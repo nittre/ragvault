@@ -1,0 +1,25 @@
+# 신규 고객사 배포 시 복사하여 사용
+# cp terraform.tfvars.example terraform.tfvars
+# (terraform.tfvars 는 .gitignore 처리)
+
+customer_id         = "acme-corp"
+customer_account_id = "123456789012"
+aws_region          = "ap-northeast-2"
+environment         = "prod"
+vpc_cidr            = "10.0.0.0/16"
+
+ec2_app_instance_type = "t3.medium"
+ec2_gpu_instance_type = "g5.xlarge"
+ec2_app_count         = 2
+
+rds_instance_class    = "db.t3.medium"
+rds_allocated_storage = 50
+
+db_name     = "ragdb"
+db_username = "raguser"
+db_password = "CHANGE_ME"  # Secrets Manager 에서 주입 권장
+
+acm_certificate_arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/XXXX"
+ses_sender_domain   = "acme-corp.ragservice.com"
+route53_zone_id     = "ZXXXXXXXXXXXX"
+jenkins_account_id  = "987654321098"  # 우리 회사 Jenkins AWS 계정 ID

@@ -1,0 +1,13 @@
+apiVersion: v2
+name: rag-backend
+description: RAG SaaS Spring Boot Backend
+type: application
+version: 0.1.0
+appVersion: "0.0.1-SNAPSHOT"
+keywords:
+  - rag
+  - spring-boot
+  - ollama
+home: https://github.com/your-org/rag-infra
+maintainers:
+  - name: rag-team

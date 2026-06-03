@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ollama
+description: Ollama LLM Server for RAG SaaS
+type: application
+version: 0.1.0
+appVersion: "latest"

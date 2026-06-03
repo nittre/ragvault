@@ -1,0 +1,5 @@
+apiVersion: v2
+name: rag-monitoring
+description: RAG SaaS Monitoring — kube-prometheus-stack values
+type: application
+version: 0.1.0

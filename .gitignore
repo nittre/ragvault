@@ -1,0 +1,46 @@
+# ── Claude / OMC ─────────────────────────────
+.claude/settings.local.json
+.omc/
+**/.omc/
+_workspace/
+
+# ── macOS ────────────────────────────────────
+.DS_Store
+
+# ── IDE ──────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+
+# ── Java / Spring Boot (rag-backend 추가 시) ─
+rag-backend/build/
+rag-backend/.gradle/
+rag-backend/bin/
+rag-backend/out/
+*.class
+*.log
+
+# ── Terraform (rag-infra 추가 시) ────────────
+rag-infra/**/.terraform/
+rag-infra/**/terraform.tfstate
+rag-infra/**/terraform.tfstate.backup
+rag-infra/**/*.tfvars
+rag-infra/**/.terraform.lock.hcl
+
+# ── Helm ─────────────────────────────────────
+rag-infra/helm/**/charts/
+rag-infra/helm/**/*.tgz
+
+# ── 비밀·자격증명 ─────────────────────────────
+.env
+.env.local
+*.pem
+*.key
+*-credentials.json
+**/secrets.yaml
+
+# ── 로컬 데이터 ──────────────────────────────
+*.sqlite
+*.db
+data/
+tmp/

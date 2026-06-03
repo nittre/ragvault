@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAG Admin</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+  <style>
+    .sidebar-item { display:flex; align-items:center; gap:0.5rem; padding:0.5rem 1rem; color:#374151; cursor:pointer; border-radius:0.25rem; }
+    .sidebar-item:hover { background:#eff6ff; color:#1d4ed8; }
+    .sidebar-item.active { background:#dbeafe; color:#1e40af; font-weight:600; }
+    .btn { padding:0.5rem 1rem; border-radius:0.25rem; font-weight:500; border:none; cursor:pointer; transition:background 0.15s; }
+    .btn-primary { background:#2563eb; color:#fff; }
+    .btn-primary:hover { background:#1d4ed8; }
+    .btn-danger { background:#ef4444; color:#fff; }
+    .btn-danger:hover { background:#dc2626; }
+    .btn-secondary { background:#f3f4f6; color:#374151; }
+    .btn-secondary:hover { background:#e5e7eb; }
+    .card { background:#fff; border-radius:0.5rem; box-shadow:0 1px 3px rgba(0,0,0,0.1); padding:1.5rem; }
+    .input { width:100%; border:1px solid #d1d5db; border-radius:0.25rem; padding:0.5rem 0.75rem; font-size:0.875rem; outline:none; box-sizing:border-box; }
+    .input:focus { border-color:#60a5fa; }
+    .table { width:100%; border-collapse:collapse; }
+    .table th { text-align:left; font-size:0.75rem; font-weight:600; color:#6b7280; text-transform:uppercase; padding:0.5rem 0.75rem; background:#f9fafb; }
+    .table td { padding:0.5rem 0.75rem; border-bottom:1px solid #f3f4f6; font-size:0.875rem; }
+    .badge { display:inline-block; padding:0.125rem 0.5rem; border-radius:9999px; font-size:0.75rem; font-weight:500; }
+    .spinner { width:2rem; height:2rem; border:4px solid #93c5fd; border-top-color:transparent; border-radius:50%; animation:spin 0.7s linear infinite; margin:2rem auto; display:block; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .alert { border-radius:0.25rem; padding:0.75rem; font-size:0.875rem; margin-bottom:1rem; border:1px solid; }
+    .alert-info { background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; }
+    .alert-error { background:#fef2f2; color:#b91c1c; border-color:#fecaca; }
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:50; }
+    .modal { background:#fff; border-radius:0.5rem; box-shadow:0 10px 25px rgba(0,0,0,0.2); padding:1.5rem; max-width:42rem; width:100%; margin:1rem; }
+  </style>
+</head>
+<body style="background:#f3f4f6; min-height:100vh;">
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useMemo } = React;
+
+// ────────────── API Helpers ──────────────
+// 인증: 운영에서는 Open WebUI 관리자 세션 쿠키(credentials:'include')로 api:admin 부여 (ADR-0009).
+// 로컬 dev(localhost)에서는 SPA(:8080)와 Open WebUI(:3000) 가 다른 origin 이라 token 쿠키가
+// 전달되지 않으므로 X-Dev-Admin 헤더로 우회 (서버는 dev 프로파일에서만 허용).
+const IS_DEV = ['localhost', '127.0.0.1'].includes(location.hostname);
+function authHeaders(extra) {
+  const h = Object.assign({}, extra || {});
+  if (IS_DEV) h['X-Dev-Admin'] = 'true';
+  return h;
+}
+const API = {
+  get: (path) => fetch(`/api/v1/admin${path}`, { credentials: 'include', headers: authHeaders() }).then(r => r.json()),
+  post: (path, body) => fetch(`/api/v1/admin${path}`, {
+    method: 'POST', credentials: 'include',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body)
+  }).then(r => r.json()),
+  put: (path, body) => fetch(`/api/v1/admin${path}`, {
+    method: 'PUT', credentials: 'include',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body)
+  }).then(r => r.json()),
+  patch: (path, body) => fetch(`/api/v1/admin${path}`, {
+    method: 'PATCH', credentials: 'include',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body)
+  }).then(r => r.json()),
+  del: (path) => fetch(`/api/v1/admin${path}`, {
+    method: 'DELETE', credentials: 'include', headers: authHeaders()
+  }).then(async r => { try { return await r.json(); } catch(e) { return { ok: r.ok }; } }),
+};
+
+// 콤마 구분 문자열 → 배열 (공백/빈값 제거)
+function csvToArray(s) {
+  if (!s) return [];
+  return s.split(',').map(x => x.trim()).filter(Boolean);
+}
+// 줄바꿈 구분 텍스트 → JSON 배열 문자열 (sample_queries jsonb)
+function linesToJsonArray(s) {
+  const arr = (s || '').split('\n').map(x => x.trim()).filter(Boolean);
+  return JSON.stringify(arr);
+}
+// JSON 배열 문자열 → 줄바꿈 텍스트 (편집용)
+function jsonArrayToLines(s) {
+  if (!s) return '';
+  try { const a = JSON.parse(s); return Array.isArray(a) ? a.join('\n') : ''; }
+  catch(e) { return ''; }
+}
+
+// ────────────── 공통 컴포넌트 ──────────────
+function Spinner() {
+  return <div className="spinner" />;
+}
+function Alert({ type='info', children }) {
+  return <div className={`alert ${type==='error' ? 'alert-error' : 'alert-info'}`}>{children}</div>;
+}
+
+// ────────────── 사용자 관리 ──────────────
+function UsersPage() {
+  const [users, setUsers] = useState([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    const q = search ? `?email=${encodeURIComponent(search)}` : '';
+    API.get(`/users${q}`).then(d => { setUsers(d.data || []); setLoading(false); });
+  }, [search]);
+
+  useEffect(() => { load(); }, []);
+
+  async function uploadCsv(e) {
+    const file = e.target.files[0]; if (!file) return;
+    const fd = new FormData(); fd.append('file', file);
+    const r = await fetch('/api/v1/admin/users/csv', { method: 'POST', credentials: 'include', headers: authHeaders(), body: fd });
+    const d = await r.json();
+    setMsg(`CSV 업로드: ${d.queued}명 처리됨`);
+    load();
+  }
+
+  return (
+    <div>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1rem'}}>
+        <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'#111827'}}>사용자 관리</h2>
+        <label className="btn btn-primary" style={{cursor:'pointer'}}>
+          CSV 업로드 <input type="file" accept=".csv" style={{display:'none'}} onChange={uploadCsv} />
+        </label>
+      </div>
+      {msg && <Alert>{msg}</Alert>}
+      <div className="card">
+        <div style={{display:'flex', gap:'0.5rem', marginBottom:'1rem'}}>
+          <input className="input" style={{maxWidth:'16rem'}} placeholder="이메일 검색..." value={search} onChange={e=>setSearch(e.target.value)} />
+          <button className="btn btn-secondary" onClick={load}>검색</button>
+        </div>
+        {loading ? <Spinner/> : (
+          <table className="table">
+            <thead><tr><th>이메일</th><th>Key Prefix</th><th>Scope</th><th>상태</th><th>생성일</th></tr></thead>
+            <tbody>
+              {users.map((u,i) => (
+                <tr key={i}>
+                  <td>{u.email}</td>
+                  <td><code style={{background:'#f3f4f6', padding:'0 0.25rem', borderRadius:'0.25rem', fontSize:'0.75rem'}}>{u.keyPrefix}</code></td>
+                  <td>{u.scope}</td>
+                  <td><span className="badge" style={{background: u.active ? '#dcfce7' : '#f3f4f6', color: u.active ? '#166534' : '#6b7280'}}>{u.active ? '활성' : '비활성'}</span></td>
+                  <td style={{color:'#9ca3af'}}>{u.createdAt?.slice(0,10)}</td>
+                </tr>
+              ))}
+              {users.length===0 && <tr><td colSpan="5" style={{textAlign:'center', color:'#9ca3af', padding:'1rem'}}>데이터 없음</td></tr>}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ────────────── RAG 테이블 ──────────────
+function RagTablesPage() {
+  const [tables, setTables]           = useState([]);
+  const [schemaTables, setSchemaTables] = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [schemaLoading, setSchemaLoading] = useState(true);
+  const [form, setForm] = useState({ tableName:'', pkColumn:'', contentColumns:[], chunkSize:500 });
+  const [msg, setMsg] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    API.get('/rag-tables').then(d => { setTables(Array.isArray(d) ? d : d.data || []); setLoading(false); });
+    API.get('/schema/tables').then(d => { setSchemaTables(Array.isArray(d) ? d : []); setSchemaLoading(false); });
+  }, []);
+
+  function flash(setter, text) { setter(text); setTimeout(() => setter(null), 4000); }
+
+  function onTableSelect(tableName) {
+    const schema = schemaTables.find(t => t.tableName === tableName);
+    const pk = schema?.columns.find(c => c.primaryKey)?.name || 'id';
+    setForm({ tableName, pkColumn: pk, contentColumns: [], chunkSize: 500 });
+  }
+
+  function toggleColumn(colName) {
+    setForm(f => ({
+      ...f,
+      contentColumns: f.contentColumns.includes(colName)
+        ? f.contentColumns.filter(c => c !== colName)
+        : [...f.contentColumns, colName]
+    }));
+  }
+
+  async function register() {
+    setErr(null);
+    if (!form.tableName)                  { flash(setErr, '테이블을 선택하세요'); return; }
+    if (form.contentColumns.length === 0) { flash(setErr, '컨텐츠 컬럼을 1개 이상 선택하세요'); return; }
+    const body = {
+      sourceTable: form.tableName, pkColumn: form.pkColumn,
+      contentColumns: form.contentColumns,
+      sourceType: 'mysql',
+      chunkSize: form.chunkSize, chunkOverlap: 50, isActive: true
+    };
+    try {
+      const r = await API.post('/rag-tables', body);
+      if (r.id || r.sourceTable) {
+        setTables([...tables, r]);
+        flash(setMsg, `등록 성공: ${r.sourceTable || form.tableName}`);
+        setForm({ tableName:'', pkColumn:'', contentColumns:[], chunkSize:500 });
+      } else { flash(setErr, r.message || r.error || '등록 실패'); }
+    } catch(e) { flash(setErr, '오류: ' + e.message); }
+  }
+
+  async function deactivate(t) {
+    const name = t.sourceTable || t.tableName;
+    if (!confirm(`'${name}' 테이블을 삭제하시겠습니까?\n(비활성화 처리되며 드롭다운에 다시 표시됩니다)`)) return;
+    await API.del(`/rag-tables/${name}`);
+    setTables(prev => prev.filter(r => (r.sourceTable || r.tableName) !== name));
+    flash(setMsg, `삭제됨: ${name}`);
+  }
+
+  const selectedSchema  = schemaTables.find(t => t.tableName === form.tableName);
+  const availableColumns = selectedSchema?.columns || [];
+  const lbl = { fontSize:'0.75rem', color:'#6b7280', display:'block', marginBottom:'0.25rem' };
+
+  return (
+    <div>
+      <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'#111827', marginBottom:'1rem'}}>RAG 테이블 관리</h2>
+      {msg && <Alert>{msg}</Alert>}
+      {err && <Alert type="error">{err}</Alert>}
+
+      <div className="card" style={{marginBottom:'1rem'}}>
+        <h3 style={{fontWeight:'600', marginBottom:'0.75rem', color:'#374151'}}>신규 등록</h3>
+
+        {/* 테이블 드롭다운 */}
+        <div style={{marginBottom:'0.75rem'}}>
+          <label style={lbl}>테이블 *</label>
+          {schemaLoading
+            ? <span style={{fontSize:'0.875rem', color:'#9ca3af'}}>스키마 로딩 중…</span>
+            : <select className="input" style={{maxWidth:'22rem'}} value={form.tableName}
+                onChange={e => onTableSelect(e.target.value)}>
+                <option value="">테이블 선택…</option>
+                {schemaTables
+                  .filter(t => !tables.some(reg => (reg.sourceTable || reg.tableName) === t.tableName))
+                  .map(t => (
+                  <option key={t.tableName} value={t.tableName}>
+                    {t.tableName}{t.tableComment ? ` — ${t.tableComment}` : ''}
+                  </option>
+                ))}
+              </select>
+          }
+        </div>
+
+        {/* PK 자동 감지 표시 */}
+        {form.tableName && (
+          <div style={{marginBottom:'0.75rem'}}>
+            <label style={lbl}>PK 컬럼 (자동 감지)</label>
+            <span style={{display:'inline-block', background:'#f3f4f6', borderRadius:'0.25rem',
+              padding:'0.375rem 0.75rem', fontSize:'0.875rem', fontFamily:'monospace', color:'#374151'}}>
+              {form.pkColumn || '—'}
+            </span>
+          </div>
+        )}
+
+        {/* 컨텐츠 컬럼 체크박스 */}
+        {availableColumns.length > 0 && (
+          <div style={{marginBottom:'0.75rem'}}>
+            <label style={lbl}>컨텐츠 컬럼 * <span style={{color:'#9ca3af', fontWeight:'400'}}>— RAG 검색에 사용할 텍스트 컬럼 선택</span></label>
+            <div style={{display:'flex', flexWrap:'wrap', gap:'0.4rem',
+              border:'1px solid #e5e7eb', borderRadius:'0.375rem', padding:'0.625rem',
+              maxHeight:'11rem', overflowY:'auto', background:'#fafafa'}}>
+              {availableColumns.map(col => {
+                const checked = form.contentColumns.includes(col.name);
+                return (
+                  <label key={col.name} style={{
+                    display:'flex', alignItems:'center', gap:'0.3rem',
+                    padding:'0.2rem 0.55rem', borderRadius:'9999px', cursor:'pointer',
+                    background: checked ? '#dbeafe' : '#f3f4f6',
+                    color: checked ? '#1e40af' : '#374151',
+                    fontSize:'0.78rem', fontWeight: checked ? '600' : '400',
+                    border: checked ? '1px solid #93c5fd' : '1px solid transparent',
+                    userSelect:'none', transition:'all 0.1s'}}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleColumn(col.name)} style={{margin:0}} />
+                    <code style={{fontFamily:'monospace'}}>{col.name}</code>
+                    <span style={{color:'#9ca3af', fontSize:'0.68rem'}}>{col.dataType}</span>
+                  </label>
+                );
+              })}
+            </div>
+            {form.contentColumns.length > 0 && (
+              <div style={{marginTop:'0.3rem', fontSize:'0.72rem', color:'#2563eb'}}>
+                선택됨: {form.contentColumns.join(', ')}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 청크 크기 */}
+        <div style={{marginBottom:'0.75rem', maxWidth:'11rem'}}>
+          <label style={lbl}>청크 크기 (토큰)</label>
+          <input type="number" className="input" value={form.chunkSize}
+            onChange={e => setForm({...form, chunkSize: +e.target.value})} />
+        </div>
+
+        <button className="btn btn-primary"
+          disabled={!form.tableName || form.contentColumns.length === 0}
+          onClick={register}>
+          등록 + 동기화 시작
+        </button>
+      </div>
+
+      {/* 등록된 테이블 목록 */}
+      <div className="card">
+        {loading ? <Spinner/> : (
+          <table className="table">
+            <thead><tr><th>테이블</th><th>컨텐츠 컬럼</th><th>PK</th><th>청크크기</th><th>민감도</th><th>상태</th><th>액션</th></tr></thead>
+            <tbody>
+              {tables.map((t,i) => (
+                <tr key={i}>
+                  <td style={{fontFamily:'monospace', fontSize:'0.875rem'}}>{t.sourceTable || t.tableName}</td>
+                  <td style={{color:'#6b7280', fontSize:'0.8rem', maxWidth:'16rem'}}>{Array.isArray(t.contentColumns) ? t.contentColumns.join(', ') : t.contentColumns}</td>
+                  <td style={{fontFamily:'monospace', fontSize:'0.8rem', color:'#9ca3af'}}>{t.pkColumn}</td>
+                  <td>{t.chunkSize}</td>
+                  <td><span className="badge" style={{background: t.dataSensitivity==='restricted' ? '#fee2e2' : '#dbeafe', color: t.dataSensitivity==='restricted' ? '#991b1b' : '#1e40af'}}>{t.dataSensitivity}</span></td>
+                  <td><span className="badge" style={{background: t.isActive ? '#dcfce7' : '#f3f4f6', color: t.isActive ? '#166534' : '#6b7280'}}>{t.isActive ? '활성' : '비활성'}</span></td>
+                  <td><button className="btn btn-danger" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem'}} onClick={()=>deactivate(t)}>삭제</button></td>
+                </tr>
+              ))}
+              {tables.length===0 && <tr><td colSpan="7" style={{textAlign:'center', color:'#9ca3af', padding:'1rem'}}>등록된 테이블 없음</td></tr>}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ────────────── 체크박스 컬럼 선택 공통 컴포넌트 ──────────────
+function ColumnCheckboxes({ columns, selected, onToggle, accent }) {
+  if (!columns || columns.length === 0)
+    return <span style={{fontSize:'0.8rem', color:'#9ca3af'}}>테이블을 먼저 선택하세요</span>;
+  return (
+    <div style={{display:'flex', flexWrap:'wrap', gap:'0.35rem',
+      border:'1px solid #e5e7eb', borderRadius:'0.375rem', padding:'0.6rem',
+      maxHeight:'9rem', overflowY:'auto', background:'#fafafa'}}>
+      {columns.map(col => {
+        const checked = selected.includes(col.name);
+        return (
+          <label key={col.name} style={{
+            display:'flex', alignItems:'center', gap:'0.25rem',
+            padding:'0.18rem 0.5rem', borderRadius:'9999px', cursor:'pointer',
+            background: checked ? accent.bg : '#f3f4f6',
+            color: checked ? accent.color : '#374151',
+            fontSize:'0.75rem', fontWeight: checked ? '600' : '400',
+            border: checked ? `1px solid ${accent.border}` : '1px solid transparent',
+            userSelect:'none', transition:'all 0.1s'}}>
+            <input type="checkbox" checked={checked} onChange={() => onToggle(col.name)} style={{margin:0}} />
+            <code style={{fontFamily:'monospace', fontSize:'0.73rem'}}>{col.name}</code>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+// ────────────── SQL 테이블 (화이트리스트 관리) ──────────────
+const EMPTY_SQL_FORM = {
+  sourceTable:'', displayName:'', description:'',
+  allowedColumns:[], excludedColumns:[], sampleQueriesText:'',
+  dataSensitivity:'internal'
+};
+
+function SqlTablesPage() {
+  const [tables, setTables]             = useState([]);
+  const [schemaTables, setSchemaTables] = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [schemaLoading, setSchemaLoading] = useState(true);
+  const [form, setForm]     = useState(EMPTY_SQL_FORM);
+  const [editing, setEditing] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const [err, setErr] = useState(null);
+
+  // tableName → TableInfo 빠른 조회
+  const schemaMap = useMemo(() => {
+    const m = {};
+    schemaTables.forEach(t => { m[t.tableName] = t; });
+    return m;
+  }, [schemaTables]);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    API.get('/sql-tables').then(d => { setTables(Array.isArray(d) ? d : d.data || []); setLoading(false); });
+  }, []);
+
+  useEffect(() => {
+    load();
+    API.get('/schema/tables').then(d => { setSchemaTables(Array.isArray(d) ? d : []); setSchemaLoading(false); });
+  }, [load]);
+
+  function flash(setter, text) { setter(text); setTimeout(()=>setter(null), 4000); }
+
+  // 테이블 선택 시 표시명 자동 채움
+  function onTableSelect(tableName) {
+    const schema = schemaTables.find(t => t.tableName === tableName);
+    setForm(f => ({ ...f, sourceTable: tableName,
+      displayName: schema?.tableComment || '',
+      allowedColumns: [], excludedColumns: [] }));
+  }
+
+  // 허용/제외 컬럼 토글 (중복 방지)
+  function toggleAllowed(col) {
+    setForm(f => ({
+      ...f,
+      allowedColumns:  f.allowedColumns.includes(col) ? f.allowedColumns.filter(c=>c!==col) : [...f.allowedColumns, col],
+      excludedColumns: f.excludedColumns.filter(c=>c!==col)
+    }));
+  }
+  function toggleExcluded(col) {
+    setForm(f => ({
+      ...f,
+      excludedColumns: f.excludedColumns.includes(col) ? f.excludedColumns.filter(c=>c!==col) : [...f.excludedColumns, col],
+      allowedColumns:  f.allowedColumns.filter(c=>c!==col)
+    }));
+  }
+
+  async function register() {
+    setErr(null);
+    if (!form.sourceTable) { flash(setErr, '테이블을 선택하세요'); return; }
+    const body = {
+      sourceTable: form.sourceTable,
+      displayName: form.displayName.trim() || null,
+      description: form.description.trim() || null,
+      allowedColumns: form.allowedColumns,
+      excludedColumns: form.excludedColumns,
+      sampleQueries: linesToJsonArray(form.sampleQueriesText),
+      dataSensitivity: form.dataSensitivity,
+      allowedGroups: ['all'], active: true
+    };
+    const r = await API.post('/sql-tables', body);
+    if (r && r.id) { setForm(EMPTY_SQL_FORM); flash(setMsg, `등록 성공: ${r.sourceTable}`); load(); }
+    else { flash(setErr, r?.message || r?.error || '등록 실패 (restricted 민감도이거나 중복 테이블일 수 있음)'); }
+  }
+
+  async function saveEdit() {
+    const e = editing;
+    const body = {
+      displayName: e.displayName || null, description: e.description || null,
+      allowedColumns: e.allowedColumns, excludedColumns: e.excludedColumns,
+      sampleQueries: linesToJsonArray(e.sampleQueriesText), active: e.active
+    };
+    const r = await API.patch(`/sql-tables/${e.id}`, body);
+    if (r && r.id) { setEditing(null); flash(setMsg, `수정 완료: ${r.sourceTable}`); load(); }
+    else { flash(setErr, r?.message || '수정 실패'); }
+  }
+
+  async function toggleActive(t) {
+    const r = await API.patch(`/sql-tables/${t.id}`, {
+      displayName: t.displayName, description: t.description,
+      allowedColumns: t.allowedColumns || [], excludedColumns: t.excludedColumns || [],
+      sampleQueries: t.sampleQueries || '[]', active: !t.active
+    });
+    if (r && r.id) { flash(setMsg, `${t.sourceTable} ${!t.active ? '활성화' : '비활성화'}됨`); load(); }
+    else flash(setErr, '상태 변경 실패');
+  }
+
+  async function remove(t) {
+    if (!confirm(`'${t.sourceTable}' 화이트리스트에서 삭제하시겠습니까?`)) return;
+    await API.del(`/sql-tables/${t.id}`);
+    flash(setMsg, `삭제됨: ${t.sourceTable}`); load();
+  }
+
+  async function refreshCache() {
+    await API.post('/sql-tables/refresh-schema-cache', {});
+    flash(setMsg, '스키마 캐시를 갱신했습니다');
+  }
+
+  function openEdit(t) {
+    setEditing({
+      id: t.id, sourceTable: t.sourceTable,
+      displayName: t.displayName || '', description: t.description || '',
+      allowedColumns: Array.isArray(t.allowedColumns) ? t.allowedColumns : [],
+      excludedColumns: Array.isArray(t.excludedColumns) ? t.excludedColumns : [],
+      sampleQueriesText: jsonArrayToLines(t.sampleQueries),
+      active: t.active
+    });
+  }
+
+  const sensBadge = (s) => ({
+    restricted: { background:'#fee2e2', color:'#991b1b' },
+    internal:   { background:'#dbeafe', color:'#1e40af' },
+    public:     { background:'#dcfce7', color:'#166534' }
+  })[s] || { background:'#f3f4f6', color:'#6b7280' };
+
+  const lbl = { fontSize:'0.75rem', color:'#6b7280', display:'block', marginBottom:'0.25rem' };
+
+  const formColumns = schemaMap[form.sourceTable]?.columns || [];
+  const editColumns = editing ? (schemaMap[editing.sourceTable]?.columns || []) : [];
+
+  return (
+    <div>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1rem'}}>
+        <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'#111827'}}>SQL 테이블 화이트리스트</h2>
+        <button className="btn btn-secondary" onClick={refreshCache}>스키마 캐시 갱신</button>
+      </div>
+      {msg && <Alert>{msg}</Alert>}
+      {err && <Alert type="error">{err}</Alert>}
+
+      <div className="card" style={{marginBottom:'1rem'}}>
+        <h3 style={{fontWeight:'600', marginBottom:'0.75rem', color:'#374151'}}>신규 등록</h3>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem'}}>
+
+          {/* 테이블 드롭다운 */}
+          <div>
+            <label style={lbl}>테이블 *</label>
+            {schemaLoading
+              ? <span style={{fontSize:'0.875rem', color:'#9ca3af'}}>로딩 중…</span>
+              : <select className="input" value={form.sourceTable} onChange={e=>onTableSelect(e.target.value)}>
+                  <option value="">테이블 선택…</option>
+                  {schemaTables
+                    .filter(t => !tables.some(reg => reg.sourceTable === t.tableName))
+                    .map(t => <option key={t.tableName} value={t.tableName}>{t.tableName}</option>)}
+                </select>
+            }
+          </div>
+
+          {/* 표시명 — 테이블 코멘트 자동 채움, 수정 가능 */}
+          <div>
+            <label style={lbl}>표시명 <span style={{color:'#9ca3af', fontWeight:'400'}}>— 코멘트 자동 채움, 수정 가능</span></label>
+            <input className="input" placeholder="예: 수강생" value={form.displayName}
+              onChange={e=>setForm({...form,displayName:e.target.value})} />
+          </div>
+
+          {/* 설명 */}
+          <div style={{gridColumn:'span 2'}}>
+            <label style={lbl}>설명 (LLM 컨텍스트로 사용됨)</label>
+            <input className="input" value={form.description}
+              onChange={e=>setForm({...form,description:e.target.value})} />
+          </div>
+
+          {/* 허용 컬럼 체크박스 */}
+          <div>
+            <label style={lbl}>허용 컬럼 <span style={{color:'#9ca3af', fontWeight:'400'}}>— 비우면 전체 허용</span></label>
+            <ColumnCheckboxes columns={formColumns} selected={form.allowedColumns}
+              onToggle={toggleAllowed}
+              accent={{bg:'#dbeafe', color:'#1e40af', border:'#93c5fd'}} />
+            {form.allowedColumns.length > 0 &&
+              <div style={{marginTop:'0.25rem', fontSize:'0.7rem', color:'#2563eb'}}>허용: {form.allowedColumns.join(', ')}</div>}
+          </div>
+
+          {/* 제외 컬럼 체크박스 */}
+          <div>
+            <label style={lbl}>제외 컬럼 <span style={{color:'#9ca3af', fontWeight:'400'}}>— PII 등</span></label>
+            <ColumnCheckboxes columns={formColumns} selected={form.excludedColumns}
+              onToggle={toggleExcluded}
+              accent={{bg:'#fee2e2', color:'#991b1b', border:'#fca5a5'}} />
+            {form.excludedColumns.length > 0 &&
+              <div style={{marginTop:'0.25rem', fontSize:'0.7rem', color:'#dc2626'}}>제외: {form.excludedColumns.join(', ')}</div>}
+          </div>
+
+          {/* 민감도 */}
+          <div>
+            <label style={lbl}>민감도</label>
+            <select className="input" value={form.dataSensitivity}
+              onChange={e=>setForm({...form,dataSensitivity:e.target.value})}>
+              <option value="public">public</option>
+              <option value="internal">internal</option>
+              <option value="restricted">restricted (SQL 등록 불가)</option>
+            </select>
+          </div>
+
+          {/* 샘플 쿼리 */}
+          <div style={{gridColumn:'span 2'}}>
+            <label style={lbl}>샘플 쿼리 (한 줄에 하나 — 복잡한 집계 SQL 유도용)</label>
+            <textarea className="input" style={{height:'5rem'}}
+              placeholder="SELECT l.name, COUNT(qs.id) FROM learners l ... GROUP BY l.id LIMIT 5;"
+              value={form.sampleQueriesText} onChange={e=>setForm({...form,sampleQueriesText:e.target.value})} />
+          </div>
+        </div>
+        <button className="btn btn-primary" style={{marginTop:'0.75rem'}} onClick={register}>등록</button>
+      </div>
+
+      {/* 목록 */}
+      <div className="card">
+        {loading ? <Spinner/> : (
+          <table className="table">
+            <thead><tr><th>테이블</th><th>허용 컬럼</th><th>제외 컬럼(PII)</th><th>샘플</th><th>민감도</th><th>상태</th><th>액션</th></tr></thead>
+            <tbody>
+              {tables.map((t) => {
+                let nSamples = 0; try { nSamples = (JSON.parse(t.sampleQueries||'[]')||[]).length; } catch(e){}
+                return (
+                  <tr key={t.id}>
+                    <td style={{fontFamily:'monospace', fontSize:'0.875rem'}}>
+                      {t.sourceTable}
+                      {t.displayName && <div style={{color:'#9ca3af', fontFamily:'sans-serif', fontSize:'0.7rem'}}>{t.displayName}</div>}
+                    </td>
+                    <td style={{color:'#6b7280', fontSize:'0.75rem', maxWidth:'12rem'}}>{(t.allowedColumns||[]).join(', ') || <span style={{color:'#d1d5db'}}>전체</span>}</td>
+                    <td style={{color:'#b45309', fontSize:'0.75rem', maxWidth:'10rem'}}>{(t.excludedColumns||[]).join(', ') || '-'}</td>
+                    <td style={{textAlign:'center', color:'#6b7280'}}>{nSamples}</td>
+                    <td><span className="badge" style={sensBadge(t.dataSensitivity)}>{t.dataSensitivity}</span></td>
+                    <td><span className="badge" style={{background: t.active ? '#dcfce7' : '#f3f4f6', color: t.active ? '#166534' : '#6b7280'}}>{t.active ? '활성' : '비활성'}</span></td>
+                    <td style={{display:'flex', gap:'0.25rem', flexWrap:'wrap'}}>
+                      <button className="btn btn-secondary" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem'}} onClick={()=>openEdit(t)}>편집</button>
+                      <button className="btn btn-secondary" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem'}} onClick={()=>toggleActive(t)}>{t.active ? '비활성' : '활성'}</button>
+                      <button className="btn btn-danger" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem'}} onClick={()=>remove(t)}>삭제</button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {tables.length===0 && <tr><td colSpan="7" style={{textAlign:'center', color:'#9ca3af', padding:'1rem'}}>등록된 테이블 없음</td></tr>}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* 편집 모달 */}
+      {editing && (
+        <div className="modal-overlay" onClick={()=>setEditing(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:'50rem'}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+              <h3 style={{fontWeight:'700', color:'#111827'}}>편집 — <code style={{fontSize:'0.875rem'}}>{editing.sourceTable}</code></h3>
+              <button style={{color:'#9ca3af', background:'none', border:'none', cursor:'pointer', fontSize:'1.25rem'}} onClick={()=>setEditing(null)}>×</button>
+            </div>
+            <div style={{display:'grid', gap:'0.75rem'}}>
+              <div><label style={lbl}>표시명</label>
+                <input className="input" value={editing.displayName} onChange={e=>setEditing({...editing,displayName:e.target.value})} />
+              </div>
+              <div><label style={lbl}>설명</label>
+                <input className="input" value={editing.description} onChange={e=>setEditing({...editing,description:e.target.value})} />
+              </div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem'}}>
+                <div>
+                  <label style={lbl}>허용 컬럼 <span style={{color:'#9ca3af', fontWeight:'400'}}>— 비우면 전체</span></label>
+                  <ColumnCheckboxes columns={editColumns} selected={editing.allowedColumns}
+                    onToggle={col => setEditing(e => ({
+                      ...e,
+                      allowedColumns:  e.allowedColumns.includes(col) ? e.allowedColumns.filter(c=>c!==col) : [...e.allowedColumns, col],
+                      excludedColumns: e.excludedColumns.filter(c=>c!==col)
+                    }))}
+                    accent={{bg:'#dbeafe', color:'#1e40af', border:'#93c5fd'}} />
+                </div>
+                <div>
+                  <label style={lbl}>제외 컬럼 <span style={{color:'#9ca3af', fontWeight:'400'}}>— PII 등</span></label>
+                  <ColumnCheckboxes columns={editColumns} selected={editing.excludedColumns}
+                    onToggle={col => setEditing(e => ({
+                      ...e,
+                      excludedColumns: e.excludedColumns.includes(col) ? e.excludedColumns.filter(c=>c!==col) : [...e.excludedColumns, col],
+                      allowedColumns:  e.allowedColumns.filter(c=>c!==col)
+                    }))}
+                    accent={{bg:'#fee2e2', color:'#991b1b', border:'#fca5a5'}} />
+                </div>
+              </div>
+              <div><label style={lbl}>샘플 쿼리 (한 줄에 하나)</label>
+                <textarea className="input" style={{height:'6rem'}} value={editing.sampleQueriesText}
+                  onChange={e=>setEditing({...editing,sampleQueriesText:e.target.value})} />
+              </div>
+              <label style={{display:'flex', alignItems:'center', gap:'0.5rem', fontSize:'0.875rem', color:'#374151'}}>
+                <input type="checkbox" checked={editing.active} onChange={e=>setEditing({...editing,active:e.target.checked})} /> 활성
+              </label>
+            </div>
+            <div style={{display:'flex', justifyContent:'flex-end', gap:'0.5rem', marginTop:'1rem'}}>
+              <button className="btn btn-secondary" onClick={()=>setEditing(null)}>취소</button>
+              <button className="btn btn-primary" onClick={saveEdit}>저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ────────────── PII 마스킹 규칙 ──────────────
+const EMPTY_MASK_FORM = {
+  name:'', pattern:'', replacement:'', level:'standard', enabled:true, sortOrder:100
+};
+
+function MaskingRulesPage() {
+  const [rules, setRules] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(EMPTY_MASK_FORM);
+  const [editing, setEditing] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const [err, setErr] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    API.get('/masking-rules').then(d => { setRules(Array.isArray(d) ? d : d.data || []); setLoading(false); });
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  function flash(setter, text) { setter(text); setTimeout(()=>setter(null), 5000); }
+
+  // 클라이언트측 정규식 사전 검증 (서버에서도 재검증 — 잘못된 regex 는 400 거부)
+  function regexError(p) {
+    if (!p || !p.trim()) return '정규식 패턴은 필수입니다';
+    try { new RegExp(p); return null; }
+    catch(e) { return '잘못된 정규식: ' + e.message; }
+  }
+
+  async function register() {
+    setErr(null);
+    if (!form.name.trim()) { flash(setErr, '규칙 이름을 입력하세요'); return; }
+    const re = regexError(form.pattern);
+    if (re) { flash(setErr, re); return; }
+    if (!form.replacement.trim()) { flash(setErr, '치환 토큰을 입력하세요'); return; }
+    const body = {
+      name: form.name.trim(), pattern: form.pattern, replacement: form.replacement.trim(),
+      level: form.level, enabled: form.enabled, sortOrder: Number(form.sortOrder) || 100
+    };
+    const r = await API.post('/masking-rules', body);
+    if (r && r.id) { setForm(EMPTY_MASK_FORM); flash(setMsg, `등록 성공: ${r.name}`); load(); }
+    else { flash(setErr, r?.message || r?.error || '등록 실패 (이름 중복이거나 잘못된 정규식)'); }
+  }
+
+  async function saveEdit() {
+    setErr(null);
+    const e = editing;
+    const re = regexError(e.pattern);
+    if (re) { flash(setErr, re); return; }
+    const body = {
+      name: e.name.trim(), pattern: e.pattern, replacement: e.replacement.trim(),
+      level: e.level, enabled: e.enabled, sortOrder: Number(e.sortOrder) || 100
+    };
+    const r = await API.patch(`/masking-rules/${e.id}`, body);
+    if (r && r.id) { setEditing(null); flash(setMsg, `수정 완료: ${r.name}`); load(); }
+    else { flash(setErr, r?.message || '수정 실패 (잘못된 정규식일 수 있음)'); }
+  }
+
+  async function toggleEnabled(t) {
+    const r = await API.patch(`/masking-rules/${t.id}`, {
+      name: t.name, pattern: t.pattern, replacement: t.replacement,
+      level: t.level, enabled: !t.enabled, sortOrder: t.sortOrder
+    });
+    if (r && r.id) { flash(setMsg, `${t.name} ${!t.enabled ? '활성화' : '비활성화'}됨`); load(); }
+    else flash(setErr, '상태 변경 실패');
+  }
+
+  async function remove(t) {
+    if (!confirm(`마스킹 규칙 '${t.name}' 을 삭제하시겠습니까?`)) return;
+    await API.del(`/masking-rules/${t.id}`);
+    flash(setMsg, `삭제됨: ${t.name}`); load();
+  }
+
+  function openEdit(t) {
+    setEditing({
+      id: t.id, name: t.name, pattern: t.pattern, replacement: t.replacement,
+      level: t.level, enabled: t.enabled, sortOrder: t.sortOrder
+    });
+  }
+
+  const levelBadge = (l) => ({
+    aggressive: { background:'#fef3c7', color:'#92400e' },
+    standard:   { background:'#dbeafe', color:'#1e40af' }
+  })[l] || { background:'#f3f4f6', color:'#6b7280' };
+
+  const lbl = { fontSize:'0.75rem', color:'#6b7280', display:'block', marginBottom:'0.25rem' };
+
+  return (
+    <div>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1rem'}}>
+        <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'#111827'}}>PII 마스킹 규칙</h2>
+      </div>
+      <Alert>standard 규칙은 모든 LLM 응답·SQL 결과에 적용됩니다. aggressive 규칙은 AGGRESSIVE 레벨 테이블에만 추가 적용됩니다. 잘못된 정규식은 등록되지 않습니다.</Alert>
+      {msg && <Alert>{msg}</Alert>}
+      {err && <Alert type="error">{err}</Alert>}
+
+      <div className="card" style={{marginBottom:'1rem'}}>
+        <h3 style={{fontWeight:'600', marginBottom:'0.75rem', color:'#374151'}}>신규 규칙 등록</h3>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem'}}>
+          <div><label style={lbl}>규칙 이름 *</label><input className="input" placeholder="예: 주민등록번호" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} /></div>
+          <div><label style={lbl}>치환 토큰 *</label><input className="input" placeholder="예: [주민번호]" value={form.replacement} onChange={e=>setForm({...form,replacement:e.target.value})} /></div>
+          <div style={{gridColumn:'span 2'}}><label style={lbl}>정규식 패턴 (Java regex) *</label><input className="input" style={{fontFamily:'monospace'}} placeholder="\d{6}-[1-4]\d{6}" value={form.pattern} onChange={e=>setForm({...form,pattern:e.target.value})} />
+            {form.pattern && regexError(form.pattern) && <div style={{color:'#dc2626', fontSize:'0.7rem', marginTop:'0.25rem'}}>{regexError(form.pattern)}</div>}
+          </div>
+          <div><label style={lbl}>레벨</label>
+            <select className="input" value={form.level} onChange={e=>setForm({...form,level:e.target.value})}>
+              <option value="standard">standard (항상 적용)</option>
+              <option value="aggressive">aggressive (AGGRESSIVE 만)</option>
+            </select>
+          </div>
+          <div><label style={lbl}>적용 순서 (작을수록 먼저)</label><input className="input" type="number" value={form.sortOrder} onChange={e=>setForm({...form,sortOrder:e.target.value})} /></div>
+          <label style={{display:'flex', alignItems:'center', gap:'0.5rem', fontSize:'0.875rem', color:'#374151'}}>
+            <input type="checkbox" checked={form.enabled} onChange={e=>setForm({...form,enabled:e.target.checked})} /> 활성 (enabled)
+          </label>
+        </div>
+        <button className="btn btn-primary" style={{marginTop:'0.75rem'}} onClick={register}>등록</button>
+      </div>
+
+      <div className="card">
+        {loading ? <Spinner/> : (
+          <table className="table">
+            <thead><tr><th>순서</th><th>이름</th><th>정규식</th><th>치환</th><th>레벨</th><th>상태</th><th>액션</th></tr></thead>
+            <tbody>
+              {rules.map((t) => (
+                <tr key={t.id}>
+                  <td style={{textAlign:'center', color:'#9ca3af'}}>{t.sortOrder}</td>
+                  <td style={{fontWeight:'500'}}>{t.name}</td>
+                  <td style={{fontFamily:'monospace', fontSize:'0.75rem', color:'#6b7280', maxWidth:'16rem', wordBreak:'break-all'}}>{t.pattern}</td>
+                  <td style={{fontFamily:'monospace', fontSize:'0.75rem', color:'#b45309'}}>{t.replacement}</td>
+                  <td><span className="badge" style={levelBadge(t.level)}>{t.level}</span></td>
+                  <td><span className="badge" style={{background: t.enabled ? '#dcfce7' : '#f3f4f6', color: t.enabled ? '#166534' : '#6b7280'}}>{t.enabled ? '활성' : '비활성'}</span></td>
+                  <td style={{display:'flex', gap:'0.25rem', flexWrap:'wrap'}}>
+                    <button className="btn btn-secondary" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem'}} onClick={()=>openEdit(t)}>편집</button>
+                    <button className="btn btn-secondary" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem'}} onClick={()=>toggleEnabled(t)}>{t.enabled ? '비활성' : '활성'}</button>
+                    <button className="btn btn-danger" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem'}} onClick={()=>remove(t)}>삭제</button>
+                  </td>
+                </tr>
+              ))}
+              {rules.length===0 && <tr><td colSpan="7" style={{textAlign:'center', color:'#9ca3af', padding:'1rem'}}>등록된 규칙 없음 (기본 하드코딩 규칙으로 동작)</td></tr>}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {editing && (
+        <div className="modal-overlay" onClick={()=>setEditing(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+              <h3 style={{fontWeight:'700', color:'#111827'}}>편집 — {editing.name}</h3>
+              <button style={{color:'#9ca3af', background:'none', border:'none', cursor:'pointer', fontSize:'1.25rem'}} onClick={()=>setEditing(null)}>×</button>
+            </div>
+            <div style={{display:'grid', gap:'0.75rem'}}>
+              <div><label style={lbl}>규칙 이름</label><input className="input" value={editing.name} onChange={e=>setEditing({...editing,name:e.target.value})} /></div>
+              <div><label style={lbl}>정규식 패턴 (Java regex)</label><input className="input" style={{fontFamily:'monospace'}} value={editing.pattern} onChange={e=>setEditing({...editing,pattern:e.target.value})} />
+                {editing.pattern && regexError(editing.pattern) && <div style={{color:'#dc2626', fontSize:'0.7rem', marginTop:'0.25rem'}}>{regexError(editing.pattern)}</div>}
+              </div>
+              <div><label style={lbl}>치환 토큰</label><input className="input" value={editing.replacement} onChange={e=>setEditing({...editing,replacement:e.target.value})} /></div>
+              <div><label style={lbl}>레벨</label>
+                <select className="input" value={editing.level} onChange={e=>setEditing({...editing,level:e.target.value})}>
+                  <option value="standard">standard</option>
+                  <option value="aggressive">aggressive</option>
+                </select>
+              </div>
+              <div><label style={lbl}>적용 순서</label><input className="input" type="number" value={editing.sortOrder} onChange={e=>setEditing({...editing,sortOrder:e.target.value})} /></div>
+              <label style={{display:'flex', alignItems:'center', gap:'0.5rem', fontSize:'0.875rem', color:'#374151'}}>
+                <input type="checkbox" checked={editing.enabled} onChange={e=>setEditing({...editing,enabled:e.target.checked})} /> 활성
+              </label>
+            </div>
+            <div style={{display:'flex', justifyContent:'flex-end', gap:'0.5rem', marginTop:'1rem'}}>
+              <button className="btn btn-secondary" onClick={()=>setEditing(null)}>취소</button>
+              <button className="btn btn-primary" onClick={saveEdit}>저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ────────────── 검색 설정 ──────────────
+function SearchConfigPage() {
+  const [configs, setConfigs] = useState([]);
+  const [editing, setEditing] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    API.get('/search-config').then(d => { setConfigs(Array.isArray(d) ? d : []); setLoading(false); });
+  }, []);
+
+  async function save(key, value) {
+    await API.put(`/search-config/${key}`, { value });
+    setConfigs(configs.map(c => c.configKey===key ? {...c, configValue:value} : c));
+    setEditing({...editing, [key]: false});
+    setMsg('저장됨');
+  }
+
+  return (
+    <div>
+      <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'#111827', marginBottom:'1rem'}}>검색 파라미터 설정</h2>
+      {msg && <Alert>{msg}</Alert>}
+      <div className="card">
+        {loading ? <Spinner/> : (
+          <table className="table">
+            <thead><tr><th>키</th><th>값</th><th>설명</th><th></th></tr></thead>
+            <tbody>
+              {configs.map(c => (
+                <tr key={c.configKey}>
+                  <td style={{fontFamily:'monospace', fontSize:'0.875rem'}}>{c.configKey}</td>
+                  <td>
+                    {editing[c.configKey] ? (
+                      <input className="input" style={{maxWidth:'7.5rem'}} defaultValue={c.configValue}
+                        onBlur={e => save(c.configKey, e.target.value)}
+                        onKeyDown={e => e.key==='Enter' && save(c.configKey, e.target.value)}
+                        autoFocus />
+                    ) : (
+                      <span style={{fontFamily:'monospace'}}>{c.configValue}</span>
+                    )}
+                  </td>
+                  <td style={{color:'#9ca3af', fontSize:'0.75rem'}}>{c.description}</td>
+                  <td><button className="btn btn-secondary" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem'}} onClick={()=>setEditing({...editing,[c.configKey]:true})}>편집</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ────────────── DDL 이벤트 ──────────────
+function DdlEventsPage() {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAll, setShowAll] = useState(false);
+  // 영향 분석 패널: { eventId, analysis, processing }
+  const [analysis, setAnalysis] = useState(null);
+  const [msg, setMsg] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    API.get(`/ddl-events${showAll ? '?all=true' : ''}`).then(d => {
+      setEvents(Array.isArray(d) ? d : d.data || []);
+      setLoading(false);
+    });
+  };
+  useEffect(() => { load(); }, [showAll]);
+
+  const riskStyle = (r) => ({
+    HIGH:   { background:'#fee2e2', color:'#991b1b' },
+    MEDIUM: { background:'#fef9c3', color:'#854d0e' },
+    LOW:    { background:'#dcfce7', color:'#166534' }
+  })[r] || { background:'#f3f4f6', color:'#6b7280' };
+
+  async function openAnalysis(eventId) {
+    setAnalysis({ eventId, analysis: null, processing: false });
+    try {
+      const r = await API.get(`/ddl-events/${eventId}/analysis`);
+      setAnalysis(prev => prev?.eventId === eventId ? { ...prev, analysis: r } : prev);
+    } catch(e) { setMsg('영향 분석 로드 실패'); setAnalysis(null); }
+  }
+
+  async function dismiss(eventId) {
+    await API.post(`/ddl-events/${eventId}/dismiss`, {});
+    setAnalysis(null); setMsg('무시 처리됨'); load();
+  }
+
+  async function triggerResync(eventId) {
+    setAnalysis(prev => ({ ...prev, processing: true }));
+    await API.post(`/ddl-events/${eventId}/trigger`, {});
+    setAnalysis(null); setMsg('재동기화가 예약됐습니다. 관리자 동기화 화면에서 실행하세요.'); load();
+  }
+
+  const risk = analysis?.analysis?.riskLevel;
+
+  return (
+    <div>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+        <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'#111827'}}>DDL 이벤트</h2>
+        <label style={{fontSize:'0.875rem', color:'#6b7280', display:'flex', alignItems:'center', gap:'0.375rem', cursor:'pointer'}}>
+          <input type="checkbox" checked={showAll} onChange={e=>setShowAll(e.target.checked)} /> 처리된 이벤트 포함
+        </label>
+      </div>
+      {msg && <Alert>{msg}</Alert>}
+      <div className="card">
+        {loading ? <Spinner/> : (
+          <table className="table">
+            <thead><tr><th>DDL</th><th>테이블</th><th>위험도</th><th>상태</th><th>발생일</th><th>Discord</th><th>액션</th></tr></thead>
+            <tbody>
+              {events.map((e,i) => (
+                <tr key={i} style={{background: analysis?.eventId===e.id ? '#eff6ff' : undefined}}>
+                  <td style={{fontFamily:'monospace', fontSize:'0.75rem', maxWidth:'18rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={e.sqlQuery || e.ddlStatement}>{e.sqlQuery || e.ddlStatement}</td>
+                  <td>{e.tableName}</td>
+                  <td><span className="badge" style={riskStyle(e.riskLevel)}>{e.riskLevel}</span></td>
+                  <td><span className="badge" style={{background: e.processedAt ? '#dcfce7' : '#fef9c3', color: e.processedAt ? '#166534' : '#854d0e'}}>{e.processedAt ? '처리됨' : '대기중'}</span></td>
+                  <td style={{color:'#9ca3af', fontSize:'0.75rem'}}>{(e.detectedAt || e.createdAt)?.slice(0,16)}</td>
+                  <td>{e.discordMessageUrl && <a href={e.discordMessageUrl} target="_blank" style={{color:'#2563eb', textDecoration:'underline', fontSize:'0.75rem'}}>🔗</a>}</td>
+                  <td>
+                    {!e.processedAt && (
+                      <button className="btn btn-primary" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem'}}
+                        onClick={()=>openAnalysis(e.id)}>
+                        🔍 영향 분석
+                      </button>
+                    )}
+                    {e.processedAt && <span style={{fontSize:'0.75rem', color:'#9ca3af'}}>{e.actionTaken || '-'}</span>}
+                  </td>
+                </tr>
+              ))}
+              {events.length===0 && <tr><td colSpan="7" style={{textAlign:'center', color:'#9ca3af', padding:'1rem'}}>DDL 이벤트 없음</td></tr>}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* 영향 분석 패널 */}
+      {analysis && (
+        <div className="modal-overlay" onClick={()=>setAnalysis(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:'36rem', width:'90%'}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+              <h3 style={{fontWeight:'700', color:'#111827'}}>🔍 DDL 영향 분석</h3>
+              <button style={{color:'#9ca3af', background:'none', border:'none', cursor:'pointer', fontSize:'1.25rem'}} onClick={()=>setAnalysis(null)}>×</button>
+            </div>
+
+            {!analysis.analysis ? <Spinner/> : (
+              <>
+                {/* DDL 구문 */}
+                <pre style={{background:'#f9fafb', borderRadius:'0.375rem', padding:'0.75rem', fontSize:'0.75rem', fontFamily:'monospace', overflow:'auto', marginBottom:'1rem', whiteSpace:'pre-wrap'}}>
+                  {analysis.analysis.ddlStatement}
+                </pre>
+
+                {/* 위험도 배너 */}
+                <div style={{...riskStyle(risk), borderRadius:'0.375rem', padding:'0.75rem 1rem', marginBottom:'1rem', fontWeight:'600', fontSize:'0.875rem'}}>
+                  {risk === 'HIGH'   && '🔴 HIGH — 즉시 수동 확인 필요'}
+                  {risk === 'MEDIUM' && '🟡 MEDIUM — 7일 내 조치 권장'}
+                  {risk === 'LOW'    && '🟢 LOW — 자동 처리 가능'}
+                </div>
+
+                {/* 영향 요약 */}
+                <div style={{marginBottom:'1rem'}}>
+                  <p style={{fontSize:'0.875rem', color:'#374151', marginBottom:'0.5rem'}}>{analysis.analysis.impactSummary}</p>
+                  {analysis.analysis.affectedRagTables?.length > 0 && (
+                    <div style={{marginBottom:'0.375rem'}}>
+                      <span style={{fontSize:'0.75rem', fontWeight:'600', color:'#6b7280'}}>영향받는 RAG 테이블: </span>
+                      {analysis.analysis.affectedRagTables.map(t => (
+                        <span key={t} className="badge" style={{background:'#dbeafe', color:'#1e40af', marginLeft:'0.25rem'}}>{t}</span>
+                      ))}
+                    </div>
+                  )}
+                  {analysis.analysis.affectedColumns?.length > 0 && (
+                    <div>
+                      <span style={{fontSize:'0.75rem', fontWeight:'600', color:'#6b7280'}}>영향받는 컬럼: </span>
+                      {analysis.analysis.affectedColumns.map(c => (
+                        <code key={c} style={{background:'#fee2e2', color:'#991b1b', padding:'0 0.25rem', borderRadius:'0.25rem', fontSize:'0.75rem', marginLeft:'0.25rem'}}>{c}</code>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 권장 액션 */}
+                <div style={{background:'#f9fafb', borderRadius:'0.375rem', padding:'0.75rem', marginBottom:'1.25rem', fontSize:'0.875rem', color:'#374151'}}>
+                  <strong>권장 액션:</strong> {analysis.analysis.recommendedAction}
+                </div>
+
+                {/* 위험도별 wizard 버튼 */}
+                <div style={{display:'flex', gap:'0.5rem', justifyContent:'flex-end', flexWrap:'wrap'}}>
+                  {risk === 'LOW' && (
+                    <button className="btn btn-primary" style={{background:'#16a34a'}} onClick={()=>dismiss(analysis.eventId)}>
+                      ✅ 자동 처리 (무시)
+                    </button>
+                  )}
+                  {risk === 'MEDIUM' && (<>
+                    <button className="btn btn-secondary" onClick={()=>dismiss(analysis.eventId)}>7일 유예 (무시)</button>
+                    <button className="btn btn-primary" disabled={analysis.processing} onClick={()=>triggerResync(analysis.eventId)}>
+                      🔄 지금 재동기화 예약
+                    </button>
+                  </>)}
+                  {risk === 'HIGH' && (<>
+                    <button className="btn btn-secondary" onClick={()=>dismiss(analysis.eventId)}>확인 완료 (무시)</button>
+                    <button className="btn btn-primary" style={{background:'#dc2626'}} disabled={analysis.processing} onClick={()=>triggerResync(analysis.eventId)}>
+                      🚨 재동기화 트리거
+                    </button>
+                  </>)}
+                  {!['LOW','MEDIUM','HIGH'].includes(risk) && (
+                    <button className="btn btn-secondary" onClick={()=>dismiss(analysis.eventId)}>무시</button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ────────────── 감사 로그 ──────────────
+function AuditLogsPage() {
+  const [logs, setLogs] = useState([]);
+  const [filter, setFilter] = useState({ userEmail:'', action:'' });
+  const [loading, setLoading] = useState(false);
+  const [rawModal, setRawModal] = useState(null);
+
+  async function load() {
+    setLoading(true);
+    const q = new URLSearchParams();
+    if (filter.userEmail) q.set('userEmail', filter.userEmail);
+    if (filter.action) q.set('action', filter.action);
+    const d = await API.get(`/audit-logs?${q}`);
+    setLogs(d.data || []);
+    setLoading(false);
+  }
+
+  async function showRaw(responseId) {
+    try {
+      const d = await API.get(`/audit-logs/${responseId}/raw`);
+      setRawModal(d);
+    } catch(e) { alert('원본 조회 실패 (TTL 만료 또는 권한 없음)'); }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  return (
+    <div>
+      <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'#111827', marginBottom:'1rem'}}>감사 로그</h2>
+      <div className="card" style={{marginBottom:'1rem', display:'flex', gap:'0.75rem', alignItems:'flex-end'}}>
+        <div><label style={{fontSize:'0.75rem', color:'#6b7280', display:'block', marginBottom:'0.25rem'}}>사용자 이메일</label><input className="input" style={{maxWidth:'12.5rem'}} value={filter.userEmail} onChange={e=>setFilter({...filter,userEmail:e.target.value})} /></div>
+        <div>
+          <label style={{fontSize:'0.75rem', color:'#6b7280', display:'block', marginBottom:'0.25rem'}}>Action</label>
+          <select className="input" style={{maxWidth:'9.375rem'}} value={filter.action} onChange={e=>setFilter({...filter,action:e.target.value})}>
+            <option value="">전체</option>
+            <option value="CHAT">CHAT</option>
+            <option value="SQL_QUERY">SQL_QUERY</option>
+            <option value="FILE_UPLOAD">FILE_UPLOAD</option>
+          </select>
+        </div>
+        <button className="btn btn-primary" onClick={load}>조회</button>
+      </div>
+      {loading ? <Spinner/> : (
+        <div className="card">
+          <table className="table">
+            <thead><tr><th>이메일</th><th>Action</th><th>요청</th><th>시간</th><th>원본</th></tr></thead>
+            <tbody>
+              {logs.map((l,i) => (
+                <tr key={i}>
+                  <td>{l.userEmail}</td>
+                  <td><span className="badge" style={{background:'#dbeafe', color:'#1e40af'}}>{l.action}</span></td>
+                  <td style={{color:'#6b7280', fontSize:'0.75rem', maxWidth:'20rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{l.requestSummary}</td>
+                  <td style={{color:'#9ca3af', fontSize:'0.75rem'}}>{l.createdAt?.slice(0,16)}</td>
+                  <td>{l.responseId && <button style={{fontSize:'0.75rem', color:'#2563eb', textDecoration:'underline', background:'none', border:'none', cursor:'pointer'}} onClick={()=>showRaw(l.responseId)}>원본 조회</button>}</td>
+                </tr>
+              ))}
+              {logs.length===0 && <tr><td colSpan="5" style={{textAlign:'center', color:'#9ca3af', padding:'1rem'}}>로그 없음</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {rawModal && (
+        <div className="modal-overlay" onClick={()=>setRawModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+              <h3 style={{fontWeight:'700', color:'#111827'}}>원본 응답 (ADR-0010, 30분 TTL)</h3>
+              <button style={{color:'#9ca3af', background:'none', border:'none', cursor:'pointer', fontSize:'1.25rem'}} onClick={()=>setRawModal(null)}>x</button>
+            </div>
+            <pre style={{background:'#f9fafb', borderRadius:'0.25rem', padding:'0.75rem', fontSize:'0.75rem', overflow:'auto', maxHeight:'24rem', whiteSpace:'pre-wrap'}}>{typeof rawModal === 'string' ? rawModal : JSON.stringify(rawModal, null, 2)}</pre>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ────────────── 사용량 통계 ──────────────
+function UsageStatsPage() {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    API.get('/usage-stats/daily').then(d => { setStats(d); setLoading(false); });
+  }, []);
+
+  return (
+    <div>
+      <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'#111827', marginBottom:'1rem'}}>사용량 통계</h2>
+      {loading ? <Spinner/> : stats ? (
+        <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'1rem'}}>
+          <div className="card" style={{textAlign:'center'}}>
+            <div style={{fontSize:'2.5rem', fontWeight:'700', color:'#2563eb'}}>{stats.totalQueries}</div>
+            <div style={{fontSize:'0.875rem', color:'#6b7280', marginTop:'0.25rem'}}>오늘 전체 질의</div>
+            <div style={{fontSize:'0.75rem', color:'#9ca3af'}}>{stats.date}</div>
+          </div>
+          {stats.breakdown && Object.entries(stats.breakdown).map(([k,v]) => (
+            <div key={k} className="card" style={{textAlign:'center'}}>
+              <div style={{fontSize:'2rem', fontWeight:'700', color:'#374151'}}>{v}</div>
+              <div style={{fontSize:'0.875rem', color:'#6b7280', marginTop:'0.25rem'}}>{k}</div>
+            </div>
+          ))}
+        </div>
+      ) : <Alert type="error">통계 로드 실패</Alert>}
+    </div>
+  );
+}
+
+// ────────────── API Key 관리 ──────────────
+function ApiKeysPage() {
+  const [keys, setKeys] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ email:'', scope:'api:chat' });
+  const [newKey, setNewKey] = useState(null);
+  const [msg, setMsg] = useState(null);
+
+  const load = () => { API.get('/api-keys').then(d => { setKeys(Array.isArray(d)?d:[]); setLoading(false); }); };
+  useEffect(() => { load(); }, []);
+
+  async function issue() {
+    const r = await API.post('/api-keys', form);
+    if (r.key) { setNewKey(r); load(); setMsg(null); }
+    else setMsg(r.message || r.error || '발급 실패');
+  }
+
+  async function revoke(id) {
+    if (!confirm('폐기하시겠습니까?')) return;
+    await API.del(`/api-keys/${id}`);
+    load();
+    setMsg('폐기됨');
+  }
+
+  async function rotate(id) {
+    const r = await API.post(`/api-keys/${id}/rotate`, {});
+    if (r.key) { setNewKey(r); load(); }
+  }
+
+  return (
+    <div>
+      <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'#111827', marginBottom:'1rem'}}>API Key 관리</h2>
+      {newKey && (
+        <Alert>
+          <strong>새 API Key (1회만 표시):</strong>
+          <code style={{display:'block', background:'#fefce8', border:'1px solid #fef08a', borderRadius:'0.25rem', padding:'0.5rem 0.75rem', marginTop:'0.5rem', fontSize:'0.875rem', fontFamily:'monospace', wordBreak:'break-all'}}>{newKey.key}</code>
+        </Alert>
+      )}
+      {msg && <Alert>{msg}</Alert>}
+      <div className="card" style={{marginBottom:'1rem'}}>
+        <h3 style={{fontWeight:'600', marginBottom:'0.75rem'}}>신규 발급</h3>
+        <div style={{display:'flex', gap:'0.75rem'}}>
+          <input className="input" style={{flex:1}} placeholder="이메일" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} />
+          <select className="input" style={{width:'10rem'}} value={form.scope} onChange={e=>setForm({...form,scope:e.target.value})}>
+            <option value="api:chat">api:chat</option>
+            <option value="api:admin">api:admin</option>
+            <option value="api:incident-response">api:incident-response</option>
+          </select>
+          <button className="btn btn-primary" onClick={issue}>발급</button>
+        </div>
+      </div>
+      <div className="card">
+        {loading ? <Spinner/> : (
+          <table className="table">
+            <thead><tr><th>이메일</th><th>Prefix</th><th>Scope</th><th>상태</th><th>생성일</th><th>액션</th></tr></thead>
+            <tbody>
+              {keys.map(k => (
+                <tr key={k.id}>
+                  <td>{k.email}</td>
+                  <td><code style={{background:'#f3f4f6', padding:'0 0.25rem', borderRadius:'0.25rem', fontSize:'0.75rem'}}>{k.keyPrefix}...</code></td>
+                  <td><span className="badge" style={{background:'#f3e8ff', color:'#6b21a8'}}>{k.scope}</span></td>
+                  <td><span className="badge" style={{background: k.active ? '#dcfce7' : '#f3f4f6', color: k.active ? '#166534' : '#6b7280'}}>{k.active?'활성':'비활성'}</span></td>
+                  <td style={{color:'#9ca3af', fontSize:'0.75rem'}}>{k.createdAt?.slice(0,10)}</td>
+                  <td style={{display:'flex', gap:'0.25rem'}}>
+                    <button className="btn btn-secondary" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem'}} onClick={()=>rotate(k.id)}>회전</button>
+                    <button className="btn btn-danger" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem'}} onClick={()=>revoke(k.id)}>폐기</button>
+                  </td>
+                </tr>
+              ))}
+              {keys.length===0 && <tr><td colSpan="6" style={{textAlign:'center', color:'#9ca3af', padding:'1rem'}}>API Key 없음</td></tr>}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ────────────── 파라미터 한도 ──────────────
+function ParamLimitsPage() {
+  const [limits, setLimits] = useState([]);
+  const [editing, setEditing] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState(null);
+  // 잠금 모달: { paramName, fixedValue, reason }
+  const [lockModal, setLockModal] = useState(null);
+
+  const load = () => API.get('/param-limits').then(d => { setLimits(Array.isArray(d)?d:[]); setLoading(false); });
+  useEffect(() => { load(); }, []);
+
+  async function save(paramName, data) {
+    const r = await API.put(`/param-limits/${paramName}`, data);
+    setLimits(limits.map(l => l.paramName===paramName ? r : l));
+    setEditing({});
+    setMsg('저장됨');
+  }
+
+  async function lock(paramName) {
+    if (!lockModal.reason?.trim()) { setMsg('잠금 사유를 입력해주세요'); return; }
+    const r = await API.put(`/param-limits/${paramName}/lock`, { reason: lockModal.reason, fixedValue: lockModal.fixedValue });
+    setLimits(limits.map(l => l.paramName===paramName ? {...l, ...r, guardType:'B'} : l));
+    setLockModal(null);
+    setMsg(`${paramName} Guard B로 잠금됨`);
+  }
+
+  async function unlock(paramName) {
+    if (!confirm(`${paramName}의 잠금을 해제하시겠습니까? Guard A(범위 클램핑)로 전환됩니다.`)) return;
+    const r = await API.del(`/param-limits/${paramName}/lock`);
+    setLimits(limits.map(l => l.paramName===paramName ? {...l, ...r, guardType:'A'} : l));
+    setMsg(`${paramName} Guard A로 해제됨`);
+  }
+
+  const lim = limits.find(l => l.paramName === lockModal?.paramName);
+
+  return (
+    <div>
+      <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'#111827', marginBottom:'1rem'}}>파라미터 한도 (Guard A/B)</h2>
+      <div style={{marginBottom:'0.75rem', fontSize:'0.875rem', color:'#6b7280'}}>
+        <span className="badge" style={{background:'#dbeafe', color:'#1e40af', marginRight:'0.5rem'}}>Guard A</span> 범위 클램핑 (min~max)
+        <span className="badge" style={{background:'#ffedd5', color:'#9a3412', marginLeft:'1rem', marginRight:'0.5rem'}}>Guard B</span> 강제 고정 (fixed_value) — 사용자 변경 불가
+      </div>
+      {msg && <Alert>{msg}</Alert>}
+      <div className="card">
+        {loading ? <Spinner/> : (
+          <table className="table">
+            <thead><tr><th>파라미터</th><th>Guard</th><th>Min</th><th>Max</th><th>고정값</th><th>잠금 사유</th><th>설명</th><th>액션</th></tr></thead>
+            <tbody>
+              {limits.map(l => (
+                <tr key={l.paramName}>
+                  <td style={{fontFamily:'monospace', fontSize:'0.875rem'}}>{l.paramName}</td>
+                  <td>
+                    <span className="badge" style={{background: l.guardType==='B' ? '#ffedd5' : '#dbeafe', color: l.guardType==='B' ? '#9a3412' : '#1e40af'}}>
+                      {l.guardType==='B' ? '🔒 B' : 'A'}
+                    </span>
+                  </td>
+                  <td>{editing[l.paramName] ?
+                    <input className="input" style={{width:'5rem'}} defaultValue={l.minValue} onBlur={e=>save(l.paramName, {...l, minValue:e.target.value})} /> :
+                    (l.minValue ?? '-')}</td>
+                  <td>{editing[l.paramName] ?
+                    <input className="input" style={{width:'5rem'}} defaultValue={l.maxValue} onBlur={e=>save(l.paramName, {...l, maxValue:e.target.value})} /> :
+                    (l.maxValue ?? '-')}</td>
+                  <td style={{fontFamily:'monospace', fontSize:'0.875rem', color: l.guardType==='B' ? '#9a3412' : '#374151'}}>
+                    {l.fixedValue != null ? l.fixedValue : '-'}
+                  </td>
+                  <td style={{color:'#6b7280', fontSize:'0.75rem', maxWidth:'10rem'}}>{l.lockedReason || '-'}</td>
+                  <td style={{color:'#9ca3af', fontSize:'0.75rem'}}>{l.description}</td>
+                  <td style={{display:'flex', gap:'0.25rem', flexWrap:'wrap'}}>
+                    {l.guardType !== 'B' && (
+                      <button className="btn btn-secondary" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem'}}
+                        onClick={()=>setEditing({...editing,[l.paramName]:!editing[l.paramName]})}>
+                        {editing[l.paramName] ? '완료' : '편집'}
+                      </button>
+                    )}
+                    {l.guardType !== 'B' ? (
+                      <button className="btn btn-primary" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem', background:'#dc2626'}}
+                        title="Guard B로 전환 — 사용자가 변경할 수 없게 고정"
+                        onClick={()=>setLockModal({ paramName: l.paramName, fixedValue: l.fixedValue ?? '', reason: '' })}>
+                        🔒 잠금
+                      </button>
+                    ) : (
+                      <button className="btn btn-secondary" style={{fontSize:'0.75rem', padding:'0.25rem 0.5rem'}}
+                        title="Guard A로 전환 — 범위 클램핑으로 복원"
+                        onClick={()=>unlock(l.paramName)}>
+                        🔓 해제
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* 잠금 모달 */}
+      {lockModal && (
+        <div className="modal-overlay" onClick={()=>setLockModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:'28rem'}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+              <h3 style={{fontWeight:'700', color:'#111827'}}>🔒 Guard B 잠금 — {lockModal.paramName}</h3>
+              <button style={{color:'#9ca3af', background:'none', border:'none', cursor:'pointer', fontSize:'1.25rem'}} onClick={()=>setLockModal(null)}>×</button>
+            </div>
+            <p style={{fontSize:'0.875rem', color:'#6b7280', marginBottom:'1rem'}}>
+              잠금 후 사용자는 이 파라미터를 변경할 수 없습니다. 설정한 고정값이 항상 적용됩니다.
+            </p>
+            <div style={{display:'flex', flexDirection:'column', gap:'0.75rem'}}>
+              <div>
+                <label style={{fontSize:'0.75rem', color:'#374151', fontWeight:'600', display:'block', marginBottom:'0.25rem'}}>고정값 *</label>
+                <input className="input" type="number" step="any" placeholder="예: 0.1"
+                  value={lockModal.fixedValue}
+                  onChange={e=>setLockModal({...lockModal, fixedValue: e.target.value})} />
+              </div>
+              <div>
+                <label style={{fontSize:'0.75rem', color:'#374151', fontWeight:'600', display:'block', marginBottom:'0.25rem'}}>잠금 사유 * <span style={{color:'#9ca3af', fontWeight:'400'}}>(사용자에게 표시됨)</span></label>
+                <input className="input" placeholder="예: 정확한 SQL 생성을 위해 고정"
+                  value={lockModal.reason}
+                  onChange={e=>setLockModal({...lockModal, reason: e.target.value})} />
+              </div>
+              <div style={{display:'flex', gap:'0.5rem', justifyContent:'flex-end', marginTop:'0.5rem'}}>
+                <button className="btn btn-secondary" onClick={()=>setLockModal(null)}>취소</button>
+                <button className="btn btn-primary" style={{background:'#dc2626'}} onClick={()=>lock(lockModal.paramName)}>🔒 잠금 적용</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ────────────── 사이드바 + 라우터 ──────────────
+const PAGES = [
+  { id:'users',         label:'사용자 관리',    icon:'U',  component: UsersPage },
+  { id:'rag-tables',    label:'RAG 테이블',     icon:'R',  component: RagTablesPage },
+  { id:'sql-tables',    label:'SQL 테이블',     icon:'S',  component: SqlTablesPage },
+  { id:'masking-rules', label:'마스킹 규칙',     icon:'M',  component: MaskingRulesPage },
+  { id:'search-config', label:'검색 설정',       icon:'C',  component: SearchConfigPage },
+  { id:'ddl-events',    label:'DDL 이벤트',     icon:'D',  component: DdlEventsPage },
+  { id:'audit-logs',    label:'감사 로그',       icon:'L',  component: AuditLogsPage },
+  { id:'usage-stats',   label:'사용량 통계',     icon:'S',  component: UsageStatsPage },
+  { id:'api-keys',      label:'API Key',        icon:'K',  component: ApiKeysPage },
+  { id:'param-limits',  label:'파라미터 한도',   icon:'P',  component: ParamLimitsPage },
+];
+
+function App() {
+  const [page, setPage] = useState('users');
+  const Current = PAGES.find(p => p.id === page)?.component || UsersPage;
+
+  return (
+    <div style={{display:'flex', minHeight:'100vh'}}>
+      <aside style={{width:'14rem', background:'#fff', boxShadow:'2px 0 4px rgba(0,0,0,0.06)', flexShrink:0}}>
+        <div style={{padding:'1.25rem 1rem', borderBottom:'1px solid #e5e7eb'}}>
+          <h1 style={{fontSize:'1.125rem', fontWeight:'700', color:'#111827'}}>RAG Admin</h1>
+          <p style={{fontSize:'0.75rem', color:'#9ca3af', marginTop:'0.125rem'}}>Phase 0</p>
+        </div>
+        <nav style={{padding:'0.5rem'}}>
+          {PAGES.map(p => (
+            <div key={p.id}
+              className={`sidebar-item ${page===p.id ? 'active' : ''}`}
+              onClick={()=>setPage(p.id)}>
+              <span style={{fontSize:'0.75rem', width:'1.25rem', textAlign:'center', fontFamily:'monospace', background:'#e5e7eb', borderRadius:'0.25rem', padding:'0.125rem 0.25rem'}}>{p.icon}</span>
+              <span style={{fontSize:'0.875rem'}}>{p.label}</span>
+            </div>
+          ))}
+        </nav>
+      </aside>
+      <main style={{flex:1, padding:'2rem', overflowAuto:'scroll'}}>
+        <Current />
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

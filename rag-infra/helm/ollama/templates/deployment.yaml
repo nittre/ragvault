@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ollama.fullname" . }}
+  labels:
+    {{- include "ollama.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "ollama.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: Recreate  # GPU 노드는 단일 Pod — RollingUpdate 불가
+  template:
+    metadata:
+      labels:
+        {{- include "ollama.selectorLabels" . | nindent 8 }}
+      annotations:
+        # 모델 목록 변경 시 Pod 재시작 트리거
+        checksum/models: {{ .Values.models | toJson | sha256sum }}
+    spec:
+      # GPU 노드 전용 스케줄링
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      terminationGracePeriodSeconds: 60
+
+      # ── AMI 사전 pull 모델 로드 확인 initContainer ──────────────────────────
+      initContainers:
+        - name: model-loader
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "=== Ollama 서버 시작 대기 ==="
+              # 서버를 백그라운드로 기동
+              ollama serve &
+              OLLAMA_PID=$!
+
+              # 헬스체크 — 최대 120초 대기
+              for i in $(seq 1 24); do
+                if curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; then
+                  echo "Ollama 서버 준비 완료 (${i}번 시도)"
+                  break
+                fi
+                echo "대기 중... (${i}/24)"
+                sleep 5
+              done
+
+              echo "=== 모델 상태 확인 ==="
+              ollama list
+
+              # AMI 사전 pull 모델 검증
+              {{- range .Values.models }}
+              echo "검증: {{ . }}"
+              ollama list | grep -q "{{ . | replace ":" " " | splitList " " | first }}" || {
+                echo "WARNING: {{ . }} 미발견 — AMI 사전 pull 확인 필요"
+              }
+              {{- end }}
+
+              echo "=== 모델 로드 완료 ==="
+              kill $OLLAMA_PID
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: ollama-models
+              mountPath: /root/.ollama
+            {{- end }}
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["ollama", "serve"]
+          ports:
+            - name: ollama
+              containerPort: 11434
+              protocol: TCP
+          env:
+            - name: OLLAMA_HOST
+              value: "0.0.0.0"
+            - name: OLLAMA_MODELS
+              value: "/root/.ollama"
+            - name: OLLAMA_NUM_PARALLEL
+              value: "2"
+            - name: OLLAMA_MAX_LOADED_MODELS
+              value: "2"
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: ollama-models
+              mountPath: /root/.ollama
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /api/tags
+              port: ollama
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/tags
+              port: ollama
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: ollama-models
+          persistentVolumeClaim:
+            claimName: {{ include "ollama.fullname" . }}-models
+        {{- end }}

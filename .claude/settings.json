@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": "프로젝트 공유 설정. 가드레일 PreToolUse hook 으로 위험 Bash 명령 차단 → 사용자 명시 승인 요청. 개인 설정은 settings.local.json (gitignore 권장).",
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/guardrail.py"
+          }
+        ]
+      }
+    ]
+  },
+
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew *)",
+      "Bash(./mvnw *)",
+      "Bash(docker compose *)",
+      "Bash(docker ps)",
+      "Bash(docker logs *)",
+      "Bash(kubectl get *)",
+      "Bash(kubectl describe *)",
+      "Bash(kubectl logs *)",
+      "Bash(helm list *)",
+      "Bash(helm status *)",
+      "Bash(terraform fmt)",
+      "Bash(terraform validate)",
+      "Bash(terraform plan)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(grep -rn *)",
+      "Bash(find . *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)"
+    ]
+  }
+}

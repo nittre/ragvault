@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rag-backend.fullname" . }}-config
+  labels:
+    {{- include "rag-backend.labels" . | nindent 4 }}
+data:
+  redis-host: "redis.{{ .Release.Namespace }}.svc.cluster.local"
+  ollama-base-url: "http://ollama-svc.rag.svc.cluster.local:11434"

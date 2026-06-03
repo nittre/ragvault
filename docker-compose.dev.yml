@@ -1,0 +1,172 @@
+# RagVault 로컬 개발 환경
+# Usage: docker compose -f docker-compose.dev.yml up -d
+# 모델 pull: docker exec -it ollama ollama pull qwen2.5:7b-instruct-q4_K_M
+#            docker exec -it ollama ollama pull nomic-embed-text
+#            docker exec -it ollama ollama pull qwen2.5-vl:7b-instruct-q4_K_M
+
+services:
+
+  # LLM 서버
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # 벡터 DB
+  pgvector:
+    image: pgvector/pgvector:pg16
+    container_name: pgvector
+    environment:
+      POSTGRES_DB: ragdb
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ragpassword}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # 캐시 / 분산 락 (ShedLock)
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # 고객사 MySQL 샘플 (GTID + binlog 활성화)
+  mysql-sample:
+    image: mysql:8.0
+    container_name: mysql-sample
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: customer_sample
+      MYSQL_USER: raguser
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-ragpassword}
+    ports:
+      - "3306:3306"
+    command: >
+      --gtid-mode=ON
+      --enforce-gtid-consistency=ON
+      --log-bin=mysql-bin
+      --binlog-format=ROW
+      --binlog-row-image=FULL
+      --server-id=1
+      --binlog-expire-logs-seconds=604800
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root --password=$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # Spring Boot RAG 백엔드
+  rag-backend:
+    build:
+      context: ./rag-backend
+      dockerfile: Dockerfile
+    container_name: rag-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://pgvector:5432/ragdb
+      SPRING_DATASOURCE_USERNAME: raguser
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-ragpassword}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_AI_OLLAMA_BASE_URL: http://ollama:11434
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
+      RAG_HYBRID_TIMEOUT_SEC: "120"
+    depends_on:
+      pgvector:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # Open WebUI (M5 Fork — ADR-0006 X-User-* 헤더, /v1/files 프록시, ADR-0009 /auth/verify)
+  open-webui:
+    build:
+      context: ./open-webui-fork
+      dockerfile: Dockerfile
+    # image: ghcr.io/open-webui/open-webui:v0.6.5  # Fork 빌드로 교체됨
+    container_name: open-webui
+    ports:
+      - "3000:8080"
+    environment:
+      # Spring Boot RAG 백엔드 프록시 (ADR-0006)
+      RAG_BACKEND_URL: http://rag-backend:8080
+      RAG_BACKEND_API_KEY: ${RAG_BACKEND_API_KEY:?RAG_BACKEND_API_KEY를 .env 파일에 설정하세요 (예: sk-rag-xxxxx)}
+      # 모든 챗을 rag-backend(/v1)로 라우팅 — 직접 Ollama 우회 차단
+      OPENAI_API_BASE_URL: http://rag-backend:8080/v1
+      OPENAI_API_KEY: ${RAG_BACKEND_API_KEY}
+      ENABLE_OPENAI_API: "true"
+      # Ollama 직접 연결 비활성화 (드롭다운에 RAG 모델만 노출)
+      ENABLE_OLLAMA_API: "false"
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?WEBUI_SECRET_KEY를 .env 파일에 설정하세요 (openssl rand -hex 32)}
+      WEBUI_NAME: "RagVault Dev"
+    volumes:
+      - open_webui_data:/app/backend/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+      rag-backend:
+        condition: service_healthy
+    networks:
+      - rag-net
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+  pgvector_data:
+  redis_data:
+  mysql_data:
+  open_webui_data:
+
+networks:
+  rag-net:
+    driver: bridge

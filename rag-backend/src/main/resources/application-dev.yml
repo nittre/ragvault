@@ -1,0 +1,36 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://pgvector:5432/ragdb
+    username: raguser
+    password: ${SPRING_DATASOURCE_PASSWORD:-ragpassword}
+    driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: redis
+      port: 6379
+  ai:
+    ollama:
+      base-url: http://ollama:11434
+      chat:
+        options:
+          model: qwen2.5:7b-instruct-q4_K_M
+      embedding:
+        options:
+          model: bge-m3
+
+server:
+  error:
+    # Admin API 검증 메시지를 UI 에 전달하기 위해 dev 에서만 활성화.
+    include-message: always
+
+rag:
+  admin:
+    # dev 전용: X-Dev-Admin 헤더로 Admin UI 접근 허용 (Open WebUI 세션 쿠키 cross-port 미전달 회피).
+    # 운영 프로파일(application-prod.yml)에는 두지 않음 → 기본 false.
+    dev-bypass: true
+  mysql:
+    host: mysql-sample
+    port: 3306
+    database: customer_sample
+    username: raguser
+    password: ${MYSQL_PASSWORD:-ragpassword}
