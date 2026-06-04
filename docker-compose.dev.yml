@@ -140,14 +140,14 @@ services:
     environment:
       # Spring Boot RAG 백엔드 프록시 (ADR-0006)
       RAG_BACKEND_URL: http://rag-backend:8080
-      RAG_BACKEND_API_KEY: ${RAG_BACKEND_API_KEY:?RAG_BACKEND_API_KEY를 .env 파일에 설정하세요 (예: sk-rag-xxxxx)}
+      RAG_BACKEND_API_KEY: "${RAG_BACKEND_API_KEY:?RAG_BACKEND_API_KEY를 .env 파일에 설정하세요 (예: sk-rag-xxxxx)}"
       # 모든 챗을 rag-backend(/v1)로 라우팅 — 직접 Ollama 우회 차단
       OPENAI_API_BASE_URL: http://rag-backend:8080/v1
       OPENAI_API_KEY: ${RAG_BACKEND_API_KEY}
       ENABLE_OPENAI_API: "true"
       # Ollama 직접 연결 비활성화 (드롭다운에 RAG 모델만 노출)
       ENABLE_OLLAMA_API: "false"
-      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?WEBUI_SECRET_KEY를 .env 파일에 설정하세요 (openssl rand -hex 32)}
+      WEBUI_SECRET_KEY: "${WEBUI_SECRET_KEY:?WEBUI_SECRET_KEY를 .env 파일에 설정하세요 (openssl rand -hex 32)}"
       WEBUI_NAME: "RagVault Dev"
     volumes:
       - open_webui_data:/app/backend/data

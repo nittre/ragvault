@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/guardrail.py"
+            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/.claude/hooks/guardrail.py\"'"
           }
         ]
       }
