@@ -1,5 +1,10 @@
 package com.ragservice.rag.domain;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -7,6 +12,7 @@ import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 
 /**
@@ -46,9 +52,26 @@ public class SqlTableConfig {
     @Column(columnDefinition = "jsonb")
     private String relationships;
 
+    /**
+     * sample_queries (jsonb) — JSON 배열·객체·문자열 모두 String 으로 수신.
+     * API 요청에서 JSON 배열로 보낼 경우 JsonNodeToStringDeserializer 로 변환.
+     */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "sample_queries", columnDefinition = "jsonb")
+    @JsonDeserialize(using = SqlTableConfig.JsonNodeToStringDeserializer.class)
     private String sampleQueries;
+
+    /** JSON 배열·객체 → String 변환 Deserializer (API 요청 호환성) */
+    static class JsonNodeToStringDeserializer extends StdDeserializer<String> {
+        JsonNodeToStringDeserializer() { super(String.class); }
+
+        @Override
+        public String deserialize(JsonParser p, DeserializationContext ctx) throws IOException {
+            JsonNode node = p.getCodec().readTree(p);
+            if (node.isTextual()) return node.asText();
+            return node.toString();
+        }
+    }
 
     @Column(name = "data_sensitivity", nullable = false, length = 20)
     private String dataSensitivity = "internal";
