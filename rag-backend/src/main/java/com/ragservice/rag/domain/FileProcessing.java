@@ -19,7 +19,7 @@ public class FileProcessing {
     @Column(nullable = false)
     private String userEmail;
 
-    @Column(nullable = false)
+    @Column(name = "s3_key", nullable = false)
     private String s3Key;
 
     @Column(nullable = false)
