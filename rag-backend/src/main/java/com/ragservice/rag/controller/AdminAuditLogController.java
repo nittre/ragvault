@@ -38,7 +38,9 @@ public class AdminAuditLogController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        var pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        // native query 에 ORDER BY a.created_at DESC 가 명시돼 있으므로
+        // Pageable 에 sort 를 추가하면 camelCase 컬럼명 충돌이 발생한다.
+        var pageable = PageRequest.of(page, size, Sort.unsorted());
         var result = repo.findFiltered(userEmail, action, from, to, pageable);
         return ResponseEntity.ok(Map.of(
                 "data", result.getContent(),

@@ -3,6 +3,7 @@ package com.ragservice.rag.domain;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "audit_log")
@@ -14,8 +15,9 @@ import java.time.LocalDateTime;
 public class AuditLog {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue
+    @Column(columnDefinition = "uuid default gen_random_uuid()")
+    private UUID id;
 
     /** ADR-0010: ResponseRawStorageService 키 */
     private String responseId;
