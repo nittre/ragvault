@@ -1,7 +1,7 @@
 # RagVault 로컬 개발 환경
 # Usage: docker compose -f docker-compose.dev.yml up -d
 # 모델 pull: docker exec -it ollama ollama pull qwen2.5:7b-instruct-q4_K_M
-#            docker exec -it ollama ollama pull nomic-embed-text
+#            docker exec -it ollama ollama pull bge-m3
 #            docker exec -it ollama ollama pull qwen2.5-vl:7b-instruct-q4_K_M
 
 services:

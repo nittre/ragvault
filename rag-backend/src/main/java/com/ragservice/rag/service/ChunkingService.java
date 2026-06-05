@@ -26,7 +26,7 @@ import java.util.Map;
  * 1. MySQL 행 → 텍스트 결합 (title + content_columns)
  * 2. PII 마스킹 (rag_table_config.pii_masking_level 기준, ADR-0008)
  * 3. 청킹 (recursive / per-record 전략)
- * 4. 임베딩 (nomic-embed-text via OllamaEmbeddingModel)
+ * 4. 임베딩 (bge-m3 via OllamaEmbeddingModel)
  * 5. document_chunks UPSERT (content_hash 기반 멱등성, ADR-0001)
  */
 @Service

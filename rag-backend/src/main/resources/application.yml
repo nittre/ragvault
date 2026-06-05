@@ -63,7 +63,7 @@ spring.ai.ollama:
 rag:
   security:
     # W-3: 신뢰 프록시 CIDR — 이 대역의 요청에서만 X-User-* 헤더를 신뢰.
-    # k3s 파드 네트워크(기본 10.42.0.0/16)는 10.0.0.0/8 에 포함.
+    # Docker Compose 컨테이너 네트워크(172.16.0.0/12)는 아래 CIDR에 포함.
     # 프로덕션에서 파드 CIDR 을 좁혀 설정하려면 application-prod.yml 에 override.
     trusted-proxy-cidrs:
       - "127.0.0.0/8"
