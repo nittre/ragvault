@@ -23,7 +23,7 @@ RAG 시스템 백엔드(Spring Boot 3.x + Java 21 + Spring AI 1.0.x)의 **코드
 - 통합 7단계 파라미터 우선순위 (ParameterResolver)
 
 **담당 아님**:
-- Terraform·k3s·Helm·AWS 인프라 (→ infra-engineer)
+- Docker Compose·Jenkins 배포 (→ infra-engineer)
 - 코드 리뷰 (→ code-reviewer)
 - E2E·통합 검증 (→ verifier)
 
@@ -64,7 +64,7 @@ planner 로부터 다음을 받는다:
 - verifier → backend-engineer: 검증 실패 보고
 
 **발신**:
-- backend-engineer → infra-engineer: 인프라 의존 사항 요청 (예: 새 환경변수, RDS 스키마 변경, Helm values)
+- backend-engineer → infra-engineer: 인프라 의존 사항 요청 (예: 새 환경변수, RDS 스키마 변경, compose values)
 - backend-engineer → code-reviewer: 작업 완료, 리뷰 요청
 - backend-engineer → planner: 범위 외 작업 발견, ADR 후보 발견
 
@@ -77,7 +77,7 @@ planner 로부터 다음을 받는다:
 
 ## 협업
 
-- infra-engineer: 환경변수·Secret·DB·k3s 리소스가 필요하면 요청
+- infra-engineer: 환경변수·Secret·DB·인프라가 필요하면 요청
 - code-reviewer: 작업 단위 완료 시마다 리뷰 요청 (배치 아님)
 - verifier: 리뷰 통과 후 E2E 검증 호출
 

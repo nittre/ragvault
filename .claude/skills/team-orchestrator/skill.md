@@ -29,7 +29,7 @@ planner (opus, 계획·분해·위임)
    │
    ├─→ backend-engineer (sonnet, Spring Boot·Spring AI·pgvector·동기화·SQL·파일·VLM)
    │
-   └─→ infra-engineer (sonnet, Terraform·k3s·Helm·AWS·SES·AMI)
+   └─→ infra-engineer (sonnet, Docker Compose·Jenkins·배포 자동화)
 
 작업 완료 후:
 backend-engineer / infra-engineer
@@ -51,7 +51,7 @@ verifier (sonnet, 빌드·테스트·경계면·E2E·회귀)
 ```
 1. 도메인 축
    backend-engineer   ← Spring Boot 코드, RAG 로직, Spring AI
-   infra-engineer     ← Terraform, k3s, Helm, AWS, AMI
+   infra-engineer     ← Docker Compose, Jenkins, 배포 자동화
 
 2. 작업 유형 축
    구현 (write)       ← backend / infra
@@ -75,7 +75,7 @@ for 사용자 요청:
     1. 마일스톤 확인 (현재 어디?)
     2. 작업 분해 — 1~3시간 단위
     3. 각 작업에 owner 지정:
-       - 도메인 키워드(Spring Boot·RDS·Helm 등) → backend / infra
+       - 도메인 키워드(Spring Boot·RDS·docker compose 등) → backend / infra
        - 작업 유형(rev·verify·plan) → 해당 owner
     4. 의존성 그래프 작성 (blocks/blockedBy)
     5. 병렬 가능 작업 식별 (independent path)
@@ -214,7 +214,7 @@ Agent(
 모든 task 시작 직전, 해당 owner 가 `lessons-learned` 스킬 트리거 → 도메인 키워드로 grep → 발견된 LL 의 규칙 적용.
 
 ### 에러 발생 시 — 작성 (의무)
-- 빌드·테스트 실패, 런타임 에러, `terraform apply` 실패, 가드레일 차단 + 거부 시 즉시
+- 빌드·테스트 실패, 런타임 에러, `docker compose up` 실패, 가드레일 차단 + 거부 시 즉시
 - `lessons-learned` 스킬 자동 트리거 → 새 LL-NNNN 작성
 - spec-check 에 재발 방지 검증 패턴 추가
 
@@ -285,7 +285,7 @@ for task in planner.output.tasks:
 
 ```
 [backend-engineer ↔ infra-engineer]
-backend 가 새 환경변수 필요 → SendMessage(to: infra-engineer, "RDS 에 X 컬럼 추가 + Helm values 갱신")
+backend 가 새 환경변수 필요 → SendMessage(to: infra-engineer, "RDS 에 X 컬럼 추가 + compose .env 갱신")
 
 [작업 완료]
 backend-engineer 가 작업 완료 → SendMessage(to: code-reviewer, "리뷰 요청: {git diff}, 영향 영역, 관련 ADR")
@@ -324,7 +324,7 @@ verifier 가 빌드·테스트·회귀 검증:
 |------|------|
 | **TaskCreate / TaskUpdate** | 작업 자체 — 진행 상황·의존성·owner |
 | **SendMessage** | 팀원 간 실시간 조율·피드백 (BLOCKER 발생, 추가 의존 발견 등) |
-| **파일 기반** | 큰 산출물 — `git diff`, Terraform plan, 검증 report. `_workspace/` 폴더 또는 PR description |
+| **파일 기반** | 큰 산출물 — `git diff`, docker compose config, 검증 report. `_workspace/` 폴더 또는 PR description |
 
 `_workspace/` 사용 시 파일명 컨벤션: `{phase}_{agent}_{artifact}.{ext}`
 - 예: `01_planner_breakdown.md`, `03_backend_chat-controller.diff`, `05_reviewer_feedback.md`

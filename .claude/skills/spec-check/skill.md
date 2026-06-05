@@ -26,7 +26,6 @@ description: requirements/ 와 docs/adr/ 의 결정사항 정합성을 검증한
 
 | 항목 | 권위 출처 | 다른 곳에서 위반 신호 |
 |------|---------|------------------|
-| 고객사당 월 비용 | `requirements/01-architecture.md` 섹션 8-1 표 ($415) | 본문에 $435, $400 등 다른 숫자 |
 | Phase 0 일정 | `requirements/01-architecture.md` 섹션 11 (약 3.5~4개월) | "2개월", "2.5개월" 표기 |
 | binlog 동기화 주기 | ADR-0001 (30분) | "매일 새벽 2시" 잔재 |
 | 파라미터 우선순위 | ADR-0005 (7단계) | 별도 우선순위 정의 |
@@ -65,7 +64,6 @@ ADR-0002 (데이터 격리 옵션 D)
   □ 'restricted' 등록 거부 가드
 
 ADR-0003 (ALB Multi-AZ)
-  □ Terraform aws_lb.subnets 에 2개 AZ Public Subnet
   □ Public Subnet AZ-a + AZ-c 양쪽 정의
   □ ALB "Single AZ" 표기 잔재 없음
 
@@ -73,7 +71,7 @@ ADR-0004 (Spring AI + Q4_K_M)
   □ Spring AI ChatClient + OllamaChatModel 사용
   □ raw OllamaClient 자체 wrapper 없음 (grep)
   □ application.yml 의 model 이 q4_K_M suffix 포함
-  □ AMI 빌드에 qwen2.5:14b-instruct-q4_K_M + qwen2.5-vl:7b + nomic-embed-text 사전 pull
+  □ 에 qwen2.5:14b-instruct-q4_K_M + qwen2.5-vl:7b + bge-m3 사전 pull
 
 ADR-0005 (7단계 우선순위)
   □ ParameterResolver 가 7단계 + Guard A/B 구현
@@ -106,7 +104,6 @@ grep -rn "SELECT \*\|select\s\*" rag-backend/src/main/java/
 
 ```bash
 # 비용 표 단일 출처 확인
-sed -n '/8-1\. 고객사 1개당 월 AWS 비용/,/합계/p' requirements/01-architecture.md
 # → 표의 합계가 본문 인용과 일치하는지
 
 # Phase 0 체크리스트가 ADR 모두 반영
@@ -137,7 +134,6 @@ for line in sys.stdin:
 ## Spec Check Report
 
 ### 권위 출처 침범
-- ✅ 비용 ($415) — OK
 - ❌ 일정 — requirements/X 에 "2.5개월" 잔재 (line N)
 
 ### ADR 정합
@@ -152,7 +148,6 @@ for line in sys.stdin:
 - ✅ SSRF Guard: URL Fetch 경로 OK
 
 ### 비용·일정
-- ✅ 비용 표 합계 ($415) ↔ 본문 인용 일치
 - ✅ Phase 0 체크리스트 — 6경로 의도 분류 포함
 
 ### Cross-reference

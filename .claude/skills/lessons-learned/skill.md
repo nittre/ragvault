@@ -1,6 +1,6 @@
 ---
 name: lessons-learned
-description: 에러·실패·예상치 못한 행동 발생 시 docs/lessons-learned/ 에 LL-NNNN 문서를 작성한다. 또한 새 작업을 시작하기 전 관련 카테고리의 기존 LL 을 grep 으로 검색하여 동일한 실수를 반복하지 않게 한다. 빌드 실패, terraform apply 에러, 런타임 예외, 30분 이상 디버깅, 가드레일 차단 등 모든 실패 신호에 트리거하라. 작업 시작 시점에도 자동으로 관련 LL 을 참조하라.
+description: 에러·실패·예상치 못한 행동 발생 시 docs/lessons-learned/ 에 LL-NNNN 문서를 작성한다. 또한 새 작업을 시작하기 전 관련 카테고리의 기존 LL 을 grep 으로 검색하여 동일한 실수를 반복하지 않게 한다. 빌드 실패, docker compose up 에러, 런타임 예외, 30분 이상 디버깅, 가드레일 차단 등 모든 실패 신호에 트리거하라. 작업 시작 시점에도 자동으로 관련 LL 을 참조하라.
 ---
 
 # Lessons Learned 스킬
@@ -31,7 +31,7 @@ grep -rln "Tika\|Tesseract\|OCR" docs/lessons-learned/
 **언제 트리거 (반드시)**:
 - 빌드·테스트 실패 (`./gradlew build`, `npm test` 등 명령 실패)
 - 런타임 에러 (Spring Boot 시작 실패, NullPointerException, BeanCreationException)
-- 인프라 적용 실패 (`terraform apply` 에러, `helm install` 실패)
+- 인프라 적용 실패 (`docker compose up` 에러, `docker compose up` 실패)
 - 가드레일에 의해 위험 명령 차단 (사용자가 차단 후 거부한 경우)
 - 통합 경계면 mismatch (API shape 불일치 등)
 - 디버깅 시간 30분 초과 영역
@@ -110,7 +110,7 @@ ls docs/lessons-learned/ | grep -E '^[0-9]{4}-' | tail -1
 
 ### Should-trigger (이 스킬 발동)
 - "테스트 실패", "빌드 실패", "에러 발생"
-- `terraform apply` 또는 `helm install` 실패
+- `docker compose up` 또는 `docker compose up` 실패
 - Spring Boot 시작 시 BeanCreationException 등
 - 가드레일 차단 후 사용자가 명시 거부
 - "이거 30분째 못 풀고 있어"
@@ -129,7 +129,7 @@ ls docs/lessons-learned/ | grep -E '^[0-9]{4}-' | tail -1
 |--------|---------|
 | Gradle, Maven, classpath, dependency | `build` |
 | Spring Bean, application context, profile, NullPointerException | `runtime` |
-| Terraform, k3s, Helm, AWS, VPC | `infra` |
+| Docker Compose, Jenkins, 배포 | `infra` |
 | DB 스키마, 마이그레이션, binlog, GTID, pgvector | `data` |
 | PII, 인증, SSRF, access_groups, API Key | `security` |
 | API shape, Open WebUI ↔ Spring Boot, JSON schema | `integration` |

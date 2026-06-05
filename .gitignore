@@ -34,6 +34,7 @@ rag-infra/helm/**/*.tgz
 # ── 비밀·자격증명 ─────────────────────────────
 .env
 .env.local
+.env.internal
 *.pem
 *.key
 *-credentials.json
