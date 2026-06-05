@@ -1,47 +1,41 @@
 # rag-infra
 
-RAG SaaS 인프라 코드 (Terraform + Helm).
+사내 RAG 서비스 배포 파일.
 
 ## 구조
 
-- `terraform/modules/rag-stack/` — 재사용 가능한 고객사 스택 Terraform 모듈 (VPC, ALB, RDS, EC2, SES, IAM)
-- `terraform/customers/template/` — 신규 고객사 배포 템플릿
-- `helm/rag-backend/` — Spring Boot Helm 차트
-- `helm/ollama/` — Ollama Helm 차트
-
-## 자주 쓰는 명령어
-
-### Terraform
-
-```bash
-# 고객사 디렉토리로 이동
-cd terraform/customers/{customer_id}
-
-terraform init -backend=false    # 로컬 검증용
-terraform validate
-terraform plan
-# terraform apply 는 가드레일 통과 + 사용자 명시 승인 후 실행
+```
+rag-infra/
+├── docker-compose.prod.yml  — 운영 배포 (rag-backend, open-webui, redis, prometheus, grafana)
+└── README.md
 ```
 
-### Helm
+## 배포
 
 ```bash
-# 린트
-helm lint helm/rag-backend
-helm lint helm/ollama
+# 이미지 Pull
+IMAGE_TAG=abc1234 docker compose -f docker-compose.prod.yml pull
 
-# 템플릿 렌더링 확인
-helm template rag-backend helm/rag-backend -f helm/rag-backend/values-prod.yaml
+# 서비스 기동 / 재배포
+IMAGE_TAG=abc1234 docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+# 상태 확인
+docker compose -f docker-compose.prod.yml ps
+
+# 로그 확인
+docker compose -f docker-compose.prod.yml logs -f rag-backend
 ```
 
-## ADR 참고
+## 환경변수
 
-- ADR-0003: ALB Multi-AZ 의무, 컴퓨트 Single AZ
-- ADR-0004: Q4_K_M 양자화 (모든 환경)
-- 실제 구현: M7 마일스톤
+비밀값은 `/opt/ragvault/.env` 파일에 저장 (서버에서 직접 관리).  
+`.env.internal.example`을 참고해 작성.
+
+```bash
+cp .env.internal.example /opt/ragvault/.env
+vi /opt/ragvault/.env   # 실제 값으로 편집
+```
 
 ## 의존성
 
-- Terraform >= 1.5
-- Helm >= 3.12
-- kubectl >= 1.28 (k3s 호환)
+- Docker + Docker Compose >= 2.20

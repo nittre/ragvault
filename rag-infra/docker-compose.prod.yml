@@ -1,0 +1,141 @@
+# RagVault 프로덕션 배포 (EC2 단일 인스턴스 — Docker Compose)
+#
+# 사용 방법:
+#   IMAGE_TAG=abc1234 docker compose -f docker-compose.prod.yml up -d
+#
+# 외부 의존성 (컨테이너 아님):
+#   - RDS PostgreSQL + pgvector : SPRING_DATASOURCE_URL 환경변수
+#   - Ollama GPU EC2            : SPRING_AI_OLLAMA_BASE_URL 환경변수
+#   - 고객사 MySQL               : CUSTOMER_MYSQL_* 환경변수
+#
+# 환경변수 공급 방법:
+#   - AWS Secrets Manager → /opt/ragvault/.env (systemd 또는 배포 스크립트에서 주입)
+#   - Jenkinsfile에서 SSM Parameter Store 조회 후 파일로 생성
+
+services:
+
+  # ── Spring Boot RAG 백엔드 ────────────────────────────────────────────────
+  rag-backend:
+    image: ${ECR_REGISTRY}/rag-backend:${IMAGE_TAG:-latest}
+    container_name: rag-backend
+    ports:
+      - "8080:8080"
+    env_file:
+      - /opt/ragvault/.env        # Secrets Manager에서 주입된 환경변수
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
+      RAG_HYBRID_TIMEOUT_SEC: "120"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    logging:
+      driver: "awslogs"
+      options:
+        awslogs-region: "ap-northeast-2"
+        awslogs-group: "/rag/${CUSTOMER_ID}/rag-backend"
+        awslogs-stream: "app"
+
+  # ── Open WebUI (Fork) ────────────────────────────────────────────────────
+  open-webui:
+    image: ${ECR_REGISTRY}/open-webui:${IMAGE_TAG:-latest}
+    container_name: open-webui
+    ports:
+      - "3000:8080"
+    env_file:
+      - /opt/ragvault/.env
+    environment:
+      RAG_BACKEND_URL: http://rag-backend:8080
+      OPENAI_API_BASE_URL: http://rag-backend:8080/v1
+      ENABLE_OPENAI_API: "true"
+      ENABLE_OLLAMA_API: "false"
+      WEBUI_NAME: "RagVault"
+    depends_on:
+      rag-backend:
+        condition: service_healthy
+    networks:
+      - rag-net
+    volumes:
+      - open_webui_data:/app/backend/data
+    restart: unless-stopped
+    logging:
+      driver: "awslogs"
+      options:
+        awslogs-region: "ap-northeast-2"
+        awslogs-group: "/rag/${CUSTOMER_ID}/open-webui"
+        awslogs-stream: "app"
+
+  # ── Redis (캐시 + Rate Limit + ShedLock) ─────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"             # 외부 노출은 sg.tf에서 App SG 내부로 제한
+    volumes:
+      - redis_data:/data
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+  # ── Prometheus (메트릭 수집) ──────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus_data:/prometheus
+      - /opt/ragvault/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - rag-net
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+
+  # ── Grafana (대시보드) ────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - /opt/ragvault/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - /opt/ragvault/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    networks:
+      - rag-net
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  open_webui_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  rag-net:
+    driver: bridge

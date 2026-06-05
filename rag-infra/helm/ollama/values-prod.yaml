@@ -1,7 +1,0 @@
-# 상용 오버라이드
-image:
-  pullPolicy: Always
-
-persistence:
-  enabled: true
-  size: 150Gi
