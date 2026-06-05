@@ -14,13 +14,5 @@ COPY frontend/ /app/frontend/
 # 응답 소요 시간 표시 스크립트 — 사전 빌드된 Open WebUI 에 직접 주입
 # /static 경로는 /app/backend/open_webui/static/ 에서 제공됨 (Open WebUI env.py STATIC_DIR)
 COPY frontend/static/elapsed-timer.js /app/backend/open_webui/static/elapsed-timer.js
-RUN python3 -c "
-content = open('/app/build/index.html').read()
-snippet = '<script src=\"/static/elapsed-timer.js\" defer></script>'
-if snippet not in content:
-    content = content.replace(
-        '<script src=\"/static/loader.js\" defer></script>',
-        '<script src=\"/static/loader.js\" defer></script>\n\t\t' + snippet
-    )
-    open('/app/build/index.html', 'w').write(content)
-"
+COPY scripts/inject_timer.py /tmp/inject_timer.py
+RUN python3 /tmp/inject_timer.py
