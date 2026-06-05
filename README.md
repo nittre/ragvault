@@ -134,8 +134,10 @@ RAG_BACKEND_API_KEY=sk-rag-xxxxxxxx
 # openssl rand -hex 32
 WEBUI_SECRET_KEY=xxxxxxxx
 
-# ── pgvector (로컬 컨테이너, 기본값 그대로 사용 가능) ─────────
-POSTGRES_PASSWORD=ragpassword
+# ── PostgreSQL + pgvector (외부 서버) ─────────────────────────
+SPRING_DATASOURCE_URL=jdbc:postgresql://<pg-server-ip>:5432/ragdb
+SPRING_DATASOURCE_USERNAME=raguser
+SPRING_DATASOURCE_PASSWORD=<실제 비밀번호>
 ```
 
 ---

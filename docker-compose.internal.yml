@@ -9,27 +9,6 @@
 
 services:
 
-  # 벡터 DB
-  pgvector:
-    image: pgvector/pgvector:pg16
-    container_name: pgvector
-    environment:
-      POSTGRES_DB: ragdb
-      POSTGRES_USER: raguser
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ragpassword}
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgvector_data:/var/lib/postgresql/data
-    networks:
-      - rag-net
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U raguser -d ragdb"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
   # 캐시 / 분산 락 (ShedLock)
   redis:
     image: redis:7-alpine
@@ -57,9 +36,10 @@ services:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: internal
-      SPRING_DATASOURCE_URL: jdbc:postgresql://pgvector:5432/ragdb
-      SPRING_DATASOURCE_USERNAME: raguser
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-ragpassword}
+      # 외부 PostgreSQL (pgvector) 서버
+      SPRING_DATASOURCE_URL: "${SPRING_DATASOURCE_URL:?SPRING_DATASOURCE_URL를 .env.internal에 설정하세요}"
+      SPRING_DATASOURCE_USERNAME: "${SPRING_DATASOURCE_USERNAME:-raguser}"
+      SPRING_DATASOURCE_PASSWORD: "${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD를 .env.internal에 설정하세요}"
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       # 사내 Ollama 서버 (로컬 컨테이너 없음)
@@ -76,8 +56,6 @@ services:
       MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
       RAG_HYBRID_TIMEOUT_SEC: "120"
     depends_on:
-      pgvector:
-        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
@@ -117,7 +95,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  pgvector_data:
   redis_data:
   open_webui_data:
 

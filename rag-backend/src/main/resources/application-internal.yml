@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://pgvector:5432/ragdb
-    username: raguser
-    password: ${SPRING_DATASOURCE_PASSWORD:-ragpassword}
+    url: ${SPRING_DATASOURCE_URL:?SPRING_DATASOURCE_URL를 .env.internal에 설정하세요}
+    username: ${SPRING_DATASOURCE_USERNAME:-raguser}
+    password: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD를 .env.internal에 설정하세요}
     driver-class-name: org.postgresql.Driver
   data:
     redis:
