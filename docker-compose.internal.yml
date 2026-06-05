@@ -1,0 +1,153 @@
+# RagVault 사내 개발 서버 환경
+# 사내 Ollama 서버를 사용하므로 로컬 Ollama 컨테이너 없음.
+# 사전 준비: 사내 Ollama 서버에서 `ollama pull bge-m3` 실행 필요.
+#
+# Usage:
+#   cp .env.internal.example .env.internal
+#   # .env.internal 에 INTERNAL_OLLAMA_BASE_URL 등 채우기
+#   docker compose -f docker-compose.internal.yml --env-file .env.internal up -d
+
+services:
+
+  # 벡터 DB
+  pgvector:
+    image: pgvector/pgvector:pg16
+    container_name: pgvector
+    environment:
+      POSTGRES_DB: ragdb
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ragpassword}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # 캐시 / 분산 락 (ShedLock)
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # 고객사 MySQL 샘플 (GTID + binlog 활성화)
+  mysql-sample:
+    image: mysql:8.0
+    container_name: mysql-sample
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: customer_sample
+      MYSQL_USER: raguser
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-ragpassword}
+    ports:
+      - "3306:3306"
+    command: >
+      --gtid-mode=ON
+      --enforce-gtid-consistency=ON
+      --log-bin=mysql-bin
+      --binlog-format=ROW
+      --binlog-row-image=FULL
+      --server-id=1
+      --binlog-expire-logs-seconds=604800
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./infra/mysql-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root --password=$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # Spring Boot RAG 백엔드
+  rag-backend:
+    build:
+      context: ./rag-backend
+      dockerfile: Dockerfile
+    container_name: rag-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: internal
+      SPRING_DATASOURCE_URL: jdbc:postgresql://pgvector:5432/ragdb
+      SPRING_DATASOURCE_USERNAME: raguser
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-ragpassword}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      # 사내 Ollama 서버 (로컬 컨테이너 없음)
+      INTERNAL_OLLAMA_BASE_URL: "${INTERNAL_OLLAMA_BASE_URL:?INTERNAL_OLLAMA_BASE_URL를 .env.internal에 설정하세요 (예: http://192.168.x.x:11434)}"
+      INTERNAL_CHAT_MODEL: ${INTERNAL_CHAT_MODEL:-qwen3:8b}
+      INTERNAL_EMBEDDING_MODEL: ${INTERNAL_EMBEDDING_MODEL:-bge-m3}
+      INTERNAL_VLM_MODEL: ${INTERNAL_VLM_MODEL:-qwen3:8b}
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
+      RAG_HYBRID_TIMEOUT_SEC: "120"
+    depends_on:
+      pgvector:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # Open WebUI (ADR-0006 X-User-* 헤더, ADR-0009 /auth/verify)
+  open-webui:
+    build:
+      context: ./open-webui-fork
+      dockerfile: Dockerfile
+    container_name: open-webui
+    ports:
+      - "3000:8080"
+    environment:
+      RAG_BACKEND_URL: http://rag-backend:8080
+      RAG_BACKEND_API_KEY: "${RAG_BACKEND_API_KEY:?RAG_BACKEND_API_KEY를 .env.internal에 설정하세요}"
+      OPENAI_API_BASE_URL: http://rag-backend:8080/v1
+      OPENAI_API_KEY: ${RAG_BACKEND_API_KEY}
+      ENABLE_OPENAI_API: "true"
+      ENABLE_OLLAMA_API: "false"
+      WEBUI_SECRET_KEY: "${WEBUI_SECRET_KEY:?WEBUI_SECRET_KEY를 .env.internal에 설정하세요}"
+      WEBUI_NAME: "RagVault Internal"
+    volumes:
+      - open_webui_data:/app/backend/data
+    depends_on:
+      rag-backend:
+        condition: service_healthy
+    networks:
+      - rag-net
+    restart: unless-stopped
+
+volumes:
+  pgvector_data:
+  redis_data:
+  mysql_data:
+  open_webui_data:
+
+networks:
+  rag-net:
+    driver: bridge

@@ -1,0 +1,39 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://pgvector:5432/ragdb
+    username: raguser
+    password: ${SPRING_DATASOURCE_PASSWORD:-ragpassword}
+    driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: redis
+      port: 6379
+  ai:
+    ollama:
+      base-url: ${INTERNAL_OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        options:
+          model: ${INTERNAL_CHAT_MODEL:qwen3:8b}
+      embedding:
+        options:
+          model: ${INTERNAL_EMBEDDING_MODEL:bge-m3}
+
+server:
+  error:
+    # Admin API 검증 메시지를 UI 에 전달하기 위해 internal(dev) 에서만 활성화.
+    include-message: always
+
+rag:
+  admin:
+    # dev-bypass: X-Dev-Admin 헤더로 Admin UI 접근 허용 (사내 개발 환경에서도 허용).
+    dev-bypass: true
+  mysql:
+    host: mysql-sample
+    port: 3306
+    database: customer_sample
+    username: raguser
+    password: ${MYSQL_PASSWORD:-ragpassword}
+  vlm:
+    # vision 모델이 없으면 일반 chat 모델로 fallback.
+    # 이미지 입력 시 텍스트 응답만 반환되거나 오류가 발생할 수 있음.
+    model: ${INTERNAL_VLM_MODEL:qwen3:8b}
