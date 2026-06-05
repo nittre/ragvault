@@ -102,6 +102,27 @@ ollama list
 - [ ] 채팅 모델 Pull 완료 및 모델명 확인
 - [ ] 개발 서버 IP → Ollama 서버 **11434 포트** 방화벽 오픈
 
+**외부 PostgreSQL 서버**
+
+pgvector 확장이 설치되어 있어야 벡터 검색이 동작한다.
+
+```bash
+# 1. pgvector 패키지 설치 (PostgreSQL 16 기준, Ubuntu/Debian)
+apt install -y postgresql-16-pgvector
+
+# 2. 대상 DB에 확장 활성화 (ragdb에 접속 후)
+psql -U raguser -d ragdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+# 3. 설치 확인
+psql -U raguser -d ragdb -c "\dx vector"
+```
+
+> RDS 등 매니지드 서비스 사용 시 콘솔에서 pgvector 지원 여부를 먼저 확인한다.
+
+- [ ] pgvector 패키지 설치 완료
+- [ ] `CREATE EXTENSION vector` 실행 완료
+- [ ] 개발 서버 IP → PostgreSQL 서버 **5432 포트** 방화벽 오픈
+
 ---
 
 #### 2) 미리 설정해야 하는 것
