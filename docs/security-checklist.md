@@ -20,7 +20,7 @@
 |---|------|------|------|
 | 1 | API Key bcrypt 검증 | ✅ | `ApiKeyAuthFilter` L103: `passwordEncoder.matches(rawKey, k.getKeyHash())` — `BCryptPasswordEncoder` 사용 확인. key_prefix(15자) DB 후보 조회 후 BCrypt 검증하는 2단계 구조. |
 | 2 | Rate Limit 구현 | ✅ | Redis increment/expire 패턴으로 분(60)/시(1000)/일(10000) 3개 창 구현. Redis 장애 시 fail-open (L175 주석 명시). fail-open 정책은 운영 수용 여부 별도 확인 필요. |
-| 3 | TrustedHeaderFilter — 외부 X-User-* 헤더 제거 | ⚠️ | `x-user-groups`, `x-user-role`은 항상 제거. `x-user-email`은 devBypass=true + `/api/v1/user/**` 경로에서 통과 허용. **Phase 0 TODO: 내부 프록시 IP 화이트리스트 미구현** (L29 주석 확인). 외부 IP 차단은 네트워크 계층(k3s NetworkPolicy)에 의존하는 상태. |
+| 3 | TrustedHeaderFilter — 외부 X-User-* 헤더 제거 | ⚠️ | `x-user-groups`, `x-user-role`은 항상 제거. `x-user-email`은 devBypass=true + `/api/v1/user/**` 경로에서 통과 허용. **Phase 0 TODO: 내부 프록시 IP 화이트리스트 미구현** (L29 주석 확인). 외부 IP 차단은 네트워크 계층(Security Group)에 의존하는 상태. |
 | 4 | SSRF Guard — private IP 차단 | ✅ | `SsrfGuard.java`: RFC 1918 전체 (10.x, 172.16–31.x, 192.168.x), loopback (127.x, ::1), link-local 169.254.x (AWS metadata), IPv6 ULA (fc00::/7) 차단 구현. DNS resolve 후 검증으로 DNS rebinding 방어. 리다이렉트 hop별 재검증은 `UrlFetchService`에서 별도 확인 필요. |
 | 5 | SQL Validator — SELECT * 차단 | ✅ | `SqlValidator.java` L80–L131: JSqlParser AST 기반 `AllColumns`/`AllTableColumns` 검사. 중첩 서브쿼리 재귀 검사 포함. |
 | 6 | SQL Validator — DDL/DML 차단 | ✅ | L75: `!(statement instanceof Select)` 조건으로 SELECT 외 모든 구문 거부. DROP, INSERT, UPDATE, DELETE, CREATE 등 DDL/DML 전체 차단. 테이블 화이트리스트(sql_table_config.is_active=true) + excluded_columns 추가 검증. |
@@ -53,9 +53,9 @@
 
 #### W-3: TrustedHeaderFilter IP 화이트리스트 미구현 (항목 3)
 - **파일**: `TrustedHeaderFilter.java` L29 TODO
-- **현황**: Phase 0에서 내부 프록시 IP 기반 화이트리스트 미구현. k3s NetworkPolicy로 외부 접근을 네트워크 레이어에서 차단하는 구조에 의존.
+- **현황**: Phase 0에서 내부 프록시 IP 기반 화이트리스트 미구현. Security Group로 외부 접근을 네트워크 레이어에서 차단하는 구조에 의존.
 - **위험**: NetworkPolicy 설정 오류 시 외부에서 X-User-Email 직접 주입 가능.
-- **권고**: Phase 1+ 전환 시 IP 화이트리스트 구현 필수. 현재 k3s NetworkPolicy 설정 infra-engineer 검토 요청.
+- **권고**: Phase 1+ 전환 시 IP 화이트리스트 구현 필수. 현재 Security Group 설정 infra-engineer 검토 요청.
 
 #### W-4: Rate Limit fail-open 정책 (항목 2)
 - **파일**: `ApiKeyAuthFilter.java` L175

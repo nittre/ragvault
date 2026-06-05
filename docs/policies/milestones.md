@@ -1,6 +1,6 @@
 # Phase 0 마일스톤
 
-> Phase 0 (RAG SaaS MVP) 작업을 8개 마일스톤으로 분할.
+> Phase 0 (RAG 사내 서비스 MVP) 작업을 8개 마일스톤으로 분할.
 > 각 마일스톤 끝에 **데모 가능 상태** + 명확한 Exit criteria.
 > 4.5~4.7개월의 Phase 0 가 두루뭉술하게 흘러가지 않도록 통제 단위.
 
@@ -22,9 +22,9 @@
 
 **작업 영역**:
 - `rag-backend` 리포 부트스트랩 (Java 21 + Spring Boot 3.x + Spring AI 1.0.x)
-- `rag-infra` 리포 부트스트랩 (Terraform 디렉토리 구조)
+- `rag-infra` 리포 부트스트랩 (인프라 관리 도구 디렉토리 구조)
 - `docker-compose.dev.yml` — Ollama / pgvector / Redis / MySQL 샘플 / Open WebUI
-- 로컬 Ollama: `qwen2.5:7b-instruct-q4_K_M`, `nomic-embed-text` pull
+- 로컬 Ollama: `qwen2.5:7b-instruct-q4_K_M`, `bge-m3` pull
 - Jenkinsfile 기본 (build + test)
 - `.editorconfig` / 코드 스타일 / Gradle 설정
 
@@ -80,13 +80,13 @@
 - 초기 동기화 API (`POST /api/v1/admin/sync/initial`)
 
 **Exit criteria**:
-- ☐ 고객사 MySQL 샘플 INSERT/UPDATE/DELETE → 30분 cron 안 pgvector 반영
+- ☐ 회사 MySQL 샘플 INSERT/UPDATE/DELETE → 30분 cron 안 pgvector 반영
 - ☐ DDL 발생 → ddl_events 기록 + Discord 알람
 - ☐ binlog 1시간 lag 시 Warning 알람
 - ☐ 초기 동기화 10만 행 → ~1.75시간 안 완료
 
 **의존**: M1
-**데모**: **"고객사 MySQL 자동 동기화"** — 실제 데이터 기반 RAG
+**데모**: **"회사 MySQL 자동 동기화"** — 실제 데이터 기반 RAG
 
 ---
 
@@ -158,7 +158,7 @@
   - `/v1/chat/completions` 프록시 (X-User-* 헤더 주입 — ADR-0006)
   - `/v1/files` 프록시 → Spring Boot
   - `/auth/verify` 엔드포인트 신규 (admin UI 세션 검증용 — ADR-0009)
-  - SES SMTP 환경변수 + 메일 발송
+
 - **Frontend (Svelte)**:
   - 사이드 패널 13 파라미터 (디폴트 접힘 — S1 #11)
   - 클립 버튼 (파일·이미지 통합)
@@ -220,28 +220,28 @@
 **Entry**: M0 완료
 
 **작업 영역**:
-- Terraform 모듈 (`rag-stack`):
-  - VPC + Public Subnet AZ-a + AZ-c (ALB Multi-AZ — ADR-0003)
+
+
   - Private App Subnet AZ-a + AZ-c (AZ-c reserve)
   - Private LLM Subnet AZ-a (GPU 노드)
   - Private Data Subnet AZ-a + AZ-c (RDS Multi-AZ)
   - NAT Gateway 1개 (AZ-a)
-  - ALB (idle_timeout=600, ACM)
-  - RDS PostgreSQL Multi-AZ + pgvector
-  - EC2 k3s (t3.medium × 2) + GPU (g5.xlarge Spot)
-  - SES + 도메인 검증 cross-account
+
+
+
+
   - Secrets Manager + KMS
-  - IAM Cross-Account Role (최소 권한)
-- Helm 차트: rag-backend, open-webui, ollama, monitoring (kube-prometheus-stack)
-- AMI 빌드: qwen2.5:14b-instruct-q4_K_M + qwen2.5-vl:7b + nomic-embed-text 사전 pull
-- Jenkins 파이프라인: build → ECR push → AssumeRole → Helm upgrade
+
+- docker-compose.prod.yml: rag-backend, open-webui, redis, prometheus, grafana
+
+- Jenkins 파이프라인: build → ECR push → docker compose up -d
 - Route 53 hosted zone + ACM 자동 검증
 
 **Exit criteria**:
-- ☐ Terraform apply 신규 고객사 → 30분 안 인프라 배포
-- ☐ Helm install 4종 차트 → k3s Pod 정상
-- ☐ AMI 부팅 → Ollama + 모델 사전 로드
-- ☐ Jenkins Cross-Account 배포 성공
+- ☐ 
+- ☐ docker compose up -d → 컨테이너 5종 정상 기동
+- ☐ Ollama 기동 + 모델 pull 확인
+- ☐ Jenkins  배포 성공
 - ☐ ALB 외부 접근 → SSE 스트리밍 정상 (600초 timeout)
 
 **의존**: M0
@@ -294,7 +294,7 @@ M0
 | M | 데모 가치 |
 |---|----------|
 | M1 | "Spring AI 챗봇 동작" — 영업 첫 시연 |
-| M2 | "고객사 MySQL 자동 동기화" — 실제 데이터 RAG |
+| M2 | "회사 MySQL 자동 동기화" — 실제 데이터 RAG |
 | M3 | "수치·혼합 답변" — Text-to-SQL 차별화 |
 | M4 | "PDF·이미지·URL 분석" — ChatGPT급 |
 | M5 | "ChatGPT-like UX 완성" |

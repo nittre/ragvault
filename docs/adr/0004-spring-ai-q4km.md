@@ -29,7 +29,7 @@
   - 로컬·dev: `qwen2.5:7b-instruct-q4_K_M` (~6GB VRAM/RAM)
   - 상용: `qwen2.5:14b-instruct-q4_K_M` (~11GB VRAM)
   - 멀티모달: `qwen2.5-vl:7b-instruct-q4_K_M` (~6GB VRAM, 듀얼 모델로 추가)
-- 임베딩: `nomic-embed-text` (모든 환경 동일, 양자화 무관)
+- 임베딩: `bge-m3` (모든 환경 동일, 양자화 무관)
 - 격상 트리거: Phase 1+ RAGAS faithfulness < 0.85 → Q5_K_M 검토
 
 ### C. 환경별 application.yml 통일
@@ -37,7 +37,7 @@
 spring.ai.ollama:
   base-url: <env-specific>
   chat.options.model: <env-specific>   # qwen2.5:7b 또는 14b
-  embedding.options.model: nomic-embed-text
+  embedding.options.model: bge-m3
 rag.vlm.model: qwen2.5-vl:7b-instruct-q4_K_M
 ```
 
@@ -56,7 +56,7 @@ rag.vlm.model: qwen2.5-vl:7b-instruct-q4_K_M
 - 환경별 모델 크기 차이로 dev/local 7B vs 상용 14B — 프롬프트 튜닝·RAGAS 평가는 상용 14B 인프라에서 해야 정확
 
 ### 후속 작업
-- AMI 빌드 절차: `ollama pull qwen2.5:14b-instruct-q4_K_M nomic-embed-text qwen2.5-vl:7b-instruct-q4_K_M` 사전 포함
+- AMI 빌드 절차: `ollama pull qwen2.5:14b-instruct-q4_K_M bge-m3 qwen2.5-vl:7b-instruct-q4_K_M` 사전 포함
 - 코드 리뷰 회귀 검증: raw `OllamaClient` 자체 wrapper 작성 시 BLOCKER
 - 04·08·03·05 문서의 코드 예시는 실제 구현 시점에 Spring AI 패턴으로 정렬
 

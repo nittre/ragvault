@@ -125,13 +125,13 @@ gantt
 
 | Sprint | 주제 | 핵심 산출물 |
 |--------|------|----------|
-| **선행** | 준비 | 개발 환경, Open WebUI 학습, k3s 학습 |
+| **선행** | 준비 | 개발 환경, Open WebUI 학습, Docker Compose 학습 |
 | **1** | 백엔드 스켈레톤 | Docker Compose 동작, Spring Boot 기본 API |
 | **2** | RAG 파이프라인 | 단일 문서로 RAG 응답 동작 (E2E) |
 | **3** | 데이터 동기화 | MySQL binlog → pgvector 자동 동기화 |
 | **4** | Text-to-SQL | 의도 분류 + SQL 생성 + 혼합 검색 동작 |
 | **5** | UI 통합 | Open WebUI 포크에서 파라미터 패널 동작 |
-| **6** | AWS 배포 | Terraform으로 첫 인스턴스 배포 성공 |
+| **6** | AWS 배포 | 인프라 관리 도구으로 첫 인스턴스 배포 성공 |
 | **7** | 운영 안정성 | 모니터링/알람/보안 완성 |
 | **8** | 멀티모달 | URL Fetch, PDF/Word/이미지 첨부 처리 |
 | **9** | 운영 도구 | Admin Web UI, CSV 임포트, **첫 고객사 베타 출시** |
@@ -154,7 +154,7 @@ gantt
   - Open WebUI (포트 3000) — 기본 형태로
 - [ ] Ollama 모델 다운로드 스크립트
   - `qwen2.5:7b` 다운로드
-  - `nomic-embed-text` 다운로드
+  - `bge-m3` 다운로드
 - [ ] 샘플 MySQL 데이터 생성 스크립트 (Faker 등)
   - `products`, `contracts`, `customers`, `transactions` 테이블
   - 각 100~500행
@@ -515,72 +515,66 @@ gantt
 ## 8. Sprint 6 — AWS 인프라 + 배포 파이프라인
 
 **기간**: 2주
-**목표**: Terraform으로 AWS에 인프라 배포 + Jenkins 자동 배포
+**목표**: 인프라 관리 도구으로 AWS에 인프라 배포 + Jenkins 자동 배포
 
 ### 작업 항목
 
-#### Terraform 모듈 (1주차)
+#### 인프라 관리 도구 모듈 (1주차)
 - [ ] `rag-infra` 리포지토리 셋업
 - [ ] `terraform/modules/rag-stack/` 모듈
   - VPC, Subnet (Public, App, LLM, Data)
   - 보안 그룹
   - ALB (외부)
-  - EC2 t3.medium × 2 (k3s 노드)
+  - EC2 t3.medium × 2 (Docker Compose 호스트)
   - EC2 g5.xlarge × 1 (GPU Spot)
   - Auto Scaling Group (GPU)
   - RDS PostgreSQL Multi-AZ + pgvector
   - Secrets Manager
   - CloudWatch + 알람
-  - IAM 역할 (k3s 노드, ECR pull 등)
+  - IAM 역할 (EC2 인스턴스, ECR pull 등)
 - [ ] `terraform/modules/shared/` (우리 회사 계정)
   - ECR
   - Route 53 (ragservice.com)
-  - Cross-Account Role 정책 템플릿
+  -  Role 정책 템플릿
 - [ ] 변수화 (customer_name, customer_domain, instance_size 등)
 - [ ] 상태 파일 S3 백엔드
 
-#### AMI 빌드 (1주차)
-- [ ] Packer 또는 EC2 Image Builder
-- [ ] Ubuntu 22.04 + NVIDIA 드라이버 + Ollama
-- [ ] 모델 사전 포함 (qwen2.5:14b, nomic-embed-text)
-- [ ] AMI 버전 관리
-
-#### k3s 클러스터 (1~2주차)
-- [ ] k3s 설치 자동화 (cloud-init / Ansible)
-- [ ] Helm 차트 작성
-  - `helm/rag-backend/` (Spring Boot)
-  - `helm/open-webui/` (포크 빌드)
-  - `helm/ollama/` (GPU 노드 전용)
-  - `helm/monitoring/` (Prometheus + Grafana)
-- [ ] AWS Load Balancer Controller (ALB ↔ k3s)
-- [ ] aws-node-termination-handler (Spot 회수 대응)
-- [ ] NVIDIA Device Plugin (GPU 자원)
+#### Docker Compose 프로덕션 환경 (1~2주차)
+- [ ] Docker 설치 자동화 (cloud-init / Ansible)
+- [ ] docker-compose.prod.yml 작성
+  - Spring Boot 컨테이너
+  - Open WebUI (포크 빌드)
+  - Ollama (GPU EC2 전용 compose)
+  - Prometheus + Grafana
+- [ ] ALB Target Group 헬스체크 설정
+- [ ] Spot 회수 대응 스크립트 (IMDS 폴링, systemd 서비스)
+- [ ] Docker GPU 지원 설정 (nvidia-container-toolkit)
 
 #### Jenkins 파이프라인 (2주차)
 - [ ] 회사 서버에 Jenkins 설치
-- [ ] AWS Cross-Account Role 설정
+- [ ] AWS  Role 설정
 - [ ] Spring Boot 빌드 파이프라인
   - Gradle 빌드 + 테스트
   - Docker 이미지 빌드
   - ECR 푸시 (우리 회사 계정)
-  - AssumeRole → 고객사 계정
-  - Helm upgrade
+  - 배포 권한 → 고객사 계정
+  - docker compose up -d
   - Smoke 테스트
-  - 실패 시 자동 롤백
+  - 실패 시 이전 이미지로 복구
 - [ ] Open WebUI 포크 빌드 파이프라인
-- [ ] Terraform plan/apply 파이프라인
+- [ ] 인프라 관리 도구 plan/apply 파이프라인
 - [ ] Discord 알람 통합
 
 ### Definition of Done
 
 ```
-☑ terraform apply로 고객사 AWS 계정에 인프라 생성됨 (30~60분)
-☑ ALB → k3s → Spring Boot Pod 라우팅 동작
+☑ docker compose up로 운영 서버에 인프라 생성됨 (30~60분)
+☑ ALB → EC2 → Spring Boot 컨테이너 라우팅 동작
 ☑ RDS PostgreSQL Multi-AZ 페일오버 테스트 통과
 ☑ GPU EC2 (Spot)에서 Ollama 동작
 ☑ Spot 회수 시뮬레이션 → 3분 내 복구
 ☑ Jenkins에서 한 줄 명령으로 배포 완료
-☑ Helm rollback으로 이전 버전 복귀 가능
+☑ docker compose 이전 이미지로 복귀 가능
 ☑ Discord에 배포 완료 알림
 ☑ 신규 고객 추가 시간: 30분 ~ 1시간
 ```
@@ -588,7 +582,7 @@ gantt
 ### 데모 시나리오
 
 ```
-1. terraform apply -var customer=demo-customer
+1. docker compose up -var customer=demo-customer
 2. 30분 후 인프라 완성
 3. customera.ragservice.com 접속 → Open WebUI 로그인
 4. 채팅 동작 확인
@@ -629,7 +623,7 @@ gantt
 - [ ] 1년 자동 삭제 cron
 
 #### 모니터링 (1~2주차)
-- [ ] Prometheus + Grafana (Helm install)
+- [ ] Prometheus + Grafana (docker compose로 기동)
 - [ ] Spring Boot Actuator 메트릭 노출
 - [ ] DCGM Exporter (GPU 메트릭)
 - [ ] Grafana 대시보드
@@ -642,7 +636,7 @@ gantt
 - [ ] 알람 억제 (30분 중복 차단)
 
 #### Health Check (1주차)
-- [ ] k3s Probe 설정 (Liveness, Readiness)
+- [ ] Docker Healthcheck 설정 (Liveness, Readiness)
 - [ ] Deep Health Check 엔드포인트
 - [ ] ALB Target Group 헬스체크
 
@@ -669,7 +663,7 @@ gantt
 ### 데모 시나리오
 
 ```
-1. Spring Boot Pod 강제 종료 → k3s 자동 재시작
+1. Spring Boot 컨테이너 강제 종료 → Docker 자동 재시작
 2. RDS CPU 90% 초과 시뮬레이션 → Critical 알람
 3. Rate Limit 70회/분 초과 → 429 응답
 4. API Key 만료 30일 이내 → 알람
@@ -793,19 +787,19 @@ gantt
 
 #### 신규 고객 온보딩 도구 (2주차)
 - [ ] 온보딩 체크리스트 자동화
-- [ ] AWS Cross-Account Role 검증 도구
+- [ ] AWS  Role 검증 도구
 - [ ] 도메인 / SSL 설정 자동화 스크립트
-- [ ] 고객사 MySQL binlog 활성화 가이드
+- [ ] 회사 MySQL binlog 활성화 가이드
 - [ ] 초기 admin 계정 생성 도구
 - [ ] 초기 동기화 진행 모니터링
 
 #### 베타 출시 (3주차)
-- [ ] 첫 고객사 AWS 계정 준비 (영업 협조)
-- [ ] Cross-Account Role 부여 받음
+- [ ] 첫 운영 서버 준비 (영업 협조)
+- [ ]  Role 부여 받음
 - [ ] Jenkins에서 customer-a 배포 트리거
 - [ ] customera.ragservice.com 도메인 활성화
 - [ ] 초기 admin 계정 인계
-- [ ] 고객사 MySQL binlog 활성화 (고객사 작업)
+- [ ] 회사 MySQL binlog 활성화 (고객사 작업)
 - [ ] 초기 풀 동기화 (CSV 또는 binlog)
 - [ ] 고객사 사용자 5명 이상 추가
 - [ ] 1주일 집중 모니터링 + 이슈 대응
@@ -928,7 +922,7 @@ Sprint 3 중반
 [대응]
 - 백업 계획: updated_at 폴링 방식
 - Phase 0에선 binlog 안정성 미달이면 폴링으로 전환
-- 고객사 MySQL 버전 사전 확인 (5.7+ 필수)
+- 회사 MySQL 버전 사전 확인 (5.7+ 필수)
 ```
 
 ### 위험 3: Open WebUI 포크 유지보수
@@ -946,11 +940,11 @@ Sprint 5 후반
 - Phase 1+ 자체 UI 검토 옵션
 ```
 
-### 위험 4: AWS Cross-Account 권한 복잡도
+### 위험 4: AWS  권한 복잡도
 
 ```
 [증상]
-Terraform apply 권한 부족, IAM 정책 디버깅
+docker compose up 권한 부족, IAM 정책 디버깅
 
 [감지 시점]
 Sprint 6 초반

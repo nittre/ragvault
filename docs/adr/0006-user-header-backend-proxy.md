@@ -36,17 +36,17 @@ fetch('/v1/chat/completions', {
 [외부 — 불신뢰]
 브라우저 ── 세션 쿠키만 ──┐
                           ▼
-[k3s VPC 내부 — 신뢰]
+[VPC 내부 — 신뢰]
 Open WebUI 백엔드 ── 세션 인증 후 X-User-* 헤더 주입 ──▶
 Spring Boot ── TrustedHeaderFilter:
-                · 발신 IP 가 k3s VPC 내부 → 헤더 신뢰
+                · 발신 IP 가 VPC 내부 → 헤더 신뢰
                 · 외부 IP 발신 → 헤더 제거
 ```
 
 ### 구현
 1. Open WebUI Fork 의 **백엔드 코드 (Python/FastAPI)** 수정 — `/v1/chat/completions` 프록시 라우트에서 클라이언트 헤더 폐기 후 세션 사용자 정보로 헤더 재구성
 2. **브라우저(Svelte) 코드는 X-User-* 헤더 추가 금지** — body 의 `rag_params` 만 추가
-3. Spring Boot `TrustedHeaderFilter` — `X-Forwarded-For` 최우측 신뢰 IP 가 k3s VPC CIDR 안인지 검증, 외부면 `X-User-*` 제거
+3. Spring Boot `TrustedHeaderFilter` — `X-Forwarded-For` 최우측 신뢰 IP 가 VPC CIDR 안인지 검증, 외부면 `X-User-*` 제거
 
 ### 헤더 스펙
 ```

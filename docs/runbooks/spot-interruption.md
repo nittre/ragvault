@@ -7,7 +7,7 @@
 ## 증상
 - CloudWatch: `alb-healthy-hosts-critical` 알람 (정상 호스트 0개)
 - Discord: "Spot interruption notice received" 로그
-- k3s: GPU 노드 NotReady
+- Docker: GPU 컨테이너 미응답 (Ollama 헬스체크 실패)
 
 ## 자동 복구 흐름
 
@@ -18,7 +18,7 @@ Spot 회수 알림 (2분 전)
 spot-termination-handler.sh 감지
     |
     v
-k3s kubectl drain <node>
+docker compose -f /opt/ragvault/docker-compose.prod.yml stop
     |
     v
 Spot 인스턴스 종료
@@ -30,10 +30,10 @@ aws_spot_instance_request (persistent) 자동 재요청
 새 Spot 인스턴스 기동 (3~8분)
     |
     v
-k3s 자동 재등록
+새 EC2 기동 후 user_data로 docker compose up -d 자동 실행
     |
     v
-Ollama 모델 로드 (AMI 사전 pull)
+Ollama 모델 pull (재기동 후)
 ```
 
 ## 수동 확인 절차
@@ -46,7 +46,7 @@ aws ec2 describe-spot-instance-requests \
   --query 'SpotInstanceRequests[*].[SpotInstanceRequestId,Status.Code,InstanceId]'
 ```
 
-### Step 2: 신규 인스턴스 k3s 등록 확인
+### Step 2: 신규 인스턴스 컨테이너 기동 확인
 
 ```bash
 kubectl get nodes
@@ -60,7 +60,7 @@ SSM Session Manager로 새 GPU 인스턴스 접속 후:
 ```bash
 aws ssm start-session --target <new-instance-id>
 ollama list
-# 3개 모델 확인: qwen2.5:14b-instruct-q4_K_M, qwen2.5-vl:7b-instruct-q4_K_M, nomic-embed-text
+# 3개 모델 확인: qwen2.5:14b-instruct-q4_K_M, qwen2.5-vl:7b-instruct-q4_K_M, bge-m3
 ```
 
 ### Step 4: 서비스 복구 확인
@@ -72,13 +72,12 @@ curl https://<host>/api/v1/health/deep | jq '.ollama'
 
 ## Spot 가용성 부족 시 (On-Demand 전환)
 
-Terraform 변수 변경:
+인프라 관리 도구 변수 변경:
 
 ```bash
 # terraform.tfvars 에서 ec2_gpu_instance_type 을 On-Demand 타입으로 교체
-# 이후 terraform apply -target=aws_spot_instance_request.gpu
+# 이후 docker compose up -target=aws_spot_instance_request.gpu
 ```
 
 ## 예방
-- AMI 최신 모델 사전 pull 유지 (분기마다 packer 재빌드)
 - Spot Fleet 대체 인스턴스 타입 설정: `g5.2xlarge`, `g4dn.xlarge`

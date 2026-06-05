@@ -100,7 +100,7 @@ Discord `#ddl-alerts` 채널에서 알림 수신 → Admin 패널에서 처리
 
 1. 사용자 신고 수신 즉시 response_id 확인
 2. Admin 패널 → 감사 로그 → 원본 조회
-3. PII 노출 여부 확인 후 RAG SaaS 팀 보고
+3. PII 노출 여부 확인 후 RAG 팀 보고
 
 ---
 
@@ -147,7 +147,7 @@ Discord `#ddl-alerts` 채널에서 알림 수신 → Admin 패널에서 처리
 | 상황 | 연락처 |
 |------|--------|
 | 시스템 장애 | Discord #critical-alerts |
-| PII 노출 의심 | RAG SaaS 팀 즉시 연락 |
+| PII 노출 의심 | RAG 팀 즉시 연락 |
 | 보안 사고 | [보안 담당자 이메일] |
 
 [시스템 상태 페이지](/status) | [사용자 가이드](/docs/user-guide.md)

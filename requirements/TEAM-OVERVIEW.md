@@ -1,6 +1,6 @@
 # RAG 시스템 — 팀 공유 문서
 
-> 회사 내부 데이터 기반 AI 질의응답 SaaS 프로덕트.
+> 회사 내부 데이터 기반 AI 질의응답 사내 서비스.
 > 개발자라면 누구나 이해할 수 있도록 작성된 종합 개요.
 
 ---
@@ -14,7 +14,7 @@
 5. [핵심 컴포넌트 상세](#5-핵심-컴포넌트-상세)
 6. [사용자 인터페이스 — Open WebUI](#6-사용자-인터페이스--open-webui)
 7. [데이터 흐름](#7-데이터-흐름)
-8. [인프라 — AWS 환경](#8-인프라--aws-환경)
+8. [인프라 — 배포 환경](#8-인프라--배포-환경)
 9. [보안 모델](#9-보안-모델)
 10. [운영 — 배포 및 모니터링](#10-운영--배포-및-모니터링)
 11. [환경 구성 (로컬/개발/상용)](#11-환경-구성-로컬개발상용)
@@ -64,7 +64,7 @@ AI: "A 상품의 보증 기간은 2년입니다. (출처: 계약서 #12345)"
 ✓ 첨부파일 분석 (PDF/Word/PPTX 등, 30MB, Tika + Tesseract OCR)
 ✓ 멀티모달 이미지 (qwen2.5-vl 7B, Phase 0 채팅 직접 첨부)
 ✓ 멀티턴 대화 (Open WebUI 세션, 최근 10턴)
-✓ 멀티 사용자 (고객사 직원 ~300명)
+✓ 멀티 사용자 (~300명)
 ✓ 웹 UI (Open WebUI) + (Phase 2+) CLI 도구
 ✓ 데이터 외부 전송 없음 (사내 보안)
 
@@ -143,7 +143,7 @@ LLM ───직접 쿼리───> DB
 **텍스트를 숫자 벡터로 변환하는 작업**.
 
 ```
-"안녕하세요" → [0.12, -0.45, 0.78, ..., 0.31] (768개 숫자)
+"안녕하세요" → [0.08, -0.31, 0.92, ..., 0.41] (1024개 숫자)
 ```
 
 왜 필요한가:
@@ -161,51 +161,45 @@ LLM ───직접 쿼리───> DB
 
 ## 3. 비즈니스 모델
 
-### Dedicated Instance per Customer (MSP)
+### 사내 단일 인스턴스
 
 ```
 [운영 방식]
-- 고객사 1곳 = AWS 계정 1개 = 전용 인프라 1세트
-- 고객사가 AWS 계정 만들어서 우리에게 위탁
-- 우리는 그 계정에 인프라 배포/운영
-- AWS 비용은 고객사가 직접 부담
-- 우리는 라이선스 + 운영비 청구
+- 사내 서비스로 단일 인스턴스 운영
+- 사내 서버 또는 단일 클라우드 환경 (미정)
+- Docker Compose로 서비스 관리
+- 내부 팀이 직접 운영·유지보수
 ```
 
 ### 왜 이런 모델인가
 
 ```
-[고객사 입장]
-✓ 자기 데이터를 다른 회사와 섞지 않음 (완전 격리)
-✓ AWS 비용 투명 (직접 청구서 받음)
-✓ 보안 정책 자체적으로 통제
-
-[우리 입장]
-✓ 코드 단순화 (멀티 테넌시 불필요)
-✓ 보안 사고 격리 (한 고객사 사고가 다른 곳 영향 0)
-✓ 고객사별 커스터마이징 자유
+[사내 서비스 기준]
+✓ 멀티 테넌시 불필요 — 코드 단순
+✓ 배포 환경 자유 — 온프레미스 또는 클라우드
+✓ Docker Compose로 일관된 환경 (로컬·개발·운영 동일)
+✓ 외부 데이터 유출 없음 (Ollama 로컬 실행)
 ```
 
-### 신규 고객 온보딩 흐름
+### 서비스 시작 흐름
 
 ```mermaid
 flowchart LR
-    A[영업 계약] --> B[고객사 AWS 계정 생성]
-    B --> C[Cross-Account IAM Role 부여]
-    C --> D[Terraform으로<br/>인프라 자동 배포]
-    D --> E[도메인/SSL 설정<br/>customer.ragservice.com]
-    E --> F[초기 데이터<br/>동기화]
-    F --> G[admin 계정 인계]
-    G --> H[서비스 시작]
+    A[서버 준비] --> B[Docker Compose 환경 설정]
+    B --> C[MySQL 연결 설정<br/>binlog 활성화 확인]
+    C --> D[Ollama 모델 Pull<br/>qwen2.5, bge-m3]
+    D --> E[초기 데이터 동기화]
+    E --> F[admin 계정 생성]
+    F --> G[서비스 시작]
 ```
 
-소요 시간: **1~2일** (DNS 검증 + 데이터 마이그레이션 포함)
+소요 시간: **2~4시간** (모델 다운로드 포함)
 
 ---
 
 ## 4. 시스템 아키텍처
 
-### 전체 그림 (고객사 1개 기준)
+### 전체 그림
 
 ```mermaid
 flowchart TB
@@ -214,20 +208,20 @@ flowchart TB
     CF --> R53[Route 53<br/>customer.ragservice.com]
     R53 --> ALB[ALB<br/>SSL 종료]
 
-    subgraph AWS[고객사 AWS 계정]
-        ALB --> k3s
+    subgraph AWS[회사 서버]
+        ALB --> DC
 
-        subgraph k3s[k3s Cluster]
-            subgraph AppNode[일반 노드 t3.medium × 2]
-                OW[Open WebUI Pod]
-                SB[Spring Boot Pod × 2]
-                R[Redis Pod]
+        subgraph DC[Docker Compose Host]
+            subgraph AppNode[EC2 t3.medium]
+                OW[Open WebUI 컨테이너]
+                SB[Spring Boot 컨테이너]
+                R[Redis 컨테이너]
                 P[Prometheus]
                 G[Grafana]
             end
 
-            subgraph GPUNode[GPU 노드 g5.xlarge × 1 Spot]
-                OL[Ollama Pod<br/>qwen2.5:14b + nomic-embed]
+            subgraph GPUNode[GPU EC2 g5.xlarge × 1 Spot]
+                OL[Ollama 컨테이너<br/>qwen2.5:14b + bge-m3]
             end
         end
 
@@ -237,7 +231,7 @@ flowchart TB
         OW -->|API Key| SB
     end
 
-    SB -.->|binlog| CMS[(고객사 MySQL<br/>VPC Peering/VPN)]
+    SB -.->|binlog)]
 ```
 
 ### 핵심 컴포넌트 정리
@@ -246,13 +240,12 @@ flowchart TB
 |---------|------|
 | **Open WebUI** | 사용자 채팅 인터페이스 (ChatGPT 클론) |
 | **Spring Boot** | 비즈니스 로직 + RAG 오케스트레이션 + OpenAI 호환 API |
-| **Ollama** | LLM 추론 (qwen2.5:14b) + 임베딩 생성 (nomic-embed-text) |
+| **Ollama** | LLM 추론 (qwen2.5:14b) + 임베딩 생성 (bge-m3) |
 | **PostgreSQL + pgvector** | 벡터 저장 + 유사도 검색 |
 | **Redis** | 캐시 + 분산 락(ShedLock) |
-| **고객사 MySQL** | 원본 데이터 소스 (우리는 binlog로 변경 감지만) |
-| **k3s** | 컨테이너 오케스트레이션 (경량 Kubernetes) |
-| **Helm** | 앱 배포 패키지 |
-| **Terraform** | 인프라 코드 (IaC) |
+| **회사 MySQL** | 원본 데이터 소스 (binlog로 변경 감지) |
+| **Docker Compose** | EC2 단일 호스트 컨테이너 오케스트레이션 (프로덕션) |
+
 | **Jenkins** | CI/CD (회사 서버에 위치) |
 
 ---
@@ -267,7 +260,7 @@ flowchart TB
 - 완성품 (대화 UI, 사용자 관리, 파일 업로드 등 다 포함)
 - OpenAI 호환 API 지원 → 우리 백엔드 연결 가능
 - 별도 프론트엔드 개발 불필요 (개발 기간 단축)
-- Dedicated Instance 모델에 적합 (고객사 1개당 WebUI 1개)
+- 사내 서비스 모델에 적합 (서비스당 WebUI 1개)
 
 **역할**:
 - 사용자 인증 (이메일/비밀번호, 자체 DB)
@@ -320,7 +313,7 @@ Authorization: Bearer sk-rag-...
 
 **사용 모델**:
 - **LLM**: qwen2.5:14b (Alibaba가 만든 한국어 잘하는 14B 모델)
-- **임베딩**: nomic-embed-text (텍스트 → 768차원 벡터)
+- **임베딩**: bge-m3 (텍스트 → 1024차원 벡터)
 
 **왜 qwen2.5인가**:
 - 한국어 성능이 Llama보다 좋음
@@ -328,7 +321,7 @@ Authorization: Bearer sk-rag-...
 - 오픈소스 (상업 사용 가능)
 - g5.xlarge GPU에서 잘 동작
 
-**라이선스**: Qwen2.5-7B / 14B = **Apache 2.0** ✅. nomic-embed-text = **Apache 2.0** ✅. Qwen2.5-72B는 별도 Qwen License — Phase 2+ 검토 시 재확인. 상세는 [02-stack-reference.md](02-stack-reference.md) 참고.
+**라이선스**: Qwen2.5-7B / 14B = **Apache 2.0** ✅. bge-m3 = **Apache 2.0** ✅. Qwen2.5-72B는 별도 Qwen License — Phase 2+ 검토 시 재확인. 상세는 [02-stack-reference.md](02-stack-reference.md) 참고.
 
 ### 5-4. PostgreSQL + pgvector
 
@@ -361,7 +354,7 @@ LIMIT 5;
 **분산 락이 왜 필요한가**:
 ```
 [문제]
-Spring Boot Pod이 2개일 때 30분마다 동기화 작업이
+Spring Boot 컨테이너가 여러 개일 때 30분마다 동기화 작업이
 양쪽에서 동시 실행되면 데이터 중복/충돌 위험
 
 [해결: ShedLock + Redis]
@@ -370,48 +363,33 @@ Spring Boot Pod이 2개일 때 30분마다 동기화 작업이
 - 락은 Redis에 저장 (분산 환경에서도 동작)
 ```
 
-### 5-6. k3s
+### 5-6. Docker Compose (프로덕션)
 
-**한 줄 설명**: 경량 Kubernetes 배포판. Rancher Labs가 만듦.
+**한 줄 설명**: EC2 단일 호스트에서 docker compose를 사용해 프로덕션 운영.
 
-**왜 k3s인가**:
-- Kubernetes 표준 API 100% 호환 (학습 자산 보존)
-- 가벼움 (메모리 512MB, 1MB 바이너리)
-- 5분 설치
-- EKS 대비 $73/월 절약 (Control Plane 비용 없음)
-- 300명 규모 시스템엔 충분
+로컬 개발과 동일한 방식으로 프로덕션도 운영 — Dev/Prod Parity 극대화.
 
-**k3s가 하는 일**:
+**왜 Docker Compose인가**:
+- Kubernetes 없이도 300명 규모 운영 충분 (Docker Compose로 대체)
+- 로컬/개발/상용 모두 같은 도구 (학습 비용 없음)
+- EC2 단일 호스트에서 충분한 성능
+- 운영 단순화 (컨테이너 오케스트레이터 불필요)
+
+**Docker Compose가 하는 일**:
 ```
-1. 여러 EC2에 Pod 자동 배치
-2. Pod 죽으면 자동 재시작
-3. 트래픽 분산
-4. 헬스체크 + 자동 복구
-5. 무중단 배포 (Rolling Update)
+1. 컨테이너 한 번에 기동/중단
+2. 컨테이너 종료 시 자동 재시작 (restart: unless-stopped)
+3. healthcheck 기반 상태 감지
+4. 서비스 간 네트워크 자동 구성
+5. 업데이트: docker compose up -d (이미지 교체)
 ```
-
-### 5-7. Helm
-
-**한 줄 설명**: Kubernetes 패키지 매니저. K8s YAML 묶음 관리.
-
-**왜 필요한가**:
-- 앱 배포에 필요한 K8s 리소스가 보통 5~10개
-- Helm 차트로 묶어서 한 번에 배포
-- 환경별 설정 오버라이드 쉬움
 
 ```bash
-# Helm 없이
-kubectl apply -f deployment.yaml
-kubectl apply -f service.yaml
-kubectl apply -f ingress.yaml
-kubectl apply -f configmap.yaml
-kubectl apply -f secret.yaml
-
-# Helm으로
-helm install rag-backend ./chart -f values-prod.yaml
+# 프로덕션 배포/업데이트
+docker compose -f docker-compose.prod.yml up -d --remove-orphans
 ```
 
-### 5-8. Terraform
+### 5-7. 인프라 관리 도구
 
 **한 줄 설명**: HashiCorp의 IaC(Infrastructure as Code) 도구.
 
@@ -421,14 +399,14 @@ helm install rag-backend ./chart -f values-prod.yaml
 - 신규 고객 온보딩 30분 만에 완료
 - 콘솔 클릭으로는 불가능
 
-### 5-9. Jenkins
+### 5-8. Jenkins
 
 **한 줄 설명**: 오픈소스 CI/CD 자동화 서버.
 
 **왜 회사 서버에 두나**:
 - AWS 계정에 두면 매월 EC2 비용 발생
 - 회사 사무실 서버라면 추가 비용 없음
-- Cross-Account Role로 AWS 배포 가능
+- 단일 계정 Role로 AWS 배포 가능
 
 ---
 
@@ -505,13 +483,13 @@ T = 유사도 임계값
 
 **언제**: **30분 주기 자동** (cron `0 */30 * * * *`) — 데이터 신선도 ≤ 30분, 또는 관리자 수동 트리거
 
-**어떻게**: 고객사 MySQL의 binlog를 GTID 기반으로 읽어서 변경분만 처리
+**어떻게**: 회사 MySQL의 binlog를 GTID 기반으로 읽어서 변경분만 처리
 
 ```mermaid
 sequenceDiagram
     participant S as Spring Boot<br/>(@Scheduled)
     participant L as ShedLock<br/>(Redis)
-    participant MY as 고객사 MySQL<br/>(binlog)
+    participant MY as 회사 MySQL<br/>(binlog)
     participant O as Ollama<br/>(임베딩)
     participant PG as pgvector
 
@@ -528,7 +506,7 @@ sequenceDiagram
         S->>S: PII 마스킹
         S->>S: 청킹 (500토큰)
         S->>O: 청크 임베딩 요청
-        O-->>S: 768차원 벡터
+        O-->>S: 1024차원 벡터
         S->>PG: 청크 + 벡터 저장
     end
 
@@ -549,8 +527,8 @@ MySQL이 모든 변경 작업을 기록하는 로그.
 - 고객사 운영 DB에 부하 거의 없음
 
 [전제 조건]
-- 고객사 MySQL: log-bin, binlog_format=ROW, binlog_row_image=FULL
-- 고객사 MySQL: gtid_mode=ON, enforce_gtid_consistency=ON (옵션 B: GTID 전용)
+- 회사 MySQL: log-bin, binlog_format=ROW, binlog_row_image=FULL
+- 회사 MySQL: gtid_mode=ON, enforce_gtid_consistency=ON (옵션 B: GTID 전용)
 - 우리에게 REPLICATION SLAVE / REPLICATION CLIENT / SELECT 권한 부여
 - binlog 보존 기간 최소 7일 (30분 주기 운영의 실패 회복 마진)
 - VPC Peering 또는 VPN 연결
@@ -634,7 +612,7 @@ sequenceDiagram
     R-->>SB: OK (분당 60 이내)
     SB->>SB: 프롬프트 인젝션 검사
     SB->>O_E: 질문 임베딩 요청
-    O_E-->>SB: 768차원 벡터
+    O_E-->>SB: 1024차원 벡터
     SB->>PG: 벡터 검색<br/>(코사인 거리, Top-5, T=0.65)
     PG-->>SB: 관련 청크 5개
     SB->>SB: 프롬프트 조합<br/>(시스템 + 청크 + 대화이력 + 질문)
@@ -658,7 +636,7 @@ sequenceDiagram
 
 **2. Rate Limit** — Redis 카운터로 분당 60회 제한 확인
 
-**3. 임베딩** — 질문 텍스트를 Ollama nomic-embed-text로 벡터화
+**3. 임베딩** — 질문 텍스트를 Ollama bge-m3로 벡터화
 
 **4. 벡터 검색** — pgvector에서 가장 비슷한 청크 5개 선택
 ```sql
@@ -681,82 +659,60 @@ LIMIT 5;
 
 ---
 
-## 8. 인프라 — AWS 환경
+## 8. 인프라 — 배포 환경
 
-### 8-1. AWS 계정 구조
+> **현재 상태**: 사내 서버 우선 운영. 배포 환경 미정 (온프레미스 또는 클라우드).
+
+### 8-1. 배포 구조
 
 ```mermaid
 flowchart TB
-    subgraph Us[우리 회사 AWS 계정]
-        ECR[ECR<br/>Docker 이미지]
-        R53[Route 53<br/>ragservice.com]
-    end
-
     subgraph Office[회사 사무실]
-        Jenkins[Jenkins 서버]
+        Jenkins[Jenkins 서버<br/>(빌드·배포 자동화)]
+        Registry[Docker Registry<br/>(ECR 또는 사내)]
     end
 
-    subgraph CA[고객사 A AWS 계정]
-        InfraA[VPC + EC2 + RDS<br/>+ k3s + Ollama]
+    subgraph Server[운영 서버]
+        App[Docker Compose 호스트<br/>rag-backend / open-webui<br/>redis / prometheus / grafana]
+        GPU[GPU 서버<br/>Ollama<br/>qwen2.5:14b + bge-m3]
+        DB[(PostgreSQL + pgvector)]
     end
 
-    subgraph CB[고객사 B AWS 계정]
-        InfraB[VPC + EC2 + RDS<br/>+ k3s + Ollama]
+    subgraph Source[사내 MySQL]
+        MySQL[(고객사 DB<br/>binlog 동기화)]
     end
 
-    Jenkins -->|AssumeRole<br/>Terraform apply| CA
-    Jenkins -->|AssumeRole<br/>Terraform apply| CB
-    InfraA -.->|이미지 pull| ECR
-    InfraB -.->|이미지 pull| ECR
-    R53 -.->|DNS| InfraA
-    R53 -.->|DNS| InfraB
+    Jenkins -->|docker compose up| App
+    Jenkins -->|이미지 push| Registry
+    App -.->|이미지 pull| Registry
+    App --> GPU
+    App --> DB
+    App --> MySQL
 ```
 
-### 8-2. 고객사 1개당 VPC 구조
+### 8-2. 서버 구성 (현재 기준)
 
-```mermaid
-flowchart TB
-    Internet[인터넷] --> R53[Route 53]
-    R53 --> ALB[ALB<br/>Multi-AZ 의무]
+```
+운영 서버 (단일 호스트)
+├── rag-backend     (Spring Boot API)
+├── open-webui      (채팅 UI)
+├── redis           (캐시)
+├── prometheus      (메트릭)
+└── grafana         (대시보드)
 
-    subgraph VPC[VPC 10.0.0.0/16 — ap-northeast-2]
+GPU 서버 (별도 또는 동일 호스트)
+└── ollama          (LLM + 임베딩)
 
-        subgraph PubA[Public Subnet AZ-a]
-            ALB
-            NAT[NAT Gateway<br/>AZ-a에 1개만]
-        end
+DB 서버 (별도 또는 동일 호스트)
+└── PostgreSQL + pgvector
 
-        subgraph PubC[Public Subnet AZ-c]
-            ALB
-        end
-
-        subgraph App[Private App Subnet AZ-a]
-            E1[EC2 t3.medium #1<br/>k3s server]
-            E2[EC2 t3.medium #2<br/>k3s agent]
-        end
-
-        subgraph LLM[Private LLM Subnet AZ-a]
-            E3[EC2 g5.xlarge<br/>Spot, GPU<br/>Ollama]
-        end
-
-        subgraph DataA[Private Data Subnet AZ-a]
-            DB1[(RDS PostgreSQL<br/>Primary)]
-        end
-
-        subgraph DataC[Private Data Subnet AZ-c]
-            DB2[(RDS PostgreSQL<br/>Standby)]
-        end
-
-        ALB --> E1
-        ALB --> E2
-        E1 -.-> E3
-        E2 -.-> E3
+사내 MySQL (기존 인프라 연결, binlog 활성화 필요)
         E1 --> DB1
         E2 --> DB1
         DB1 <-.->|Multi-AZ 복제| DB2
     end
 
-    E1 -.->|binlog<br/>VPC Peering/VPN| CustomerDB[(고객사 MySQL)]
+    E1 -.->|binlog| CustomerDB[(회사 MySQL)]
 ```
 
 > ALB는 AZ-a, AZ-c 양쪽 Public Subnet에 attach되어야 함 (AWS 강제).
@@ -767,20 +723,20 @@ flowchart TB
 
 | 서비스 | 용도 |
 |--------|------|
-| EC2 | k3s 노드 (앱 + GPU) |
+| EC2 | Docker Compose 호스트 (앱 + GPU) |
 | SES | 트랜잭션 메일 발송 — 비밀번호 재설정·가입 승인. 발신 `noreply@{customer}.ragservice.com`, Route 53 cross-account 검증. **상용만** (로컬·개발 환경은 메일 발송 비활성화) |
 | RDS | PostgreSQL (벡터 DB) |
 | ALB | 로드밸런서 + SSL |
 | Route 53 | DNS |
 | ACM | SSL 인증서 |
-| S3 | 원본 문서, AMI 백업 |
+| S3 | 원본 문서 백업 |
 | Secrets Manager | DB 비밀번호, API 키 |
 | CloudWatch | 로그, 메트릭, 알람 |
 | EventBridge | 스케줄링 |
 | ECR | Docker 이미지 저장소 |
 | Auto Scaling | EC2 자동 증감 (Spot 회수 시) |
 | CloudTrail | 감사 로그 |
-| AWS STS | Cross-Account 인증 |
+| AWS STS | 단일 계정 인증 |
 
 ### 8-4. 외부 서비스
 
@@ -801,7 +757,7 @@ flowchart TB
    → 데이터 손실 0
 
 [Single AZ — 의도된 비용 절감]
-✗ EC2 (k3s 일반 노드 + GPU 노드) — AZ-a에만 배치
+✗ EC2 (앱 + GPU) — AZ-a에만 배치
    → AZ-a 다운 시 30분~2시간 다운타임 (수동 대응)
    → 데이터 손실 없음 (DB는 AZ-c로 페일오버)
 ✗ NAT Gateway — AZ-a에만 1개 (시간당 요금 절감)
@@ -828,9 +784,9 @@ GPU EC2(g5.xlarge)는 Spot 인스턴스로 운영
 [Spot 회수 시]
 - 2분 전 AWS 알림
 - aws-node-termination-handler가 감지
-- Pod를 다른 노드로 drain
+- 컨테이너를 graceful stop
 - Auto Scaling이 새 Spot 인스턴스 부팅
-- AMI에 모델 미리 포함 → 30초 만에 부팅
+- Docker 이미지 사전 pull → 재기동 시 빠른 부팅
 - 다운타임 1~3분
 
 [Discord Warning 알람]
@@ -884,7 +840,7 @@ sequenceDiagram
     end
 ```
 
-### 9-3. 데이터 격리 (Dedicated Instance의 장점)
+### 9-3. 데이터 격리 (사내 서비스의 장점)
 
 ```
 [멀티 테넌트 SaaS (다른 회사들 흔히 쓰는 방식)]
@@ -892,7 +848,7 @@ sequenceDiagram
 └── tenant_id 컬럼으로 분리 (RLS)
 └── 애플리케이션 버그 시 데이터 노출 위험
 
-[우리 방식 — Dedicated Instance]
+[우리 방식 — 사내 서비스]
 고객사 A 데이터 = AWS 계정 A의 RDS
 고객사 B 데이터 = AWS 계정 B의 RDS
 └── 물리적 격리 (서버 자체가 다름)
@@ -977,7 +933,7 @@ MySQL 원본 → 정규식 마스킹 → 청킹 → 임베딩 → pgvector
 
 ## 10. 운영 — 배포 및 모니터링
 
-### 10-1. 배포 흐름 (Cross-Account)
+### 10-1. 배포 흐름 (단일 계정)
 
 ```mermaid
 sequenceDiagram
@@ -986,19 +942,19 @@ sequenceDiagram
     participant J as Jenkins<br/>(회사 서버)
     participant ECR as 우리 회사 ECR
     participant STS as AWS STS
-    participant CA as 고객사 AWS 계정
-    participant K as k3s 클러스터
+    participant CA as 회사 서버
+    participant K as Docker Compose 호스트
 
     D->>GH: git push
     GH->>J: webhook
     J->>J: 빌드 + 테스트
     J->>ECR: Docker 이미지 push
-    J->>STS: AssumeRole (고객사 Role)
+    J->>STS: 배포 권한 (고객사 Role)
     STS-->>J: 임시 자격증명 (1시간)
-    J->>CA: Terraform apply
-    J->>K: helm upgrade
+    J->>CA: docker compose up
+    J->>K: docker compose up -d
     K->>ECR: 새 이미지 pull
-    K->>K: Rolling Update (무중단)
+    K->>K: 컨테이너 재기동 (docker compose up -d)
     J->>J: Smoke Test
     J-->>D: Discord 배포 완료 알림
 ```
@@ -1011,10 +967,10 @@ sequenceDiagram
 2. ./gradlew build + test
 3. Docker 이미지 빌드
 4. ECR 푸시
-5. Terraform apply (인프라 변경 있을 시)
-6. Helm upgrade (k3s)
+5. docker compose up (인프라 변경 있을 시)
+6. docker compose up -d
 7. Smoke test (curl /api/v1/health)
-8. 실패 시 자동 롤백 (helm rollback)
+8. 실패 시 이전 이미지로 복구 (docker compose 이전 이미지로 복구)
 9. Discord 알림
 ```
 
@@ -1027,7 +983,7 @@ flowchart LR
         OL[Ollama] -->|GPU 메트릭| Prom
     end
 
-    subgraph k3s
+    subgraph EC2[Docker Compose 호스트]
         Prom[Prometheus]
         Graf[Grafana]
         Prom --> Graf
@@ -1105,18 +1061,18 @@ Discord 알람에 Runbook 링크 자동 포함:
 
 ### 11-1. 환경별 비교
 
-| 항목 | 로컬 | 개발 서버 | 고객사 인스턴스 (상용) |
+| 항목 | 로컬 | 개발 서버 | 운영 인스턴스 (상용) |
 |------|------|----------|---------------------|
-| 위치 | 개발자 맥북 | 회사 서버 | 고객사 AWS 계정 |
-| 컨테이너 관리 | Docker Compose | Docker Compose | k3s |
-| Web UI | Open WebUI (Docker) | Open WebUI (Docker) | Open WebUI (Pod) |
-| 앱 서버 | IDE 직접 실행 | Docker 컨테이너 | k3s Pod × 2 |
+| 위치 | 개발자 맥북 | 회사 서버 | 회사 서버 |
+| 컨테이너 관리 | Docker Compose | Docker Compose | Docker Compose |
+| Web UI | Open WebUI (Docker) | Open WebUI (Docker) | Open WebUI (컨테이너) |
+| 앱 서버 | IDE 직접 실행 | Docker 컨테이너 | Docker 컨테이너 |
 | LLM (텍스트) | Ollama (Docker, qwen2.5:7b) | Ollama (Docker) | EC2 Spot + Ollama (qwen2.5:14b) |
 | LLM (이미지·VLM) | Ollama (qwen2.5-vl:7b) | Ollama (qwen2.5-vl:7b) | Ollama (qwen2.5-vl:7b, 듀얼 모델) |
 | 벡터 DB | pgvector (Docker) | pgvector (Docker) | RDS Multi-AZ |
-| 원본 DB | MySQL Docker (샘플) | 회사 MySQL | 고객사 MySQL (binlog) |
-| 비용 | $0 | 사내 | ~$415/월 |
-| HA | 없음 | 없음 | ALB·RDS Multi-AZ / 컴퓨트 Single AZ (AZ-a) |
+| 원본 DB | MySQL Docker (샘플) | 회사 MySQL | 회사 MySQL (binlog) |
+| 비용 | $0 | 사내 | 운영 환경 미정 |
+| HA | 없음 | 없음 | 운영 환경 확정 후 결정 |
 
 ### 11-2. 로컬 개발 환경
 
@@ -1174,45 +1130,28 @@ docker compose up -d   # 인프라 시작
 
 ## 12. 비용 구조
 
-### 12-1. 고객사 1개당 월 비용 (AWS)
+> **현재 상태**: 사내 서비스로 전환. 비용 구조는 운영 환경 확정 후 업데이트 예정.
 
-| 항목 | 비용 |
-|------|------|
-| EC2 t3.medium × 2 (1 OD + 1 Spot) | $50 |
-| EC2 g5.xlarge × 1 (Spot, GPU) | $220 |
-| RDS PostgreSQL Multi-AZ (db.t3.small) | $50 |
-| Redis (k3s Pod, 무료) | $0 |
-| ALB | $20 |
-| VPC Peering / VPN | ~$30 |
-| CloudWatch | $20 |
-| 데이터 전송 (~100GB) | $20 |
-| CloudTrail / Config | $5 |
-| **합계 (고객사 직불)** | **~$415/월** |
-
-### 12-2. 우리 회사 공유 인프라
-
-| 항목 | 비용 |
-|------|------|
-| Jenkins 서버 (회사 사무실) | $0 |
-| ECR (Docker 이미지) | $5 |
-| Route 53 (도메인) | $1 |
-| **합계** | **~$6/월** |
-
-### 12-3. 수익 모델
+### 12-1. 사내 서비스 비용 구조
 
 ```
-[고객사 부담]
-- AWS 비용 (~$415/월) — AWS에서 직접 청구
+[인프라 비용]
+- 운영 서버: 기존 사내 서버 활용 또는 별도 구매
+- GPU 서버: Ollama 실행용 (NVIDIA GPU 권장)
+- DB 서버: PostgreSQL + pgvector (기존 사내 DB 또는 별도)
 
-[우리 청구]
-- 월 라이선스 + 운영비 (예: $2,000/월)
-- 신규 고객 온보딩 비용 (1회성)
+[운영 비용]
+- Jenkins 서버: 기존 사내 인프라 활용
+- Docker Registry: ECR (~$5/월) 또는 사내 레지스트리
 
-[10개 고객사 운영 시]
-- 고객사 AWS 비용: 10 × $415 = $4,150 (고객사 직접)
-- 우리 회사 인프라: ~$6
-- 우리 매출: 10 × $2,000 = $20,000
+[소프트웨어 비용]
+- 오픈소스 기반 — 라이선스 비용 없음
+  (Spring Boot, Ollama, qwen2.5, bge-m3, pgvector 모두 Apache 2.0)
 ```
+
+### 12-2. 클라우드 도입 시 참고 비용
+
+클라우드(AWS 등) 도입 결정 시 별도 ADR로 비용 구조 확정 예정.
 
 ---
 
@@ -1227,8 +1166,8 @@ gantt
     Spring Boot OpenAI API   :a2, after a1, 14d
     Open WebUI 통합          :a3, after a1, 7d
     데이터 동기화 (binlog)    :a4, after a2, 21d
-    k3s 클러스터 구축        :a5, after a3, 14d
-    Terraform 모듈           :a6, after a3, 14d
+    Docker Compose 환경 구축  :a5, after a3, 14d
+    운영 서버 배포 환경 구성   :a6, after a3, 14d
     Jenkins 파이프라인       :a7, after a6, 7d
     첫 고객사 베타           :milestone, after a4, 0d
 
@@ -1262,8 +1201,8 @@ gantt
 ✓ Spring Boot OpenAI 호환 API
 ✓ Open WebUI 통합
 ✓ MySQL → pgvector 동기화 (binlog)
-✓ k3s 클러스터
-✓ Terraform 모듈
+✓ Docker Compose 프로덕션 환경
+✓ 인프라 관리 도구 모듈
 ✓ Jenkins CI/CD
 ✓ 기본 보안 (API Key, IP 화이트리스트)
 ✓ Discord 알람
@@ -1331,8 +1270,6 @@ gantt
 - Gradle
 
 # 추가 (Phase 1+)
-- kubectl
-- helm
 - terraform
 ```
 
@@ -1345,8 +1282,8 @@ rag-backend/      ← Spring Boot
                     Java/Gradle, Spring AI
                     Jenkinsfile
 
-rag-infra/        ← Terraform + Helm
-                    인프라 코드, K8s 매니페스트
+rag-infra/        ← 인프라 관리 도구 + Docker Compose
+                    인프라 코드, docker-compose.prod.yml
                     Jenkinsfile
 
 rag-cli/          ← (Phase 2)
@@ -1366,7 +1303,7 @@ docker compose -f docker-compose.dev.yml up -d
 
 # 3. Ollama 모델 다운로드 (한 번만)
 docker exec -it ollama ollama pull qwen2.5:7b
-docker exec -it ollama ollama pull nomic-embed-text
+docker exec -it ollama ollama pull bge-m3
 
 # 4. DB 마이그레이션
 ./gradlew flywayMigrate
@@ -1490,15 +1427,14 @@ public class ChatService {
 
 | 용어 | 풀이 | 한 줄 설명 |
 |------|------|----------|
-| Dedicated Instance | - | 고객사 1개당 전용 인프라 |
-| MSP | Managed Service Provider | 위탁 운영 사업 모델 |
+| 사내 서비스 | - | 사내 단일 인스턴스 |
+
 | VPC | Virtual Private Cloud | AWS 내 격리된 네트워크 |
 | Multi-AZ | Multi Availability Zone | 다중 가용영역 (HA) |
 | ALB | Application Load Balancer | AWS L7 로드밸런서 |
 | Spot Instance | - | AWS 남는 자원을 싸게 빌리는 EC2 |
-| Cross-Account Role | - | AWS 계정 간 권한 위임 |
-| AssumeRole | - | AWS STS 임시 자격증명 발급 |
-| AMI | Amazon Machine Image | EC2 부팅용 디스크 이미지 |
+| 단일 계정 Role | - | AWS 계정 간 권한 위임 |
+| 배포 권한 | - | AWS STS 임시 자격증명 발급 |
 
 ### 기술 스택
 
@@ -1506,13 +1442,12 @@ public class ChatService {
 |------|----------|
 | Open WebUI | ChatGPT 클론 오픈소스 챗 UI |
 | Ollama | 로컬 LLM 실행 도구 |
-| nomic-embed-text | 임베딩 모델 (768차원) |
+| bge-m3 | 임베딩 모델 (1024차원) |
 | qwen2.5 | Alibaba 오픈소스 LLM |
 | pgvector | PostgreSQL 벡터 확장 |
 | Spring AI | Spring의 AI 추상화 라이브러리 |
-| k3s | 경량 Kubernetes |
-| Helm | K8s 패키지 매니저 |
-| Terraform | IaC 도구 |
+| Docker Compose | 컨테이너 오케스트레이션 도구 (로컬/개발/프로덕션) |
+| 인프라 관리 도구 | IaC 도구 |
 | Jenkins | CI/CD 자동화 서버 |
 | Redis | 인메모리 캐시 |
 | ShedLock | 분산 스케줄러 락 |
@@ -1580,7 +1515,7 @@ TEAM-OVERVIEW → 01 → 02 → 04 → 07
 
 ### Q1. 왜 자체 Web UI 안 만들고 Open WebUI 쓰나요?
 
-A: 개발 기간 단축 + 검증된 UX. Dedicated Instance 모델이라 멀티 테넌시 부담 없어서 가능. Phase 2+에 자체 UI 검토.
+A: 개발 기간 단축 + 검증된 UX. 사내 서비스 모델이라 멀티 테넌시 부담 없어서 가능. Phase 2+에 자체 UI 검토.
 
 ### Q2. ChatGPT/Claude API 안 쓰고 왜 Ollama로 직접 운영하나요?
 
@@ -1590,13 +1525,13 @@ A:
 3. 모델 튜닝 자유
 4. 고객사가 외부 LLM 사용 거부할 가능성
 
-### Q3. 왜 EKS 안 쓰고 k3s 쓰나요?
+### Q3. 왜 EKS 안 쓰고 Docker Compose 쓰나요?
 
 A:
-1. EKS Control Plane $73/월 절약
-2. 300명 규모엔 k3s 충분
-3. 학습 자산 보존 (k3s → EKS 전환 쉬움)
-4. Phase 2+ 트래픽 보고 EKS 검토
+1. EKS Control Plane $73/월 절약 (Docker Compose로 충분)
+2. 300명 규모엔 EC2 단일 호스트 충분
+3. 단순성 우선 — 컨테이너 오케스트레이터 없이 운영
+4. Phase 2+ 트래픽 보고 ECS/EKS 검토
 
 ### Q4. 멀티 테넌시 안 하면 비용 폭증 아닌가요?
 
@@ -1604,11 +1539,11 @@ A: 고객사가 AWS 비용 직접 부담. 우리는 라이선스 + 운영비만 
 
 ### Q5. 신규 고객사 추가하려면 며칠 걸리나요?
 
-A: Terraform으로 자동화돼서 30분 ~ 1시간 + DNS 검증 시간 + 초기 데이터 동기화 시간. 평균 1~2일.
+A: 인프라 관리 도구으로 자동화돼서 30분 ~ 1시간 + DNS 검증 시간 + 초기 데이터 동기화 시간. 평균 1~2일.
 
 ### Q6. Spot 인스턴스 회수 시 응답 못 받는 거 OK인가요?
 
-A: Phase 0엔 1~3분 다운타임 감수. AMI로 빠른 복구. Phase 1+에서 다중 Spot 또는 OD 백업 검토.
+A: Phase 0엔 1~3분 다운타임 감수. 신규 인스턴스 기동 후 docker compose up으로 빠른 복구. Phase 1+에서 다중 Spot 또는 OD 백업 검토.
 
 ### Q7. ALB·DB는 Multi-AZ, 컴퓨트는 Single AZ인데 AZ 다운 시 어떻게 되나요?
 

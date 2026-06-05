@@ -4,7 +4,7 @@
 
 ## 프로젝트 한 줄
 
-**고객사 MySQL 데이터를 기반으로 자연어 RAG·SQL·혼합 질의응답을 제공하는 Spring Boot + Open WebUI + Ollama + pgvector SaaS 시스템. Dedicated Instance per Customer 운영.**
+**사내 MySQL 데이터를 기반으로 자연어 RAG·SQL·혼합 질의응답을 제공하는 Spring Boot + Open WebUI + Ollama + pgvector 사내 서비스.**
 
 상세: [`requirements/TEAM-OVERVIEW.md`](requirements/TEAM-OVERVIEW.md)
 
@@ -28,7 +28,6 @@
 | 영역 | 출처 |
 |------|------|
 | 시스템 전반·아키텍처 | [`requirements/01-architecture.md`](requirements/01-architecture.md) |
-| 비용 ($415/월) | [`requirements/01-architecture.md`](requirements/01-architecture.md) 섹션 8-1 표 |
 | Phase 0 일정 (약 3.5~4개월) | [`requirements/01-architecture.md`](requirements/01-architecture.md) 섹션 11 |
 | 모든 결정사항 | [`docs/adr/`](docs/adr/) (ADR-NNNN) |
 | 기술 스택 | [`requirements/02-stack-reference.md`](requirements/02-stack-reference.md) |
@@ -66,7 +65,7 @@
 
 ## 보류된 영역 (Phase 0 미해결, Phase 1+ 검토)
 
-- Jenkins 보안 격리 (Cross-Account 권한 최소화, GitHub Actions OIDC 검토)
+- Jenkins 보안 격리 (권한 최소화, GitHub Actions OIDC 검토)
 - PIPA 컴플라이언스 (법무·영업 트랙)
 - 외부 SLA 정의 (영업·법무·CTO 결정)
 - 분산 트레이싱 (OpenTelemetry + Grafana Tempo)

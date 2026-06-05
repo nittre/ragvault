@@ -586,8 +586,8 @@ rag:
 변경 시:
 1. application.yml 수정
 2. Docker 이미지 재빌드 (또는 ConfigMap 갱신)
-3. k3s에 배포
-   helm upgrade rag-backend ./chart
+3. EC2에 docker compose up -d 배포
+   docker compose up -d rag-backend ./chart
 4. Rolling 재시작 (다운타임 없음)
 
 → 변경에 5~10분 소요

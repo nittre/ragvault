@@ -57,8 +57,8 @@ TEAM-OVERVIEW.md:1 "데이터 외부 전송 없음 (사내 보안)"
 [Phase 0 도입 기능과의 관계]
 - URL Fetch: 사용자가 명시한 URL 만 호출. 회사 데이터는 외부로 안 나감.
               사용자 의도 자체가 외부 URL 분석이므로 동의 절차 불필요.
-- 첨부파일:  S3 (고객사 AWS 계정) 내부 처리. 외부 전송 0.
-- 멀티모달:  Ollama (고객사 AWS 계정 내 GPU). 외부 API 호출 0.
+- 첨부파일:  S3 (운영 서버) 내부 처리. 외부 전송 0.
+- 멀티모달:  Ollama (운영 서버 내 GPU). 외부 API 호출 0.
 - 웹 검색:   외부 검색 엔진 호출 → 데이터 외부 전송. Phase 0 보류.
 ```
 
@@ -507,7 +507,7 @@ qwen2.5-vl:7b-instruct-q4_K_M    6GB    (이미지, IMAGE 경로 전용)
 
 [Ollama 동시 로드]
 - 두 모델 모두 메모리에 사전 로드
-- 콜드 스타트 방지 (Spot 부팅 시 AMI 가 두 모델 모두 포함)
+- 콜드 스타트 방지 (Spot 재기동 시 모델 사전 pull 필요)
 ```
 
 ### 흐름
@@ -629,7 +629,7 @@ png, jpg, jpeg, webp
 
 [설정 위치]
 1. AWS ALB                          idle_timeout = 600
-2. Nginx Ingress (k3s)              proxy_read_timeout = 600s
+2. ALB              proxy_read_timeout = 600s
                                     proxy_send_timeout = 600s
 3. Spring Boot (Tomcat)             server.tomcat.connection-timeout = 5s (연결만)
                                     spring.mvc.async.request-timeout = 600000ms
@@ -637,7 +637,7 @@ png, jpg, jpeg, webp
 5. SSE Heartbeat                    20초마다 (ALB idle 안 걸리게)
 ```
 
-### Terraform 설정
+### 인프라 관리 도구 설정
 
 ```hcl
 resource "aws_lb" "alb" {

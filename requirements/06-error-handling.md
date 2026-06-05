@@ -63,12 +63,12 @@
 | Ollama (Embedding) | 네트워크 지연 | 가끔 | 검색 지연 | 즉시 |
 | pgvector | RDS 페일오버 | 드물 | 일시 다운 | 1~2분 |
 | pgvector | 디스크 풀 | 예방 가능 | 쓰기 실패 | 수동 대응 |
-| 고객사 MySQL | 네트워크 끊김 | 가끔 | 동기화 실패 | 자동 재시도 |
-| 고객사 MySQL | DB 다운 | 드물 | 동기화 중단 | 고객사 복구 |
-| Open WebUI | Pod 재시작 | 드물 | 일시 다운 | 30초~1분 |
-| Spring Boot | OOM/크래시 | 드물 | 응답 불가 | k3s 자동 재시작 |
-| Redis | Pod 재시작 | 드물 | 캐시 손실 | 30초~1분 |
-| k3s 노드 | 노드 다운 | 드물 | Pod 재배치 | 1~3분 |
+| 회사 MySQL | 네트워크 끊김 | 가끔 | 동기화 실패 | 자동 재시도 |
+| 회사 MySQL | DB 다운 | 드물 | 동기화 중단 | 담당자 복구 |
+| Open WebUI | 컨테이너 재시작 | 드물 | 일시 다운 | 30초~1분 |
+| Spring Boot | OOM/크래시 | 드물 | 응답 불가 | Docker restart: unless-stopped |
+| Redis | 컨테이너 재시작 | 드물 | 캐시 손실 | 30초~1분 |
+| EC2 인스턴스 | 인스턴스 다운 | 드물 | 컨테이너 전체 다운 | 수동 대응 또는 Auto Scaling |
 | ALB | AWS 장애 | 매우 드물 | 외부 접근 차단 | AWS 복구 대기 |
 | AZ 전체 | AZ 다운 | 매우 드물 | 컴퓨트 다운 | 수동 대응 |
 
@@ -84,8 +84,8 @@
 - pgvector 다운 → 검색 불가
 
 [부분 기능 다운]
-- 고객사 MySQL 끊김 → 동기화만 멈춤 (검색은 OK)
-- Open WebUI Pod 1개 다운 → 다른 Pod로 처리
+- 회사 MySQL 끊김 → 동기화만 멈춤 (검색은 OK)
+- Open WebUI 컨테이너 재시작 → Docker가 자동 재기동
 
 [사용자 무영향]
 - Redis 다운 → 캐시 미스만 발생
@@ -96,13 +96,13 @@
 
 ```
 [완전 자동]
-- k3s Pod 재시작 (헬스체크 실패 시)
+- Docker 컨테이너 재시작 (healthcheck 실패 시, restart: unless-stopped)
 - RDS Multi-AZ 페일오버
-- ALB의 비정상 노드 제외
+- ALB의 비정상 타겟 제외
 
 [부분 자동]
 - Spot 회수 → Auto Scaling이 새 인스턴스 생성
-- 고객사 MySQL 일시 끊김 → Retry로 복구
+- 회사 MySQL 일시 끊김 → Retry로 복구
 
 [수동 필요]
 - 디스크 풀
@@ -150,7 +150,7 @@ public class ChunkProcessor {
 | Ollama LLM (사용자 응답) | **2회** | 1초, 3초 | 사용자 대기 짧게 |
 | Ollama 임베딩 (배치) | 3회 | 1, 5, 25초 | 시간 여유 |
 | pgvector 쿼리 | 3회 | 1, 2, 4초 | 일시 부하 흡수 |
-| 고객사 MySQL 연결 | 5회 | 5, 10, 30, 60, 120초 | 네트워크 복구 대기 |
+| 회사 MySQL 연결 | 5회 | 5, 10, 30, 60, 120초 | 네트워크 복구 대기 |
 | binlog 연결 | 무한 | 30초 간격 | 동기화 안정성 |
 
 ### 재시도 안 하는 경우
@@ -222,7 +222,7 @@ HALF_OPEN (테스트)
 - 차단 시간: 10초
 - Fallback: 검색 단순화 또는 에러
 
-[고객사 MySQL]
+[회사 MySQL]
 - 임계값: 5회 연속 실패
 - 차단 시간: 5분
 - Fallback: 동기화 일시 중단
@@ -386,7 +386,7 @@ public ResponseEntity<Map<String, String>> liveness() {
 ```
 
 - 항상 200 OK
-- 실패 시 k3s가 Pod 재시작
+- 실패 시 Docker가 컨테이너 재시작 (restart: unless-stopped)
 - 가볍게 (DB 체크 X)
 
 ### Readiness — "트래픽 받을 준비됐나?"
@@ -430,7 +430,7 @@ GET /api/v1/health/deep
     "ollama_embedding": {
       "status": "UP",
       "latency_ms": 45,
-      "model": "nomic-embed-text"
+      "model": "bge-m3"
     },
     "customer_mysql": {
       "status": "DEGRADED",
@@ -445,28 +445,34 @@ GET /api/v1/health/deep
 }
 ```
 
-### k3s Probe 설정
+### Docker Healthcheck 설정
 
 ```yaml
-# helm/rag-backend/templates/deployment.yaml
-livenessProbe:
-  httpGet:
-    path: /api/v1/health
-    port: 8080
-  initialDelaySeconds: 30
-  periodSeconds: 10
-  timeoutSeconds: 3
-  failureThreshold: 3
+# docker-compose.prod.yml
+services:
+  spring-boot:
+    image: ${ECR_REGISTRY}/rag-backend:${IMAGE_TAG}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
 
-readinessProbe:
-  httpGet:
-    path: /api/v1/health/ready
-    port: 8080
-  initialDelaySeconds: 10
-  periodSeconds: 5
-  timeoutSeconds: 3
-  failureThreshold: 2
+  open-webui:
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 2
+      start_period: 10s
 ```
+
+- `restart: unless-stopped` — healthcheck 실패 시 Docker가 컨테이너 자동 재시작 (Kubernetes livenessProbe 대체)
+- `start_period` — 시작 후 grace period (Spring Boot 기동 시간 확보)
+- ALB Target Group 헬스체크: `/api/v1/health/ready` 엔드포인트 직접 사용 (Kubernetes readinessProbe 대체)
 
 ---
 
@@ -480,16 +486,14 @@ readinessProbe:
 - http://169.254.169.254/latest/meta-data/spot/instance-action
 
 [감지 → 대응]
-1. aws-node-termination-handler 데몬이 감지 (30초 폴링)
-2. k3s에 노드 unschedulable 표시
-   kubectl cordon <node>
-3. Ollama Pod를 drain
-   kubectl drain <node> --ignore-daemonsets
-4. Auto Scaling Group이 새 Spot 요청
-5. 새 EC2 부팅 (AMI 사용, 30초~1분)
-6. k3s 클러스터에 join
-7. Ollama Pod 자동 배치
-8. 서비스 재개
+1. aws-node-termination-handler 스크립트가 감지 (IMDS 30초 폴링)
+2. Ollama 컨테이너 graceful stop
+   docker compose stop ollama
+3. Auto Scaling Group이 새 Spot 요청
+4. 새 EC2 부팅 (30초~1분)
+5. cloud-init으로 Docker Compose 자동 기동
+6. Ollama 컨테이너 자동 재기동 (restart: unless-stopped)
+7. 서비스 재개
 
 [다운타임]
 1~3분
@@ -497,24 +501,23 @@ readinessProbe:
 
 ### aws-node-termination-handler
 
-```yaml
-# k3s DaemonSet으로 모든 노드에 배포
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: aws-node-termination-handler
-  namespace: kube-system
-spec:
-  template:
-    spec:
-      containers:
-      - name: handler
-        image: amazon/aws-node-termination-handler:latest
-        env:
-        - name: ENABLE_SPOT_INTERRUPTION_DRAINING
-          value: "true"
-        - name: ENABLE_REBALANCE_DRAINING
-          value: "true"
+Docker Compose 환경에서는 EC2 인스턴스 메타데이터(IMDS)를 폴링하는 스크립트로 Spot 회수를 감지한다.
+
+```bash
+#!/bin/bash
+# /usr/local/bin/spot-termination-handler.sh
+# cloud-init으로 EC2 시작 시 systemd 서비스로 등록
+
+while true; do
+  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+    http://169.254.169.254/latest/meta-data/spot/instance-action)
+  if [ "$HTTP_CODE" = "200" ]; then
+    echo "Spot termination notice received. Stopping containers gracefully..."
+    docker compose -f /opt/rag/docker-compose.prod.yml stop
+    break
+  fi
+  sleep 5
+done
 ```
 
 ### Phase 0 Fallback: 503 응답
@@ -576,7 +579,7 @@ Discord 알람:
 [시나리오 5: Redis 다운]
 영향: 캐시 미스, Rate Limit 작동 안 함
 사용자: 약간 느려질 뿐
-관리자: k3s 자동 재시작 대기
+관리자: Docker restart 정책으로 자동 재기동 대기
 ```
 
 ### 부분 장애 알림 (Phase 1+)
@@ -782,9 +785,9 @@ docs/runbooks/
      -d '{"model":"qwen2.5:14b","prompt":"test"}'
    ```
 
-4. k3s readiness 통과 확인:
+4. 컨테이너 상태 확인:
    ```bash
-   kubectl get pods -n rag -o wide
+   docker compose ps
    ```
 
 ## 예방
@@ -901,7 +904,7 @@ rag_active_jobs                  (실행 중 동기화 작업)
 ├── Critical 알람 카운트
 ├── Circuit Breaker 상태 (Phase 1+)
 ├── 디스크/메모리 사용률
-├── Pod 재시작 횟수
+├── 컨테이너 재시작 횟수
 └── 실패 이벤트 큐 길이
 
 [비즈니스 대시보드]
@@ -938,7 +941,7 @@ rag_active_jobs                  (실행 중 동기화 작업)
 ```
 [도구 후보]
 - AWS Fault Injection Service (FIS)
-- LitmusChaos (k3s용)
+- LitmusChaos
 - Chaos Mesh
 
 [시나리오]

@@ -1,6 +1,6 @@
 # 데이터 동기화 파이프라인 상세 설계
 
-> 고객사 MySQL → 우리 pgvector 동기화 메커니즘.
+> 회사 MySQL → pgvector 동기화 메커니즘.
 > binlog 기반 변경 감지 + 가변적 RAG 테이블 관리.
 
 관련 문서:
@@ -32,7 +32,7 @@
 
 | 항목 | 결정 |
 |------|------|
-| 데이터 소스 | 고객사 MySQL 직접 연결 (binlog 기반) |
+| 데이터 소스 | 회사 MySQL 직접 연결 (binlog 기반) |
 | 변경 감지 | MySQL binlog (mysql-binlog-connector-java) |
 | 우리 측 미러 DB | 없음 (직접 binlog 읽기) |
 | 네트워크 | VPC Peering 또는 Site-to-Site VPN |
@@ -54,7 +54,7 @@
 | 초기 동기화 | 풀 스냅샷 + binlog 시작 위치 기록 |
 | 초기 동기화 병렬 | 8 스레드 |
 
-### 고객사 MySQL 사전 조건
+### 회사 MySQL 사전 조건
 
 ```
 - log-bin 활성화
@@ -87,7 +87,7 @@
 [2] binlog_position 테이블에서 마지막 GTID set 조회
     {gtid_set: "uuid-1:1-12345"}
         ↓
-[3] 고객사 MySQL에 binlog 클라이언트 연결
+[3] 회사 MySQL에 binlog 클라이언트 연결
     BinaryLogClient (mysql-binlog-connector-java)
     setGtidSet(lastGtidSet)    ← GTID 기반 위치 지정
     VPC Peering 또는 VPN 경유
@@ -140,7 +140,7 @@
 - 06-error-handling.md 섹션 9 와 일치
 
 [GTID 사용 이유]
-- 고객사 MySQL master 페일오버 시 binlog 파일명·position 이 깨질 수 있음
+- 회사 MySQL 페일오버 시 binlog 파일명·position 이 깨질 수 있음
 - GTID 는 트랜잭션 단위 globally unique → 페일오버에 안전
 - 초기 동기화 시점에 SHOW MASTER STATUS 로 현재 gtid_executed 기록
 ```
@@ -765,7 +765,7 @@ HIGH 수동:
    - 너무 큰 텍스트
 
 4. binlog 읽기 실패
-   - 고객사 MySQL 다운
+   - 회사 MySQL 다운
    - binlog 파일 회전 중
    - 네트워크 끊김
 ```

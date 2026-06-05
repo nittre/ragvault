@@ -39,7 +39,7 @@
 | 도입 시점 | **Phase 0 (옵션 B)** |
 | 지원 경로 | RAG / SQL / **Hybrid** 3가지 |
 | 의도 분류기 (이 문서 범위) | qwen2.5 LLM (별도 호출), **RAG / SQL / HYBRID 3경로 분류만 담당**. 정적 규칙 기반의 URL_FETCH / FILE / IMAGE 분류는 [10-multimodal-files-url.md 섹션 2](10-multimodal-files-url.md) 참고 |
-| 스키마 소스 | 고객사 MySQL INFORMATION_SCHEMA 자동 조회 |
+| 스키마 소스 | 회사 MySQL INFORMATION_SCHEMA 자동 조회 |
 | 스키마 캐시 | Redis, TTL 1시간 |
 | SQL 대상 테이블 | sql_table_config DB 화이트리스트 |
 | SQL 안전성 | SELECT만, AST 파싱, JSqlParser |
@@ -236,7 +236,7 @@ public enum QueryIntent { RAG, SQL, HYBRID }
 ### 자동 스키마 조회
 
 ```sql
--- 고객사 MySQL INFORMATION_SCHEMA에서 추출
+-- 회사 MySQL INFORMATION_SCHEMA에서 추출
 SELECT 
     TABLE_NAME,
     COLUMN_NAME,
@@ -637,7 +637,7 @@ spring:
     # 기본 (pgvector) - PostgreSQL
     url: jdbc:postgresql://...
     
-    # Read-only (고객사 MySQL)
+    # Read-only (회사 MySQL)
     customer-mysql-readonly:
       url: jdbc:mysql://customer-host:3306/customer_db
       username: rag_readonly  # 별도 read-only 계정
@@ -1069,7 +1069,7 @@ Phase 0:
 ```
 [원인]
 - 타임아웃 (10초)
-- 고객사 MySQL 연결 끊김
+- 회사 MySQL 연결 끊김
 - 권한 부족
 
 [대응]

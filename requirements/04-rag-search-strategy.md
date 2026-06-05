@@ -38,7 +38,7 @@
 | 항목 | Phase 0 결정 | 비고 |
 |------|------------|------|
 | 의도 분류 | LLM 기반 + 정적 규칙 — **6경로** (RAG / SQL / HYBRID / URL_FETCH / FILE / IMAGE) | Phase 0 도입. 08·10 문서 참고 |
-| 거리 함수 | 코사인 `<=>` | 표준, nomic-embed-text와 호환 |
+| 거리 함수 | 코사인 `<=>` | 표준, bge-m3와 호환 |
 | Top-K 기본값 | 5 | 균형 |
 | 동적 K 조정 | 고정 (Phase 0) | Phase 1+ 동적 |
 | 유사도 임계값 | 0.65 | 0.6~0.7 권장 범위 |
@@ -92,8 +92,8 @@
     질문에서 source_type, 카테고리 등 추출
     "상품" 키워드 → source_type='product'
         ↓
-[7] 질문 임베딩 (Ollama nomic-embed-text)
-    768차원 벡터 생성
+[7] 질문 임베딩 (Ollama bge-m3)
+    1024차원 벡터 생성
         ↓
 [8] pgvector 검색 (Top-K + 임계값 + 접근 그룹)
     SELECT id, content, metadata, source_type
@@ -142,7 +142,7 @@
 
 ```
 [선택 이유]
-- nomic-embed-text는 L2 정규화된 벡터 출력
+- bge-m3는 L2 정규화된 벡터 출력
 - 코사인 거리가 임베딩 검색 관습적 표준
 - pgvector HNSW 인덱스에서 효율적
 
@@ -250,7 +250,7 @@ public class SearchService {
 [Phase 0]
 - 모든 청크의 access_groups = ['all']
 - 모든 사용자에게 ARRAY['all'] 그룹 부여
-- 결과: 같은 고객사 직원은 동일 검색 결과
+- 결과: 같은 사내 직원은 동일 검색 결과
 - 등록 시점에 admin이 민감 데이터 등록을 막아 보호한다 ([03-data-sync-pipeline.md 섹션 3](03-data-sync-pipeline.md) "등록 가드")
 
 [Phase 1+]
@@ -481,10 +481,10 @@ LLM 호출은 진행하되 프롬프트에 명시:
 
 ```
 [Phase 1: 새 모델로 신규 임베딩 시작]
-- 현재: nomic-embed-text-v1
-- 새 모델: nomic-embed-text-v2
+- 현재: bge-m3
+- 새 모델: bge-m3-new
         ↓
-search_config.embedding_model = 'nomic-embed-text-v2'
+search_config.embedding_model = 'bge-m3-new'
         ↓
 - 새 데이터 동기화는 v2로
 - 기존 v1 데이터는 그대로
@@ -494,7 +494,7 @@ search_config.embedding_model = 'nomic-embed-text-v2'
 - 배치 작업으로 v1 청크를 v2로 재임베딩
 - 진행률 모니터링
         ↓
-- 새 청크 생성 (embedding_model='nomic-embed-text-v2')
+- 새 청크 생성 (embedding_model='bge-m3-new')
 - 기존 v1 청크는 유지 (검색 시 병행 사용)
 
 [Phase 3: 병존 기간 검색]
@@ -517,18 +517,18 @@ LIMIT 5;
 
 ```
 1. 관리자: PATCH /api/v1/admin/search-config/embedding_model
-   body: { "value": "nomic-embed-text-v2" }
+   body: { "value": "bge-m3-new" }
         ↓
 2. Spring Boot: search_config 캐시 갱신
         ↓
 3. 신규 임베딩부터 v2 모델 사용
         ↓
 4. 관리자: POST /api/v1/admin/embeddings/migrate
-   body: { "from": "nomic-embed-text-v1", "to": "nomic-embed-text-v2" }
+   body: { "from": "bge-m3", "to": "bge-m3-new" }
         ↓
 5. 백그라운드 배치 시작 (sync_jobs 테이블 추적)
         ↓
-6. 완료 후 관리자: DELETE /api/v1/admin/embeddings/old?model=nomic-embed-text-v1
+6. 완료 후 관리자: DELETE /api/v1/admin/embeddings/old?model=bge-m3
 ```
 
 ---
@@ -568,7 +568,7 @@ INSERT INTO search_config (config_key, config_value, description, valid_values) 
   '{"min":1000,"max":20000}'),
 ('max_history_turns', '10', '대화 이력 최대 턴',
   '{"min":3,"max":50}'),
-('embedding_model', '"nomic-embed-text-v1"', '활성 임베딩 모델',
+('embedding_model', '"bge-m3"', '활성 임베딩 모델',
   null),
 ('reranker_enabled', 'false', 'Re-ranker 사용 여부 (Phase 1+)',
   null),
@@ -696,7 +696,7 @@ Guard B 관리자 강제 고정
 │  대화 이력 턴:    [10   ] (5~50)             │
 │  컨텍스트 토큰:    [5000 ]                    │
 │                                              │
-│  임베딩 모델:     [nomic-embed-text-v1 ▼]    │
+│  임베딩 모델:     [bge-m3 ▼]    │
 │   [변경 적용]                                 │
 │                                              │
 │  하이브리드 검색: [ ] 사용 (Phase 1+)         │

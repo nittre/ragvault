@@ -72,7 +72,7 @@ grep -rln "PII\|access_groups" docs/lessons-learned/
 #### 작성 트리거
 - 빌드·테스트 실패 (`./gradlew build` 등)
 - 런타임 에러 (NPE, BeanCreationException 등)
-- 인프라 적용 실패 (`terraform apply`, `helm install`)
+- 인프라 적용 실패 (`docker compose up`, `docker compose up`)
 - 가드레일에 의해 차단 + 사용자 거부
 - 통합 경계면 mismatch
 - 디버깅 시간 30분+ 영역
@@ -105,7 +105,7 @@ grep -rln "PII\|access_groups" docs/lessons-learned/
 |---------|------|
 | `build` | Gradle·Maven·dependency·classpath |
 | `runtime` | Spring Boot 실행·beans·application context |
-| `infra` | Terraform·k3s·Helm·AWS |
+| `infra` | Docker Compose·Jenkins |
 | `data` | DB 스키마·마이그레이션·동기화 |
 | `security` | PII·인증·SSRF·access_groups |
 | `integration` | 경계면 (Spring Boot ↔ Open WebUI 등) |

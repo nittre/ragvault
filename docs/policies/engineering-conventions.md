@@ -23,9 +23,9 @@
 |------|------|------|------|
 | 모델 (텍스트) | qwen2.5:7b-instruct-q4_K_M | 동일 | qwen2.5:14b-instruct-q4_K_M |
 | 모델 (이미지) | qwen2.5-vl:7b-instruct-q4_K_M | 동일 | 동일 |
-| Embedding | nomic-embed-text | 동일 | 동일 |
+| Embedding | bge-m3 | 동일 | 동일 |
 | 양자화 | Q4_K_M | Q4_K_M | Q4_K_M |
-| 인프라 | Docker Compose | Docker Compose | k3s + Helm + Terraform |
+| 인프라 | Docker Compose | Docker Compose | Docker Compose + 인프라 관리 도구 |
 | LLM 클라이언트 | Spring AI `ChatClient` | 동일 | 동일 |
 | SMTP | 비활성 | 비활성 | AWS SES |
 | HTTP 타임아웃 | 600s | 600s | 600s (ALB/Nginx/Spring/OpenWebUI) |
@@ -46,20 +46,20 @@ cd rag-infra/terraform/customers/{customer}
 terraform init -backend=false
 terraform validate
 terraform plan
-# terraform apply 는 가드레일 통과 후 사용자 명시 승인 필요
+# docker compose up 는 가드레일 통과 후 사용자 명시 승인 필요
 ```
 
-### Helm
+### Docker Compose (배포 검증)
 ```bash
-helm lint rag-infra/helm/rag-backend
-helm template rag-backend rag-infra/helm/rag-backend -f values-prod.yaml
+docker compose -f rag-infra/docker-compose.prod.yml config
+docker compose -f rag-infra/docker-compose.prod.yml pull
 ```
 
 ### 로컬 환경
 ```bash
 docker compose -f docker-compose.dev.yml up -d
 docker exec -it ollama ollama pull qwen2.5:7b-instruct-q4_K_M
-docker exec -it ollama ollama pull nomic-embed-text
+docker exec -it ollama ollama pull bge-m3
 docker exec -it ollama ollama pull qwen2.5-vl:7b-instruct-q4_K_M
 ```
 
@@ -125,7 +125,7 @@ rag-practice/
 │       └── lessons-learned/        ← 에러 기록·재발 방지
 └── (실제 코드는 구현 시점에 추가)
     ├── rag-backend/                ← Spring Boot
-    └── rag-infra/                  ← Terraform + Helm
+    └── rag-infra/                  ← Docker Compose 배포 파일
 ```
 
 ## 참고

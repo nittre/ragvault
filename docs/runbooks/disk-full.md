@@ -46,7 +46,7 @@ crictl rmi --prune
 ```bash
 # 사용하지 않는 모델만 삭제 (필수 3개 유지)
 ollama list
-# 유지 목록: qwen2.5:14b-instruct-q4_K_M, qwen2.5-vl:7b-instruct-q4_K_M, nomic-embed-text
+# 유지 목록: qwen2.5:14b-instruct-q4_K_M, qwen2.5-vl:7b-instruct-q4_K_M, bge-m3
 ollama rm <불필요한-모델>
 ```
 

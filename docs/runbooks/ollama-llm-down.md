@@ -47,7 +47,7 @@ aws ec2 request-spot-instances \
   --launch-specification file://spot-spec.json
 ```
 
-새 인스턴스 기동 후 Helm rollout restart 불필요 (k3s 자동 재스케줄)
+새 인스턴스 기동 후 docker compose restart 불필요 (Docker 자동 재시작)
 
 ### Step 2-B: Ollama 프로세스 크래시
 
@@ -73,9 +73,8 @@ systemctl restart ollama
 
 ```bash
 curl http://localhost:11434/api/tags | jq '.models[].name'
-# 확인 목록: qwen2.5:14b-instruct-q4_K_M, qwen2.5-vl:7b-instruct-q4_K_M, nomic-embed-text
+# 확인 목록: qwen2.5:14b-instruct-q4_K_M, qwen2.5-vl:7b-instruct-q4_K_M, bge-m3
 ```
 
 ## 장기 대응
-- AMI 사전 빌드 모델 업데이트 (`packer/ollama-ami.pkr.hcl`)
 - Spot Fleet 예비 인스턴스 타입 추가 (`g5.2xlarge` 대안)

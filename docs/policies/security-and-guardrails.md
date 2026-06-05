@@ -17,8 +17,8 @@
 | 파일 파괴 | `rm -rf` · `rm /*` · `dd of=` · `mkfs` · `shred` |
 | Git 강제·파괴 | `push --force` · `reset --hard` · `clean -f` · `branch -D` · `checkout .` |
 | SQL 파괴 | `DROP TABLE/DATABASE/SCHEMA` · `TRUNCATE` · `DELETE FROM` (WHERE 없음) |
-| K8s/Helm | `kubectl delete` · `helm uninstall` · `kubectl drain` |
-| Terraform | `destroy` · `apply -destroy` · `state rm` |
+| K8s/Helm (레거시) | `kubectl delete` · `helm uninstall` · `kubectl drain` — 현 시스템 미사용 |
+| 인프라 관리 도구 | `destroy` · `apply -destroy` · `state rm` |
 | AWS | `ec2 terminate-instances` · `rds delete-db-instance` · `s3 rb` · `iam delete-*` |
 | 권한·sudo | `chmod -R 777` · `chown -R` · `sudo` |
 | 우회 | `curl|sh` · `wget|sh` |
@@ -90,15 +90,15 @@ URL Fetch 모든 호출 전 `SsrfGuard.validate(url)` 통과 의무:
 ### 8. 가드레일 우회 금지
 hook 비활성화·sudo 권한 부여 명령은 코드 리뷰에서 BLOCKER. 가드레일 자체 변경은 ADR + 사용자 명시 승인 필요.
 
-### 9. Cross-Account IAM 최소 권한
-- `RagOperatorRole` 에 `AdministratorAccess` 금지
-- Terraform 모듈이 실제 사용하는 Action 만 화이트리스트
+### 9.  IAM 최소 권한
+- `DeployRole` 에 `AdministratorAccess` 금지
+- 인프라 관리 도구 모듈이 실제 사용하는 Action 만 화이트리스트
 - ExternalId + sourceIP 조건 (Trust Policy)
 
 ### 10. 데이터 외부 전송 정책
 [`requirements/TEAM-OVERVIEW.md`](../../requirements/TEAM-OVERVIEW.md): "데이터 외부 전송 없음"
 - Ollama (로컬·고객사 GPU) — 외부 호출 0
-- 임베딩 모델 (nomic-embed-text) — 로컬
+- 임베딩 모델 (bge-m3) — 로컬
 - URL Fetch — 사용자 명시 URL 만, 회사 RAG 데이터 미전송
 - Tavily/외부 검색 — Phase 0 보류
 

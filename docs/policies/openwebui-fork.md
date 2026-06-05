@@ -36,7 +36,7 @@
 | `/v1/chat/completions` 프록시 | `backend/apps/openai/main.py` | X-User-* 헤더 주입 (브라우저 헤더 폐기 후 세션 사용자로 새로 구성) | ADR-0006 |
 | `/v1/files` 프록시 | `backend/apps/openai/files.py` 신규 | 첨부파일 → Spring Boot `/v1/files` 라우팅 | requirements/10 |
 | `/auth/verify` 엔드포인트 | `backend/apps/users/auth.py` | admin UI 의 세션 검증 호출용 | ADR-0009 |
-| SES SMTP 환경변수 | `backend/config.py`, helm values | 메일 발송 (Open WebUI 기본 SMTP 설정 활용) | ADR-0014 (SES) |
+| SES SMTP 환경변수 | `backend/config.py`, docker-compose.prod.yml env | 메일 발송 (Open WebUI 기본 SMTP 설정 활용) | ADR-0014 (SES) |
 | (선택) Functions/Filters | `backend/apps/webui/internal/db.py` 신규 모듈 | 만약 Plugin 방식 도입 시 — Phase 1+ 검토 |
 
 ## Fork 범위 — Frontend (Svelte)
@@ -126,7 +126,7 @@ fork/customer-rag      ← 우리 변경 적용 (단일 feature branch)
 ☐ Frontend 변경 영역 PR N개 (사이드 패널·클립·출처·...)
 ☐ 회귀 테스트 시나리오 정의 (스모크 6~8개)
 ☐ CHANGELOG.md 초기화
-☐ Helm 차트의 image tag (fork-v0.3.42-rag1 등) 명명 규칙
+☐ docker-compose.prod.yml의 image tag (fork-v0.3.42-rag1 등) 명명 규칙
 ```
 
 ## 참고

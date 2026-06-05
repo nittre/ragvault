@@ -44,7 +44,7 @@
 
 ```
 [Job to be done]
-우리 회사 (MSP) 가 신규 고객사 인프라 배포 후
+관리자가 서버 세팅 후
 고객사 admin 에게 시스템 운영 권한을 안전하게 인계.
 
 [성공 조건]
@@ -71,7 +71,7 @@
 | **Admin UI 진입 경로** | A. `customera.ragservice.com/admin/*` — 같은 도메인 별도 경로 |
 | 인계 시점 | 7일 grace period — 우리 초기 계정 7일 후 자동 비활성화 cron |
 | Onboarding 자료 | `docs/customer-admin-guide.md` 1페이지 + 인계 메일에 링크. Phase 1+ 인앱 튜토리얼 |
-| Admin 권한 회수 | 고객사 admin 이 admin Panel 에서 다른 admin 추가 + 본인 해제 가능. **자기 자신 마지막 admin 일 때 해제 X**. 비상 시 Cross-Account Role |
+| Admin 권한 회수 | 고객사 admin 이 admin Panel 에서 다른 admin 추가 + 본인 해제 가능. **자기 자신 마지막 admin 일 때 해제 X**. 비상 시 Role |
 | 다중 admin | Phase 0 다중 admin 가능 (Open WebUI 기본). 부서별 권한은 Phase 1+ |
 
 ---
@@ -171,7 +171,7 @@ admin UI → 테이블 관리 → 등록 폼 → 가드 검증 → 동기화/캐
 
 ```
 [Job to be done]
-고객사 MySQL DDL 발생 → 30분 cron 감지 → ddl_events 기록 + Discord 알람 →
+회사 MySQL DDL 발생 → 30분 cron 감지 → ddl_events 기록 + Discord 알람 →
 admin 이 위험도별 결정 (무시·설정 업데이트·재동기화)
 
 [빈도]

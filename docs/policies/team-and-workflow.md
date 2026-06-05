@@ -8,7 +8,7 @@
 |---------|------|------|
 | `planner` | **opus** | 작업 분해·위임·우선순위 (코드 안 씀) |
 | `backend-engineer` | **sonnet** | Spring Boot·Spring AI·pgvector·동기화·SQL·파일·VLM 코드 |
-| `infra-engineer` | **sonnet** | Terraform·k3s·Helm·AWS·SES·AMI |
+| `infra-engineer` | **sonnet** | Docker Compose·Jenkins·배포 자동화 |
 | `code-reviewer` | **sonnet** | 보안·ADR 정합·베스트 프랙티스 리뷰 (코드 수정 X) |
 | `verifier` | **sonnet** | 빌드·테스트·경계면·E2E·회귀 검증 |
 
@@ -52,7 +52,7 @@ verifier → planner (완료 또는 재작업)
 
 ### 4축
 ```
-1. 도메인 축       backend(Spring Boot) ↔ infra(AWS·k3s)
+1. 도메인 축       backend(Spring Boot) ↔ infra(AWS·Docker Compose)
 2. 작업 유형 축    plan / write / review / verify
 3. 의존성 축       blocks · blockedBy
 4. 마일스톤 축     Phase 0 = M1~M5 (인프라 → 코어 RAG → 동기화 → SQL/혼합 → 파일/URL/VLM)
@@ -66,7 +66,7 @@ verifier → planner (완료 또는 재작업)
 2. 작업 분해 — 각 1~3시간 단위
 3. owner 지정
    - Spring Boot·Spring AI·pgvector·SQL → backend-engineer
-   - Terraform·Helm·AWS·SES·AMI         → infra-engineer
+   - Docker Compose·Jenkins·SES → infra-engineer
    - 구현 완료 후                         → code-reviewer
    - 리뷰 통과 후                         → verifier
 4. 의존성 그래프 (blocks / blockedBy)

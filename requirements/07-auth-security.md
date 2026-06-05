@@ -79,7 +79,7 @@ Spring Boot OpenAI 호환 API
 
 [관리자 흐름]
 관리자
-  │ 1. 외부 도구 (curl, Postman, Terraform)
+  │ 1. 외부 도구 (curl, Postman, 인프라 관리 도구)
   ▼
 ALB (IP 화이트리스트 — 회사 IP만)
   │
@@ -120,10 +120,10 @@ Open WebUI가 모든 사용자 관련 인증을 처리.
 ✓ 사용자 관리 UI
 ```
 
-### 우리 설정 (helm values)
+### 우리 설정 (docker-compose.prod.yml)
 
 ```yaml
-# helm/open-webui/values.yaml
+# rag-infra/docker-compose.prod.yml (open-webui service 환경변수)
 env:
   - name: ENABLE_SIGNUP
     value: "true"  # 가입 허용 (단, 승인 필요)
@@ -180,7 +180,7 @@ env:
 
 ```
 [신규 고객사 온보딩 시]
-1. Terraform으로 인프라 배포
+1. 인프라 관리 도구으로 인프라 배포
 2. 우리가 Open WebUI 초기 admin 계정 1개 생성
    - 이메일: ops@ragservice.com
    - 임시 비밀번호: 랜덤 16자
@@ -610,7 +610,7 @@ WHERE is_active = true
 ```
 [관리자 API Key]
 - 별도 발급 (scope: api:admin + 세부 scope)
-- 외부 도구 (Terraform, Jenkins)에서 사용
+- 외부 도구 (인프라 관리 도구, Jenkins)에서 사용
 - 1년 만료, 정기 회전
 
 [IP 화이트리스트]
@@ -670,7 +670,7 @@ admin:
 ### ALB 보안 그룹
 
 ```hcl
-# Terraform
+# 인프라 관리 도구
 resource "aws_security_group_rule" "admin_api_ip_allow" {
   type              = "ingress"
   from_port         = 443
@@ -785,7 +785,7 @@ Redis 카운터 키:
 → 1명 사용자 폭주가 다른 사용자에 영향 없음
 
 [헤더 보안]
-- 내부 IP(k3s VPC 대역)에서만 X-User-* 헤더 신뢰
+- 내부 IP(VPC 대역)에서만 X-User-* 헤더 신뢰
 - 외부에서 직접 호출 시 헤더 폐기 (위변조 방지)
 - 헤더 형식 검증 (이메일 포맷 등)
 ```
@@ -806,9 +806,9 @@ Redis 카운터 키:
      · X-User-Email: 세션 사용자 이메일
      · X-User-Id:    Open WebUI 내부 사용자 ID
      · X-User-Role:  admin / user / pending
-   - Spring Boot로 프록시 (k3s 내부 통신)
+   - Spring Boot로 프록시 (Docker Compose 내부 통신)
 5. Spring Boot 수신:
-   - TrustedHeaderFilter: 발신 IP가 k3s VPC 내부인지 검증
+   - TrustedHeaderFilter: 발신 IP가 VPC 내부인지 검증
      · 외부 IP → X-User-* 제거 (API Key 인증만 사용)
      · 내부 IP → X-User-* 신뢰
    - ApiKeyAuthFilter: API Key 검증 (전체 시스템 인증)
@@ -818,7 +818,7 @@ Redis 카운터 키:
 
 [보안 검증 — Spring Boot 측]
 TrustedHeaderFilter가 X-User-* 헤더 검증:
-- 발신 IP가 내부 (k3s VPC) 인지 확인 (X-Forwarded-For 최우측 신뢰 IP 사용)
+- 발신 IP가 내부 (VPC) 인지 확인 (X-Forwarded-For 최우측 신뢰 IP 사용)
 - 외부 IP면 X-User-* 헤더 제거 (위변조 방지)
 - 내부 IP면 이메일 형식 등 sanity check 후 통과
 ```
@@ -1077,7 +1077,7 @@ DB(api_keys 테이블)에 bcrypt 해시만 저장
 사용자가 임의로 위변조 가능하기 때문 (다른 사용자 사칭 / 권한 상승).
 
 → Open WebUI 백엔드(Python/FastAPI)가 세션 인증 후 헤더를 주입한다.
-→ Spring Boot는 발신 IP가 k3s 내부인 경우에만 헤더를 신뢰한다.
+→ Spring Boot는 발신 IP가 VPC 내부인 경우에만 헤더를 신뢰한다.
 
 [헤더]
 X-User-Email: user@customer.com   (Open WebUI 인증 사용자의 이메일)
@@ -1100,7 +1100,7 @@ X-User-Role:  user                (admin | user | pending)
 │   브라우저 ── 세션 쿠키만 ───────────────┐                    │
 │                                          ▼                   │
 ├──────────────────────────────────────────────────────────────┤
-│  k3s VPC 내부 (신뢰 영역)                                      │
+│  VPC 내부 (신뢰 영역)                                      │
 │                                                              │
 │   Open WebUI Pod                                             │
 │     │ 세션 인증된 user 정보로                                  │
@@ -1332,7 +1332,7 @@ public class DataRetentionScheduler {
 }
 ```
 
-### S3 Lifecycle 정책 (Terraform)
+### S3 Lifecycle 정책 (인프라 관리 도구)
 
 ```hcl
 # 첨부 파일/이미지 (24시간 TTL)
@@ -1389,7 +1389,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "rds_backups" {
 - 고객사 RDS 스냅샷 → 1회 삭제 검증 후 삭제
 - audit_logs는 PII 마스킹 후 보관 (감사용)
 - S3 객체 모두 삭제
-- AWS 인프라 destroy (Terraform)
+- AWS 인프라 destroy (인프라 관리 도구)
         ↓
 [D-day + 31일] 삭제 증명서 발급
 - 삭제 시각
@@ -1585,6 +1585,6 @@ CREATE INDEX idx_auth_failures_ip ON auth_failures (ip_address, created_at DESC)
 [네트워크]
 ☑ VPC 격리 (DB 외부 접근 불가)
 ☑ ALB HTTPS만 허용
-☑ Spring Boot, k3s 내부 통신만
-☑ 고객사 MySQL 연결은 VPC Peering/VPN
+☑ Spring Boot, Docker Compose 내부 통신만
+☑ 회사 MySQL 연결 (사내 네트워크 또는 VPN)
 ```

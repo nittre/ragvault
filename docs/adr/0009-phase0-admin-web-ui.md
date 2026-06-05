@@ -75,7 +75,7 @@ admin UI SPA
    ▼
 Spring Boot
    │ 3. AdminSessionFilter 가 세션 쿠키 추출
-   │ 4. Open WebUI /auth/verify 호출 (k3s 내부 통신)
+   │ 4. Open WebUI /auth/verify 호출 (VPC 내부 통신)
    │    - 세션 유효 여부 확인
    │    - user_email + role 응답
    │ 5. role != 'admin' → 403 Forbidden
@@ -123,7 +123,7 @@ admin API 처리 (UserContext 활용)
   ☑ admin Web UI (/admin/*) — 7개 화면, React 또는 Thymeleaf
   ```
 - `requirements/01-architecture.md` 섹션 14-9 Phase 1+ "관리자 Web UI" → **"관리자 Web UI 강화 (인앱 튜토리얼·실시간 검증·SSE 진행)"** 로 수정 (Phase 0 기본은 이미 도입)
-- AMI 빌드 또는 Helm 차트에 admin UI 정적 자산 포함
+- docker-compose.prod.yml 이미지에 admin UI 정적 자산 포함
 - `docs/policies/team-and-workflow.md` 의 마일스톤 M1~M5 에 admin UI 마일스톤 추가 (M6 또는 M3 안 통합)
 - `docs/ux/admin-journeys.md` 의 결정사항 표가 본 ADR 의 권위 출처
 

@@ -723,7 +723,7 @@ our/security/CVE-* ← 보안 패치 브랜치
 [채택 — Open WebUI 백엔드(서버)에서 헤더 주입]
 - Open WebUI 백엔드가 세션으로 사용자를 이미 인증함
 - 인증된 신원을 Spring Boot로 전달할 때만 헤더 사용
-- Spring Boot는 발신 IP가 k3s 내부인지 확인 후 신뢰
+- Spring Boot는 발신 IP가 VPC 내부인지 확인 후 신뢰
 ```
 
 > 관련 결정: [07-auth-security.md 섹션 8](07-auth-security.md#8-rate-limiting)
@@ -737,14 +737,14 @@ our/security/CVE-* ← 보안 패치 브랜치
    │    body: { model, messages, rag_params: {...} }
    │    (사용자 식별 헤더 없음 — 세션 쿠키만)
    ▼
-Open WebUI 백엔드 (k3s Pod, 내부 IP)
+Open WebUI (Docker 컨테이너, 내부 IP)
    │ 2. 세션 쿠키로 사용자 인증
    │ 3. 사용자 정보를 헤더로 주입:
    │    X-User-Email, X-User-Id, X-User-Role
    │ 4. Spring Boot API Key Bearer 추가
    ▼
-Spring Boot (k3s Pod, 내부 IP)
-   │ 5. 발신 IP 검증 (k3s VPC 대역?)
+Spring Boot (Docker 컨테이너, 내부 IP)
+   │ 5. 발신 IP 검증 (VPC 대역?)
    │ 6. X-User-* 헤더 신뢰 → 사용자 식별
    │ 7. rag_params body 필드 추출 → 적용
    ▼
