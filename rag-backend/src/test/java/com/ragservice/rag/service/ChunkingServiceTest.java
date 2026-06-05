@@ -60,7 +60,7 @@ class ChunkingServiceTest {
     void processRow_callsUpsert() {
         RagTableConfig config = buildConfig();
         when(piiMasker.mask(anyString(), anyString())).thenAnswer(inv -> inv.getArgument(0));
-        when(embeddingModel.embed(anyString())).thenReturn(new float[768]);
+        when(embeddingModel.embed(anyString())).thenReturn(new float[1024]);
 
         Map<String, Object> row = Map.of("id", "123", "description", "test product description");
         chunkingService.processRow(config, row);
@@ -72,7 +72,7 @@ class ChunkingServiceTest {
     void processRow_masksPii() {
         RagTableConfig config = buildConfig();
         when(piiMasker.mask(anyString(), anyString())).thenAnswer(inv -> inv.getArgument(0));
-        when(embeddingModel.embed(anyString())).thenReturn(new float[768]);
+        when(embeddingModel.embed(anyString())).thenReturn(new float[1024]);
 
         // 설명에 전화번호 포함 → 마스킹되어야 함
         Map<String, Object> row = Map.of("id", "456", "description", "문의 010-1234-5678 입니다");
@@ -93,7 +93,7 @@ class ChunkingServiceTest {
         RagTableConfig config = buildConfig();
         config.setTitleColumn("name");
         when(piiMasker.mask(anyString(), anyString())).thenAnswer(inv -> inv.getArgument(0));
-        when(embeddingModel.embed(anyString())).thenReturn(new float[768]);
+        when(embeddingModel.embed(anyString())).thenReturn(new float[1024]);
 
         Map<String, Object> row = Map.of("id", "789", "name", "Product A", "description", "details");
         chunkingService.processRow(config, row);
