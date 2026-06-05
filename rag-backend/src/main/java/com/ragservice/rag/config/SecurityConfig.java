@@ -153,6 +153,9 @@ public class SecurityConfig {
                         "/api/v1/admin/audit-logs/*/raw")
                     .hasAuthority("api:incident-response")
                 .requestMatchers("/api/v1/admin/**").hasAuthority("api:admin")
+                // Paperclip / Ollama tool use 연동 검색 API — api:chat scope 필요
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/search")
+                    .hasAuthority("api:chat")
                 // M5-3: 사용자 파라미터 API — api:chat 또는 api:admin scope 필요
                 .requestMatchers("/api/v1/user/**").authenticated()
                 .anyRequest().authenticated()
