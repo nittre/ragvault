@@ -28,11 +28,11 @@ rag:
     # dev-bypass: X-Dev-Admin 헤더로 Admin UI 접근 허용 (사내 개발 환경에서도 허용).
     dev-bypass: true
   mysql:
-    host: mysql-sample
-    port: 3306
-    database: customer_sample
-    username: raguser
-    password: ${MYSQL_PASSWORD:-ragpassword}
+    host: ${INTERNAL_MYSQL_HOST:?INTERNAL_MYSQL_HOST를 .env.internal에 설정하세요}
+    port: ${INTERNAL_MYSQL_PORT:-3306}
+    database: ${INTERNAL_MYSQL_DATABASE:-customer_sample}
+    username: ${INTERNAL_MYSQL_USERNAME:-raguser}
+    password: ${INTERNAL_MYSQL_PASSWORD:?INTERNAL_MYSQL_PASSWORD를 .env.internal에 설정하세요}
   vlm:
     # vision 모델이 없으면 일반 chat 모델로 fallback.
     # 이미지 입력 시 텍스트 응답만 반환되거나 오류가 발생할 수 있음.

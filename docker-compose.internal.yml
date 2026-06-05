@@ -47,38 +47,6 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # 고객사 MySQL 샘플 (GTID + binlog 활성화)
-  mysql-sample:
-    image: mysql:8.0
-    container_name: mysql-sample
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: customer_sample
-      MYSQL_USER: raguser
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-ragpassword}
-    ports:
-      - "3306:3306"
-    command: >
-      --gtid-mode=ON
-      --enforce-gtid-consistency=ON
-      --log-bin=mysql-bin
-      --binlog-format=ROW
-      --binlog-row-image=FULL
-      --server-id=1
-      --binlog-expire-logs-seconds=604800
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./infra/mysql-init:/docker-entrypoint-initdb.d:ro
-    networks:
-      - rag-net
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root --password=$$MYSQL_ROOT_PASSWORD"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-    restart: unless-stopped
-
   # Spring Boot RAG 백엔드
   rag-backend:
     build:
@@ -99,6 +67,12 @@ services:
       INTERNAL_CHAT_MODEL: ${INTERNAL_CHAT_MODEL:-qwen3:8b}
       INTERNAL_EMBEDDING_MODEL: ${INTERNAL_EMBEDDING_MODEL:-bge-m3}
       INTERNAL_VLM_MODEL: ${INTERNAL_VLM_MODEL:-qwen3:8b}
+      # 외부 고객사 MySQL 서버
+      INTERNAL_MYSQL_HOST: "${INTERNAL_MYSQL_HOST:?INTERNAL_MYSQL_HOST를 .env.internal에 설정하세요}"
+      INTERNAL_MYSQL_PORT: ${INTERNAL_MYSQL_PORT:-3306}
+      INTERNAL_MYSQL_DATABASE: ${INTERNAL_MYSQL_DATABASE:-customer_sample}
+      INTERNAL_MYSQL_USERNAME: ${INTERNAL_MYSQL_USERNAME:-raguser}
+      INTERNAL_MYSQL_PASSWORD: "${INTERNAL_MYSQL_PASSWORD:?INTERNAL_MYSQL_PASSWORD를 .env.internal에 설정하세요}"
       MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
       RAG_HYBRID_TIMEOUT_SEC: "120"
     depends_on:
@@ -145,7 +119,6 @@ services:
 volumes:
   pgvector_data:
   redis_data:
-  mysql_data:
   open_webui_data:
 
 networks:

@@ -58,6 +58,62 @@ cd frontend && npm install && npm run dev
 
 ---
 
+### 사내 개발 서버 (Docker Compose — Internal)
+
+외부 고객사 MySQL과 외부 Ollama 서버를 연결하는 환경. 로컬 MySQL 컨테이너 없이 실제 DB와 모델 서버를 바라본다.
+
+#### 사전 체크리스트
+
+**외부 고객사 MySQL 서버**
+
+- [ ] binlog 활성화: `SHOW VARIABLES LIKE 'log_bin';` → `ON`
+- [ ] GTID 활성화: `SHOW VARIABLES LIKE 'gtid_mode';` → `ON`
+- [ ] binlog 포맷: `SHOW VARIABLES LIKE 'binlog_format';` → `ROW`
+- [ ] binlog 보존 기간: 최소 7일 (`binlog_expire_logs_seconds=604800`)
+- [ ] RAG용 DB 계정에 `REPLICATION SLAVE`, `REPLICATION CLIENT`, `SELECT` 권한 부여
+- [ ] 개발 서버 IP → MySQL 서버 3306 포트 방화벽 오픈
+
+**외부 Ollama 모델 서버**
+
+- [ ] `bge-m3` 모델 Pull 완료 (임베딩 필수): `ollama pull bge-m3`
+- [ ] 채팅 모델 Pull 완료: `ollama pull <INTERNAL_CHAT_MODEL>`
+- [ ] 개발 서버 IP → Ollama 서버 11434 포트 방화벽 오픈
+
+#### 배포 절차
+
+```bash
+# 1. 환경변수 파일 준비
+cp .env.internal.example .env.internal
+
+# 채워야 할 필수 값:
+#   INTERNAL_OLLAMA_BASE_URL=http://<ollama-server-ip>:11434
+#   INTERNAL_CHAT_MODEL=<서버에 올라가 있는 모델명>
+#   INTERNAL_MYSQL_HOST=<mysql-server-ip>
+#   INTERNAL_MYSQL_PASSWORD=<실제 비밀번호>
+#   RAG_BACKEND_API_KEY=$(openssl rand -hex 24)
+#   WEBUI_SECRET_KEY=$(openssl rand -hex 32)
+
+# 2. 서비스 기동
+docker compose -f docker-compose.internal.yml --env-file .env.internal up -d
+
+# 3. 헬스체크
+curl http://localhost:8080/api/v1/health
+
+# 4. Ollama 연결 확인
+curl http://<ollama-server-ip>:11434/api/tags
+
+# 5. binlog 동기화 로그 확인
+docker logs rag-backend | grep -i binlog
+```
+
+| 엔드포인트           | URL                          |
+| -------------------- | ---------------------------- |
+| Open WebUI (채팅 UI) | http://localhost:3000        |
+| Spring Boot API      | http://localhost:8080        |
+| Admin Web UI         | http://localhost:8080/admin/ |
+
+---
+
 ## 2. 핵심 기능
 
 ### 2-1. 질의 의도 분류 — 6가지 경로
