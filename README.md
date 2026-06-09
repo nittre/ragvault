@@ -104,22 +104,59 @@ ollama list
 
 **외부 PostgreSQL 서버**
 
+PostgreSQL이 설치되어 있지 않으면 먼저 설치해야 한다.
+
+**1단계 — 리눅스 배포판 확인**
+
+```bash
+cat /etc/os-release   # NAME, VERSION_ID 확인
+```
+
+**2단계 — PostgreSQL 16 설치**
+
+```bash
+# Ubuntu / Debian (apt)
+sudo apt update
+sudo apt install -y postgresql-16
+
+# RHEL / CentOS / Rocky Linux (dnf)
+sudo dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+sudo dnf install -y postgresql16-server
+sudo /usr/pgsql-16/bin/postgresql-16-setup initdb
+sudo systemctl enable --now postgresql-16
+```
+
+**3단계 — pgvector 확장 설치**
+
 pgvector 확장이 설치되어 있어야 벡터 검색이 동작한다.
 
 ```bash
-# 1. pgvector 패키지 설치 (PostgreSQL 16 기준, Ubuntu/Debian)
-apt install -y postgresql-16-pgvector
+# Ubuntu / Debian
+sudo apt install -y postgresql-16-pgvector
 
-# 2. 대상 DB에 확장 활성화 (ragdb에 접속 후)
-psql -U raguser -d ragdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
+# RHEL / CentOS / Rocky Linux
+sudo dnf install -y pgvector_16
+```
 
-# 3. 설치 확인
-psql -U raguser -d ragdb -c "\dx vector"
+**4단계 — DB 및 확장 활성화**
+
+```bash
+# DB · 유저 생성
+sudo -u postgres psql -c "CREATE USER raguser WITH PASSWORD 'yourpassword';"
+sudo -u postgres psql -c "CREATE DATABASE ragdb OWNER raguser;"
+
+# pgvector 확장 활성화
+sudo -u postgres psql -d ragdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+# 설치 확인
+sudo -u postgres psql -d ragdb -c "\dx vector"
 ```
 
 > RDS 등 매니지드 서비스 사용 시 콘솔에서 pgvector 지원 여부를 먼저 확인한다.
 
-- [ ] pgvector 패키지 설치 완료
+- [ ] 리눅스 배포판 확인 (`cat /etc/os-release`)
+- [ ] PostgreSQL 16 설치 완료 (`psql --version`)
+- [ ] pgvector 확장 설치 완료
 - [ ] `CREATE EXTENSION vector` 실행 완료
 - [ ] 개발 서버 IP → PostgreSQL 서버 **5432 포트** 방화벽 오픈
 
