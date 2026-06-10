@@ -32,7 +32,7 @@ import java.util.List;
 public class ApiKeyBootstrapRunner implements ApplicationRunner {
 
     /** ApiKeyAuthFilter.KEY_PREFIX_LENGTH 와 반드시 동일하게 유지. */
-    static final int PREFIX_LENGTH = 15;
+    public static final int PREFIX_LENGTH = 15;
 
     private final ApiKeyRepository apiKeyRepository;
     private final BCryptPasswordEncoder passwordEncoder;
