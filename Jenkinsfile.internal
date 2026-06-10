@@ -1,25 +1,19 @@
 // RagVault — 사내 개발 서버 배포 파이프라인
-//
-// 흐름: GitLab checkout → JAR 빌드 → JAR + Dockerfile SCP → 서버에서 Docker 빌드 → docker compose up
-//
-// 사전 준비 (Jenkins 관리자):
-//   1. Jenkins에 GitLab 플러그인 설치 후 GitLab 연결 설정
-//   2. Credentials 등록
-//      - "gitlab-ssh-key"    : GitLab 접근용 SSH 키 (또는 Username/Password)
-//      - "dev-server-ssh-key": 사내 개발 서버 SSH 개인키
-//      - "discord-webhook"  : Discord 알림 Webhook URL (선택)
-//   3. 사내 개발 서버에 .env.internal 파일 미리 배포
-//      - 위치: /opt/ragvault/.env.internal
-//      - 내용: docker-compose.internal.yml이 요구하는 환경변수 전체
+// 흐름: GitLab checkout → 변경 감지 → JAR 빌드 → SCP 전송 → Docker 빌드 → docker compose up
 
 pipeline {
     agent any
 
     parameters {
+        choice(
+            name: 'DEPLOY_TARGET',
+            choices: ['auto', 'all', 'backend-only', 'webui-only'],
+            description: '배포 대상 (auto: git diff 자동 감지 | all: 전체 | backend-only: rag-backend만 | webui-only: open-webui만)'
+        )
         string(
             name: 'DEV_SERVER',
             defaultValue: 'largeai@59.29.231.14',
-            description: '사내 개발 서버 SSH 주소 (예: deploy@59.29.231.14)'
+            description: '사내 개발 서버 SSH 주소'
         )
         string(
             name: 'DEV_SERVER_SSH_PORT',
@@ -30,11 +24,6 @@ pipeline {
             name: 'DEV_SERVER_WORKDIR',
             defaultValue: '/home/largeai/ragvault',
             description: '개발 서버 작업 디렉토리'
-        )
-        booleanParam(
-            name: 'SKIP_BUILD',
-            defaultValue: false,
-            description: 'true 시 JAR 빌드 스킵, compose 재시작만 실행'
         )
         booleanParam(
             name: 'FORCE_RECREATE',
@@ -67,15 +56,8 @@ pipeline {
                     credentialsId: 'gitlab-token'
                 )
                 script {
-                    env.GIT_COMMIT_SHORT = sh(
-                        script: 'git rev-parse --short HEAD',
-                        returnStdout: true
-                    ).trim()
-                    env.GIT_BRANCH_NAME = sh(
-                        script: 'git rev-parse --abbrev-ref HEAD',
-                        returnStdout: true
-                    ).trim()
-
+                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.GIT_BRANCH_NAME  = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
                     echo "==> Branch : ${env.GIT_BRANCH_NAME}"
                     echo "==> Commit : ${env.GIT_COMMIT_SHORT}"
                     echo "==> Server : ${params.DEV_SERVER}"
@@ -83,142 +65,221 @@ pipeline {
             }
         }
 
-        // ── Stage 2: Gradle Build (JAR) ───────────────────────────────────────
+        // ── Stage 2: Detect Changes ───────────────────────────────────────────
+        stage('Detect Changes') {
+            steps {
+                script {
+                    switch (params.DEPLOY_TARGET) {
+                        case 'backend-only':
+                            env.BUILD_BACKEND = 'true'
+                            env.BUILD_WEBUI   = 'false'
+                            break
+                        case 'webui-only':
+                            env.BUILD_BACKEND = 'false'
+                            env.BUILD_WEBUI   = 'true'
+                            break
+                        case 'all':
+                            env.BUILD_BACKEND = 'true'
+                            env.BUILD_WEBUI   = 'true'
+                            break
+                        default: // auto
+                            // 마지막 성공 빌드 이후 전체 변경을 비교 (여러 커밋 push 대응)
+                            def fromRef = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: 'HEAD~1'
+                            def changedFiles = sh(
+                                script: "git diff --name-only ${fromRef} HEAD 2>/dev/null || git diff --name-only HEAD",
+                                returnStdout: true
+                            ).trim()
+                            echo "==> 변경 파일 목록:\n${changedFiles ?: '(없음)'}"
+
+                            def fileList = changedFiles.split('\n').findAll { it.trim() }
+                            env.BUILD_BACKEND = fileList.any { it.startsWith('rag-backend/') } ? 'true' : 'false'
+                            env.BUILD_WEBUI   = fileList.any { it.startsWith('open-webui-fork/') } ? 'true' : 'false'
+
+                            // 감지된 변경이 없으면 (예: 첫 배포, compose만 변경) 전체 배포
+                            if (env.BUILD_BACKEND == 'false' && env.BUILD_WEBUI == 'false') {
+                                echo "==> 서비스 소스 변경 없음 — 전체 배포로 폴백"
+                                env.BUILD_BACKEND = 'true'
+                                env.BUILD_WEBUI   = 'true'
+                            }
+                    }
+
+                    echo "==> BUILD_BACKEND : ${env.BUILD_BACKEND}"
+                    echo "==> BUILD_WEBUI   : ${env.BUILD_WEBUI}"
+                }
+            }
+        }
+
+        // ── Stage 3: Gradle Build (JAR) ───────────────────────────────────────
         stage('Build JAR') {
-            when { expression { !params.SKIP_BUILD } }
+            when { expression { env.BUILD_BACKEND == 'true' } }
             steps {
                 dir('rag-backend') {
                     sh '''
                         chmod +x ./gradlew
-                        ./gradlew clean bootJar -x test \
-                            --no-daemon \
-                            --parallel \
-                            --build-cache
+                        ./gradlew clean bootJar -x test --no-daemon --parallel --build-cache
                     '''
                 }
                 echo "==> JAR 빌드 완료"
             }
         }
 
-        // ── Stage 3: 파일 전송 (Jenkins → 개발 서버) ─────────────────────────
-        // JAR, Dockerfile, docker-compose.internal.yml을 SCP로 전송
-        stage('Transfer Files') {
-            when { expression { !params.SKIP_BUILD } }
+        // ── Stage 4-A: 백엔드 파일 전송 (Jenkins → 개발 서버) ────────────────
+        stage('Transfer Backend Files') {
+            when { expression { env.BUILD_BACKEND == 'true' } }
             steps {
                 sshagent(credentials: ['dev-server-ssh-key']) {
                     script {
                         def server  = params.DEV_SERVER
                         def workdir = params.DEV_SERVER_WORKDIR
+                        def port    = params.DEV_SERVER_SSH_PORT
 
-                        def port = params.DEV_SERVER_SSH_PORT
-
-                        // 작업 디렉토리 구조 생성
-                        sh """
-                            ssh -o StrictHostKeyChecking=no -p ${port} ${server} \
-                                "mkdir -p ${workdir}/rag-backend/build/libs"
-                        """
-
-                        // JAR 전송
-                        sh """
-                            scp -o StrictHostKeyChecking=no -P ${port} \
-                                rag-backend/build/libs/*.jar \
-                                ${server}:${workdir}/rag-backend/build/libs/app.jar
-                        """
-
-                        // Dockerfile.ci 전송
-                        sh """
-                            scp -o StrictHostKeyChecking=no -P ${port} \
-                                rag-backend/Dockerfile.ci \
-                                ${server}:${workdir}/rag-backend/Dockerfile.ci
-                        """
-
-                        // docker-compose.internal.yml 전송
-                        sh """
-                            scp -o StrictHostKeyChecking=no -P ${port} \
-                                ${env.COMPOSE_FILE} \
-                                ${server}:${workdir}/${env.COMPOSE_FILE}
-                        """
-
-                        echo "==> 파일 전송 완료"
+                        sh "ssh -o StrictHostKeyChecking=no -p ${port} ${server} 'mkdir -p ${workdir}/rag-backend/build/libs'"
+                        sh "scp -o StrictHostKeyChecking=no -P ${port} rag-backend/build/libs/*.jar ${server}:${workdir}/rag-backend/build/libs/app.jar"
+                        sh "scp -o StrictHostKeyChecking=no -P ${port} rag-backend/Dockerfile.ci ${server}:${workdir}/rag-backend/Dockerfile.ci"
+                        sh "scp -o StrictHostKeyChecking=no -P ${port} ${env.COMPOSE_FILE} ${server}:${workdir}/${env.COMPOSE_FILE}"
+                        echo "==> 백엔드 파일 전송 완료"
                     }
                 }
             }
         }
 
-        // ── Stage 4: Docker 이미지 빌드 (개발 서버에서 실행) ─────────────────
-        stage('Docker Build on Server') {
-            when { expression { !params.SKIP_BUILD } }
+        // ── Stage 4-B: WebUI 파일 전송 (Jenkins → 개발 서버) ─────────────────
+        stage('Transfer WebUI Files') {
+            when { expression { env.BUILD_WEBUI == 'true' } }
             steps {
                 sshagent(credentials: ['dev-server-ssh-key']) {
                     script {
                         def server  = params.DEV_SERVER
                         def workdir = params.DEV_SERVER_WORKDIR
+                        def port    = params.DEV_SERVER_SSH_PORT
+
+                        sh "ssh -o StrictHostKeyChecking=no -p ${port} ${server} 'mkdir -p ${workdir}/open-webui-fork'"
+                        sh "scp -o StrictHostKeyChecking=no -P ${port} -r open-webui-fork/ ${server}:${workdir}/open-webui-fork/"
+                        // 백엔드가 배포되지 않을 경우에도 compose 파일을 최신으로 유지
+                        sh "scp -o StrictHostKeyChecking=no -P ${port} ${env.COMPOSE_FILE} ${server}:${workdir}/${env.COMPOSE_FILE}"
+                        echo "==> WebUI 파일 전송 완료"
+                    }
+                }
+            }
+        }
+
+        // ── Stage 5-A: Docker 이미지 빌드 — rag-backend ──────────────────────
+        stage('Docker Build Backend') {
+            when { expression { env.BUILD_BACKEND == 'true' } }
+            steps {
+                sshagent(credentials: ['dev-server-ssh-key']) {
+                    script {
+                        def server  = params.DEV_SERVER
+                        def workdir = params.DEV_SERVER_WORKDIR
+                        def port    = params.DEV_SERVER_SSH_PORT
                         def tag     = env.GIT_COMMIT_SHORT
 
-                        def port = params.DEV_SERVER_SSH_PORT
-
-                        sh """
-                            ssh -o StrictHostKeyChecking=no -p ${port} ${server} \
-                                "cd ${workdir} && \
-                                 DOCKER_BUILDKIT=1 docker build \
-                                     -f rag-backend/Dockerfile.ci \
-                                     --build-arg JAR_FILE=build/libs/app.jar \
-                                     -t rag-backend:${tag} \
-                                     -t rag-backend:latest \
-                                     rag-backend/"
-                        """
-
-                        echo "==> Docker 이미지 빌드 완료: rag-backend:${tag}"
+                        sh "ssh -o StrictHostKeyChecking=no -p ${port} ${server} 'cd ${workdir} && docker build -f rag-backend/Dockerfile.ci --build-arg JAR_FILE=build/libs/app.jar -t rag-backend:${tag} -t rag-backend:latest rag-backend/'"
+                        echo "==> rag-backend 이미지 빌드 완료: rag-backend:${tag}"
                     }
                 }
             }
         }
 
-        // ── Stage 5: docker compose up (개발 서버에서 실행) ──────────────────
+        // ── Stage 5-B: Docker 이미지 빌드 — open-webui ───────────────────────
+        stage('Docker Build WebUI') {
+            when { expression { env.BUILD_WEBUI == 'true' } }
+            steps {
+                sshagent(credentials: ['dev-server-ssh-key']) {
+                    script {
+                        def server  = params.DEV_SERVER
+                        def workdir = params.DEV_SERVER_WORKDIR
+                        def port    = params.DEV_SERVER_SSH_PORT
+                        def tag     = env.GIT_COMMIT_SHORT
+
+                        sh "ssh -o StrictHostKeyChecking=no -p ${port} ${server} 'cd ${workdir} && docker build -f open-webui-fork/Dockerfile -t open-webui:${tag} -t open-webui:latest open-webui-fork/'"
+                        echo "==> open-webui 이미지 빌드 완료: open-webui:${tag}"
+                    }
+                }
+            }
+        }
+
+        // ── Stage 6: docker compose up (변경된 서비스만) ──────────────────────
         stage('Deploy') {
             steps {
                 sshagent(credentials: ['dev-server-ssh-key']) {
                     script {
                         def server      = params.DEV_SERVER
                         def workdir     = params.DEV_SERVER_WORKDIR
+                        def port        = params.DEV_SERVER_SSH_PORT
                         def recreateOpt = params.FORCE_RECREATE ? '--force-recreate' : ''
 
-                        def port = params.DEV_SERVER_SSH_PORT
+                        // redis는 항상 실행 보장 (의존성)
+                        sh "ssh -o StrictHostKeyChecking=no -p ${port} ${server} 'cd ${workdir} && docker compose -f ${env.COMPOSE_FILE} --env-file .env.internal up -d --no-build redis'"
 
-                        sh """
-                            ssh -o StrictHostKeyChecking=no -p ${port} ${server} \
-                                "cd ${workdir} && \
-                                 docker compose -f ${env.COMPOSE_FILE} \
-                                     --env-file .env.internal \
-                                     up -d --remove-orphans ${recreateOpt} && \
-                                 docker compose -f ${env.COMPOSE_FILE} ps"
-                        """
+                        // 변경된 서비스만 재배포
+                        def services = []
+                        if (env.BUILD_BACKEND == 'true') services << 'rag-backend'
+                        if (env.BUILD_WEBUI == 'true')   services << 'open-webui'
+                        def serviceArgs = services.join(' ')
 
-                        echo "==> 배포 완료"
+                        sh "ssh -o StrictHostKeyChecking=no -p ${port} ${server} 'cd ${workdir} && docker compose -f ${env.COMPOSE_FILE} --env-file .env.internal up -d --no-build --remove-orphans ${recreateOpt} ${serviceArgs}'"
+                        sh "ssh -o StrictHostKeyChecking=no -p ${port} ${server} 'cd ${workdir} && docker compose -f ${env.COMPOSE_FILE} ps'"
+
+                        echo "==> 배포 완료: ${serviceArgs}"
                     }
                 }
             }
         }
 
-        // ── Stage 6: Health Check ────────────────────────────────────────────
+        // ── Stage 7: Health Check (변경된 서비스만) ───────────────────────────
         stage('Health Check') {
             steps {
                 sshagent(credentials: ['dev-server-ssh-key']) {
                     script {
                         def server = params.DEV_SERVER
+                        def port   = params.DEV_SERVER_SSH_PORT
 
-                        // 60초 이내에 /api/v1/health 응답 대기
-                        def port = params.DEV_SERVER_SSH_PORT
+                        if (env.BUILD_BACKEND == 'true') {
+                            sh """
+                                ssh -o StrictHostKeyChecking=no -p ${port} ${server} \
+                                'for i in \$(seq 1 12); do
+                                    curl -sf http://localhost:8080/api/v1/health > /dev/null && echo "==> Backend Health OK" && exit 0
+                                    echo "백엔드 대기 중... \$i/12"
+                                    sleep 5
+                                done
+                                echo "==> Backend Health Check 실패"; exit 1'
+                            """
+                        }
 
+                        if (env.BUILD_WEBUI == 'true') {
+                            sh """
+                                ssh -o StrictHostKeyChecking=no -p ${port} ${server} \
+                                'for i in \$(seq 1 12); do
+                                    curl -sf http://localhost:3000/ > /dev/null && echo "==> WebUI Health OK" && exit 0
+                                    echo "WebUI 대기 중... \$i/12"
+                                    sleep 5
+                                done
+                                echo "==> WebUI Health Check 실패"; exit 1'
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Stage 8: 이미지 정리 ──────────────────────────────────────────────
+        stage('Cleanup Old Images') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh-key']) {
+                    script {
+                        def server = params.DEV_SERVER
+                        def port   = params.DEV_SERVER_SSH_PORT
+                        // latest 제외, 최근 3개 태그 보존 후 나머지 삭제
                         sh """
-                            ssh -o StrictHostKeyChecking=no -p ${port} ${server} \
-                                "for i in \$(seq 1 12); do \
-                                     if curl -sf http://localhost:8080/api/v1/health > /dev/null; then \
-                                         echo '==> Health OK'; exit 0; \
-                                     fi; \
-                                     echo \"대기 중... \${i}/12\"; sleep 5; \
-                                 done; \
-                                 echo '==> Health Check 실패 (60초 초과)'; exit 1"
+                            ssh -o StrictHostKeyChecking=no -p ${port} ${server} '
+                                for img in rag-backend open-webui; do
+                                    docker image ls \$img --format "{{.Tag}}" \
+                                        | grep -v latest | sort | head -n -3 \
+                                        | xargs -r -I{} docker rmi \$img:{} 2>/dev/null || true
+                                done
+                                docker image prune -f
+                            '
                         """
                     }
                 }
@@ -234,9 +295,7 @@ pipeline {
             echo "❌ 배포 실패 — 빌드 #${BUILD_NUMBER} 로그: ${BUILD_URL}console"
         }
         always {
-            node('') {
-                cleanWs()
-            }
+            cleanWs() // BUG FIX: node('') 제거 — 현재 agent workspace를 직접 정리
         }
     }
 

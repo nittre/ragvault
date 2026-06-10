@@ -28,6 +28,7 @@ services:
 
   # Spring Boot RAG 백엔드
   rag-backend:
+    image: rag-backend:latest
     build:
       context: ./rag-backend
       dockerfile: Dockerfile
@@ -72,6 +73,7 @@ services:
 
   # Open WebUI (ADR-0006 X-User-* 헤더, ADR-0009 /auth/verify)
   open-webui:
+    image: open-webui:latest
     build:
       context: ./open-webui-fork
       dockerfile: Dockerfile
