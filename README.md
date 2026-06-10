@@ -87,17 +87,25 @@ GRANT SELECT, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'raguser'@'<개발
 
 **외부 Ollama 모델 서버**
 
+Ollama는 개발서버에 Docker 컨테이너로 실행 중이다. 컨테이너에 직접 접속해서 모델을 확인·설치한다.
+
 ```bash
-# 모델 목록 확인
-curl http://<ollama-server-ip>:11434/api/tags
+# 개발서버에 SSH 접속 후
+
+# 실행 중인 Ollama 컨테이너 확인
+docker ps | grep ollama
+
+# 설치된 모델 목록 확인
+docker exec -it ollama ollama list
 
 # bge-m3 없으면 필수 설치 (없으면 임베딩 불가 → 서비스 전체 불가)
-ollama pull bge-m3
+docker exec -it ollama ollama pull bge-m3
 
-# 채팅 모델 확인 (사용할 모델명 파악)
-ollama list
+# 채팅 모델 설치 (사용할 모델명 파악 후)
+docker exec -it ollama ollama pull <모델명>
 ```
 
+- [ ] Ollama 컨테이너 실행 확인 (`docker ps | grep ollama`)
 - [ ] `bge-m3` Pull 완료
 - [ ] 채팅 모델 Pull 완료 및 모델명 확인
 - [ ] 개발 서버 IP → Ollama 서버 **11434 포트** 방화벽 오픈
