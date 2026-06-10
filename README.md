@@ -104,59 +104,38 @@ ollama list
 
 **외부 PostgreSQL 서버**
 
-PostgreSQL이 설치되어 있지 않으면 먼저 설치해야 한다.
+`pgvector/pgvector:pg16` 공식 이미지로 Docker 컨테이너를 실행한다. pgvector 확장이 미리 포함되어 있어 별도 설치가 필요 없다.
 
-**1단계 — 리눅스 배포판 확인**
+**1단계 — 컨테이너 실행**
 
 ```bash
-cat /etc/os-release   # NAME, VERSION_ID 확인
+docker run -d \
+  --name pgvector \
+  --restart unless-stopped \
+  -e POSTGRES_USER=raguser \
+  -e POSTGRES_PASSWORD=yourpassword \
+  -e POSTGRES_DB=ragdb \
+  -p 5432:5432 \
+  -v pgvector-data:/var/lib/postgresql/data \
+  pgvector/pgvector:pg16
 ```
 
-**2단계 — PostgreSQL 16 설치**
+**2단계 — pgvector 확장 활성화**
 
 ```bash
-# Ubuntu / Debian (apt)
-sudo apt update
-sudo apt install -y postgresql-16
-
-# RHEL / CentOS / Rocky Linux (dnf)
-sudo dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
-sudo dnf install -y postgresql16-server
-sudo /usr/pgsql-16/bin/postgresql-16-setup initdb
-sudo systemctl enable --now postgresql-16
+docker exec -it pgvector psql -U raguser -d ragdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-**3단계 — pgvector 확장 설치**
-
-pgvector 확장이 설치되어 있어야 벡터 검색이 동작한다.
+**3단계 — 설치 확인**
 
 ```bash
-# Ubuntu / Debian
-sudo apt install -y postgresql-16-pgvector
-
-# RHEL / CentOS / Rocky Linux
-sudo dnf install -y pgvector_16
-```
-
-**4단계 — DB 및 확장 활성화**
-
-```bash
-# DB · 유저 생성
-sudo -u postgres psql -c "CREATE USER raguser WITH PASSWORD 'yourpassword';"
-sudo -u postgres psql -c "CREATE DATABASE ragdb OWNER raguser;"
-
-# pgvector 확장 활성화
-sudo -u postgres psql -d ragdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
-
-# 설치 확인
-sudo -u postgres psql -d ragdb -c "\dx vector"
+docker exec -it pgvector psql -U raguser -d ragdb -c "\dx vector"
 ```
 
 > RDS 등 매니지드 서비스 사용 시 콘솔에서 pgvector 지원 여부를 먼저 확인한다.
 
-- [ ] 리눅스 배포판 확인 (`cat /etc/os-release`)
-- [ ] PostgreSQL 16 설치 완료 (`psql --version`)
-- [ ] pgvector 확장 설치 완료
+- [ ] Docker 설치 확인 (`docker --version`)
+- [ ] 컨테이너 기동 확인 (`docker ps | grep pgvector`)
 - [ ] `CREATE EXTENSION vector` 실행 완료
 - [ ] 개발 서버 IP → PostgreSQL 서버 **5432 포트** 방화벽 오픈
 
