@@ -153,8 +153,9 @@ pipeline {
                         def workdir = params.DEV_SERVER_WORKDIR
                         def port    = params.DEV_SERVER_SSH_PORT
 
-                        sh "ssh -o StrictHostKeyChecking=no -p ${port} ${server} 'mkdir -p ${workdir}/open-webui-fork'"
-                        sh "scp -o StrictHostKeyChecking=no -P ${port} -r open-webui-fork/ ${server}:${workdir}/open-webui-fork/"
+                        // rm -rf 후 재복사: trailing slash 중첩 경로 방지
+                        sh "ssh -o StrictHostKeyChecking=no -p ${port} ${server} 'rm -rf ${workdir}/open-webui-fork && mkdir -p ${workdir}'"
+                        sh "scp -o StrictHostKeyChecking=no -P ${port} -r open-webui-fork ${server}:${workdir}/"
                         // 백엔드가 배포되지 않을 경우에도 compose 파일을 최신으로 유지
                         sh "scp -o StrictHostKeyChecking=no -P ${port} ${env.COMPOSE_FILE} ${server}:${workdir}/${env.COMPOSE_FILE}"
                         echo "==> WebUI 파일 전송 완료"
