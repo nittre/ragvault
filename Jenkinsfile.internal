@@ -249,12 +249,13 @@ pipeline {
                         }
 
                         if (env.BUILD_WEBUI == 'true') {
+                            // open-webui는 Python 초기화로 기동에 2~3분 소요 → 30회 × 10초 = 300초
                             sh """
                                 ssh -o StrictHostKeyChecking=no -p ${port} ${server} \
-                                'for i in \$(seq 1 12); do
+                                'for i in \$(seq 1 30); do
                                     curl -sf http://localhost:3000/ > /dev/null && echo "==> WebUI Health OK" && exit 0
-                                    echo "WebUI 대기 중... \$i/12"
-                                    sleep 5
+                                    echo "WebUI 대기 중... \$i/30"
+                                    sleep 10
                                 done
                                 echo "==> WebUI Health Check 실패"; exit 1'
                             """
