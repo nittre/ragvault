@@ -61,6 +61,10 @@ spring.ai.ollama:
       timeout: 600
 
 rag:
+  bootstrap:
+    # 최초 배포 시 API Key 자동 등록. BOOTSTRAP_API_KEY 환경변수로 주입.
+    # 동일 prefix 키가 이미 존재하면 무시 (멱등성 보장).
+    api-key: ${BOOTSTRAP_API_KEY:}
   security:
     # W-3: 신뢰 프록시 CIDR — 이 대역의 요청에서만 X-User-* 헤더를 신뢰.
     # Docker Compose 컨테이너 네트워크(172.16.0.0/12)는 아래 CIDR에 포함.

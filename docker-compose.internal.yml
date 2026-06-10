@@ -38,6 +38,8 @@ services:
       INTERNAL_MYSQL_DATABASE: ${INTERNAL_MYSQL_DATABASE:-customer_sample}
       INTERNAL_MYSQL_USERNAME: ${INTERNAL_MYSQL_USERNAME:-raguser}
       INTERNAL_MYSQL_PASSWORD: "${INTERNAL_MYSQL_PASSWORD:?INTERNAL_MYSQL_PASSWORD를 .env.internal에 설정하세요}"
+      # 최초 배포 시 API Key 자동 bootstrap (open-webui 와 공유하는 키)
+      BOOTSTRAP_API_KEY: "${RAG_BACKEND_API_KEY}"
       MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
       RAG_HYBRID_TIMEOUT_SEC: "120"
     extra_hosts:

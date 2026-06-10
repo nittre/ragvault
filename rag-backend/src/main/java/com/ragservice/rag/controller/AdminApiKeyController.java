@@ -2,6 +2,7 @@ package com.ragservice.rag.controller;
 
 import com.ragservice.rag.domain.ApiKey;
 import com.ragservice.rag.repository.ApiKeyRepository;
+import com.ragservice.rag.runner.ApiKeyBootstrapRunner;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -56,8 +57,8 @@ public class AdminApiKeyController {
         }
 
         String rawKey = "rk_" + UUID.randomUUID().toString().replace("-", "");
-        // key_prefix: "rk_" + 5자리 = 8자
-        String prefix = rawKey.substring(0, 8);
+        // key_prefix: ApiKeyAuthFilter.KEY_PREFIX_LENGTH(15자) 와 동일하게 유지
+        String prefix = rawKey.substring(0, ApiKeyBootstrapRunner.PREFIX_LENGTH);
 
         ApiKey key = new ApiKey();
         key.setName(name);
@@ -98,7 +99,7 @@ public class AdminApiKeyController {
     public ResponseEntity<?> rotate(@PathVariable UUID id) {
         return apiKeyRepository.findById(id).map(k -> {
             String rawKey = "rk_" + UUID.randomUUID().toString().replace("-", "");
-            String prefix = rawKey.substring(0, 8);
+            String prefix = rawKey.substring(0, ApiKeyBootstrapRunner.PREFIX_LENGTH);
             k.setKeyPrefix(prefix);
             k.setKeyHash(passwordEncoder.encode(rawKey));
             k.setActive(true);
