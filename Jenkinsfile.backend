@@ -83,8 +83,6 @@ pipeline {
                 sshagent(credentials: ['dev-server-ssh-key']) {
                     script {
                         def recreateOpt = params.FORCE_RECREATE ? '--force-recreate' : ''
-                        // redis 실행 보장 후 rag-backend만 재배포
-                        sh "ssh -o StrictHostKeyChecking=no -p ${env.DEV_SERVER_PORT} ${env.DEV_SERVER} 'cd ${env.DEV_SERVER_DIR} && docker compose -f ${env.COMPOSE_FILE} --env-file .env.internal up -d --no-build redis'"
                         sh "ssh -o StrictHostKeyChecking=no -p ${env.DEV_SERVER_PORT} ${env.DEV_SERVER} 'cd ${env.DEV_SERVER_DIR} && docker compose -f ${env.COMPOSE_FILE} --env-file .env.internal up -d --no-build --remove-orphans ${recreateOpt} rag-backend'"
                         sh "ssh -o StrictHostKeyChecking=no -p ${env.DEV_SERVER_PORT} ${env.DEV_SERVER} 'cd ${env.DEV_SERVER_DIR} && docker compose -f ${env.COMPOSE_FILE} --env-file .env.internal ps'"
                         echo "==> 배포 완료"
@@ -100,7 +98,7 @@ pipeline {
                     sh """
                         ssh -o StrictHostKeyChecking=no -p ${env.DEV_SERVER_PORT} ${env.DEV_SERVER} \
                         'for i in \$(seq 1 12); do
-                            curl -sf http://localhost:8080/api/v1/health > /dev/null && echo "==> Backend Health OK" && exit 0
+                            curl -sf http://localhost:18090/api/v1/health > /dev/null && echo "==> Backend Health OK" && exit 0
                             echo "대기 중... \$i/12"
                             sleep 5
                         done

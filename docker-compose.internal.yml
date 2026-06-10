@@ -9,23 +9,6 @@
 
 services:
 
-  # 캐시 / 분산 락 (ShedLock)
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - rag-net
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
-
   # Spring Boot RAG 백엔드
   rag-backend:
     image: rag-backend:latest
@@ -34,14 +17,15 @@ services:
       dockerfile: Dockerfile
     container_name: rag-backend
     ports:
-      - "8080:8080"
+      - "18090:8080"
     environment:
       SPRING_PROFILES_ACTIVE: internal
       # 외부 PostgreSQL (pgvector) 서버
       SPRING_DATASOURCE_URL: "${SPRING_DATASOURCE_URL:?SPRING_DATASOURCE_URL를 .env.internal에 설정하세요}"
       SPRING_DATASOURCE_USERNAME: "${SPRING_DATASOURCE_USERNAME:-raguser}"
       SPRING_DATASOURCE_PASSWORD: "${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD를 .env.internal에 설정하세요}"
-      SPRING_DATA_REDIS_HOST: redis
+      # 서버에 설치된 Redis 직접 사용 (컨테이너 없음)
+      SPRING_DATA_REDIS_HOST: host.docker.internal
       SPRING_DATA_REDIS_PORT: 6379
       # 사내 Ollama 서버 (로컬 컨테이너 없음)
       INTERNAL_OLLAMA_BASE_URL: "${INTERNAL_OLLAMA_BASE_URL:?INTERNAL_OLLAMA_BASE_URL를 .env.internal에 설정하세요 (예: http://192.168.x.x:11434)}"
@@ -58,9 +42,6 @@ services:
       RAG_HYBRID_TIMEOUT_SEC: "120"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      redis:
-        condition: service_healthy
     networks:
       - rag-net
     healthcheck:
@@ -79,7 +60,7 @@ services:
       dockerfile: Dockerfile
     container_name: open-webui
     ports:
-      - "3000:8080"
+      - "18080:8080"
     environment:
       RAG_BACKEND_URL: http://rag-backend:8080
       RAG_BACKEND_API_KEY: "${RAG_BACKEND_API_KEY:?RAG_BACKEND_API_KEY를 .env.internal에 설정하세요}"
@@ -99,7 +80,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  redis_data:
   open_webui_data:
 
 networks:

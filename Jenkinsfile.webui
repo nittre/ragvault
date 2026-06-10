@@ -84,7 +84,7 @@ pipeline {
                     sh """
                         ssh -o StrictHostKeyChecking=no -p ${env.DEV_SERVER_PORT} ${env.DEV_SERVER} \
                         'for i in \$(seq 1 30); do
-                            curl -sf http://localhost:3000/ > /dev/null && echo "==> WebUI Health OK" && exit 0
+                            curl -sf http://localhost:18080/ > /dev/null && echo "==> WebUI Health OK" && exit 0
                             echo "대기 중... \$i/30"
                             sleep 10
                         done
