@@ -55,6 +55,8 @@ services:
       INTERNAL_MYSQL_PASSWORD: "${INTERNAL_MYSQL_PASSWORD:?INTERNAL_MYSQL_PASSWORD를 .env.internal에 설정하세요}"
       MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
       RAG_HYBRID_TIMEOUT_SEC: "120"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       redis:
         condition: service_healthy

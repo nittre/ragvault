@@ -1,0 +1,243 @@
+// RagVault — 사내 개발 서버 배포 파이프라인
+//
+// 흐름: GitLab checkout → JAR 빌드 → JAR + Dockerfile SCP → 서버에서 Docker 빌드 → docker compose up
+//
+// 사전 준비 (Jenkins 관리자):
+//   1. Jenkins에 GitLab 플러그인 설치 후 GitLab 연결 설정
+//   2. Credentials 등록
+//      - "gitlab-ssh-key"    : GitLab 접근용 SSH 키 (또는 Username/Password)
+//      - "dev-server-ssh-key": 사내 개발 서버 SSH 개인키
+//      - "discord-webhook"  : Discord 알림 Webhook URL (선택)
+//   3. 사내 개발 서버에 .env.internal 파일 미리 배포
+//      - 위치: /opt/ragvault/.env.internal
+//      - 내용: docker-compose.internal.yml이 요구하는 환경변수 전체
+
+pipeline {
+    agent any
+
+    parameters {
+        string(
+            name: 'DEV_SERVER',
+            defaultValue: 'largeai@59.29.231.14',
+            description: '사내 개발 서버 SSH 주소 (예: deploy@59.29.231.14)'
+        )
+        string(
+            name: 'DEV_SERVER_SSH_PORT',
+            defaultValue: '17222',
+            description: '사내 개발 서버 SSH 포트'
+        )
+        string(
+            name: 'DEV_SERVER_WORKDIR',
+            defaultValue: '/home/largeai/ragvault',
+            description: '개발 서버 작업 디렉토리'
+        )
+        booleanParam(
+            name: 'SKIP_BUILD',
+            defaultValue: false,
+            description: 'true 시 JAR 빌드 스킵, compose 재시작만 실행'
+        )
+        booleanParam(
+            name: 'FORCE_RECREATE',
+            defaultValue: false,
+            description: 'true 시 --force-recreate 옵션으로 컨테이너 재생성'
+        )
+    }
+
+    environment {
+        JAVA_HOME       = '/usr/lib/jvm/temurin-21-jdk-amd64'
+        PATH            = "/usr/lib/jvm/temurin-21-jdk-amd64/bin:${env.PATH}"
+        COMPOSE_FILE    = 'docker-compose.internal.yml'
+        GITLAB_REPO_URL = 'http://59.29.231.14:20350/yjlee/ragvault.git'
+    }
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
+    stages {
+
+        // ── Stage 1: Checkout ─────────────────────────────────────────────────
+        stage('Checkout') {
+            steps {
+                git(
+                    url: env.GITLAB_REPO_URL,
+                    branch: 'main',
+                    credentialsId: 'gitlab-token'
+                )
+                script {
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+                    env.GIT_BRANCH_NAME = sh(
+                        script: 'git rev-parse --abbrev-ref HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "==> Branch : ${env.GIT_BRANCH_NAME}"
+                    echo "==> Commit : ${env.GIT_COMMIT_SHORT}"
+                    echo "==> Server : ${params.DEV_SERVER}"
+                }
+            }
+        }
+
+        // ── Stage 2: Gradle Build (JAR) ───────────────────────────────────────
+        stage('Build JAR') {
+            when { expression { !params.SKIP_BUILD } }
+            steps {
+                dir('rag-backend') {
+                    sh '''
+                        chmod +x ./gradlew
+                        ./gradlew clean bootJar -x test \
+                            --no-daemon \
+                            --parallel \
+                            --build-cache
+                    '''
+                }
+                echo "==> JAR 빌드 완료"
+            }
+        }
+
+        // ── Stage 3: 파일 전송 (Jenkins → 개발 서버) ─────────────────────────
+        // JAR, Dockerfile, docker-compose.internal.yml을 SCP로 전송
+        stage('Transfer Files') {
+            when { expression { !params.SKIP_BUILD } }
+            steps {
+                sshagent(credentials: ['dev-server-ssh-key']) {
+                    script {
+                        def server  = params.DEV_SERVER
+                        def workdir = params.DEV_SERVER_WORKDIR
+
+                        def port = params.DEV_SERVER_SSH_PORT
+
+                        // 작업 디렉토리 구조 생성
+                        sh """
+                            ssh -o StrictHostKeyChecking=no -p ${port} ${server} \
+                                "mkdir -p ${workdir}/rag-backend/build/libs"
+                        """
+
+                        // JAR 전송
+                        sh """
+                            scp -o StrictHostKeyChecking=no -P ${port} \
+                                rag-backend/build/libs/*.jar \
+                                ${server}:${workdir}/rag-backend/build/libs/app.jar
+                        """
+
+                        // Dockerfile.ci 전송
+                        sh """
+                            scp -o StrictHostKeyChecking=no -P ${port} \
+                                rag-backend/Dockerfile.ci \
+                                ${server}:${workdir}/rag-backend/Dockerfile.ci
+                        """
+
+                        // docker-compose.internal.yml 전송
+                        sh """
+                            scp -o StrictHostKeyChecking=no -P ${port} \
+                                ${env.COMPOSE_FILE} \
+                                ${server}:${workdir}/${env.COMPOSE_FILE}
+                        """
+
+                        echo "==> 파일 전송 완료"
+                    }
+                }
+            }
+        }
+
+        // ── Stage 4: Docker 이미지 빌드 (개발 서버에서 실행) ─────────────────
+        stage('Docker Build on Server') {
+            when { expression { !params.SKIP_BUILD } }
+            steps {
+                sshagent(credentials: ['dev-server-ssh-key']) {
+                    script {
+                        def server  = params.DEV_SERVER
+                        def workdir = params.DEV_SERVER_WORKDIR
+                        def tag     = env.GIT_COMMIT_SHORT
+
+                        def port = params.DEV_SERVER_SSH_PORT
+
+                        sh """
+                            ssh -o StrictHostKeyChecking=no -p ${port} ${server} \
+                                "cd ${workdir} && \
+                                 DOCKER_BUILDKIT=1 docker build \
+                                     -f rag-backend/Dockerfile.ci \
+                                     --build-arg JAR_FILE=build/libs/app.jar \
+                                     -t rag-backend:${tag} \
+                                     -t rag-backend:latest \
+                                     rag-backend/"
+                        """
+
+                        echo "==> Docker 이미지 빌드 완료: rag-backend:${tag}"
+                    }
+                }
+            }
+        }
+
+        // ── Stage 5: docker compose up (개발 서버에서 실행) ──────────────────
+        stage('Deploy') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh-key']) {
+                    script {
+                        def server      = params.DEV_SERVER
+                        def workdir     = params.DEV_SERVER_WORKDIR
+                        def recreateOpt = params.FORCE_RECREATE ? '--force-recreate' : ''
+
+                        def port = params.DEV_SERVER_SSH_PORT
+
+                        sh """
+                            ssh -o StrictHostKeyChecking=no -p ${port} ${server} \
+                                "cd ${workdir} && \
+                                 docker compose -f ${env.COMPOSE_FILE} \
+                                     --env-file .env.internal \
+                                     up -d --remove-orphans ${recreateOpt} && \
+                                 docker compose -f ${env.COMPOSE_FILE} ps"
+                        """
+
+                        echo "==> 배포 완료"
+                    }
+                }
+            }
+        }
+
+        // ── Stage 6: Health Check ────────────────────────────────────────────
+        stage('Health Check') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh-key']) {
+                    script {
+                        def server = params.DEV_SERVER
+
+                        // 60초 이내에 /api/v1/health 응답 대기
+                        def port = params.DEV_SERVER_SSH_PORT
+
+                        sh """
+                            ssh -o StrictHostKeyChecking=no -p ${port} ${server} \
+                                "for i in \$(seq 1 12); do \
+                                     if curl -sf http://localhost:8080/api/v1/health > /dev/null; then \
+                                         echo '==> Health OK'; exit 0; \
+                                     fi; \
+                                     echo \"대기 중... \${i}/12\"; sleep 5; \
+                                 done; \
+                                 echo '==> Health Check 실패 (60초 초과)'; exit 1"
+                        """
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ 배포 성공 — 빌드 #${BUILD_NUMBER} (${env.GIT_COMMIT_SHORT ?: 'N/A'})"
+        }
+        failure {
+            echo "❌ 배포 실패 — 빌드 #${BUILD_NUMBER} 로그: ${BUILD_URL}console"
+        }
+        always {
+            node('') {
+                cleanWs()
+            }
+        }
+    }
+
+} // end pipeline
