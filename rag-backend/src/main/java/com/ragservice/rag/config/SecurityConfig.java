@@ -152,6 +152,13 @@ public class SecurityConfig {
                 .requestMatchers(org.springframework.http.HttpMethod.GET,
                         "/api/v1/admin/audit-logs/*/raw")
                     .hasAuthority("api:incident-response")
+                // 사용자 관리 - super-admin 전용 (GET 제외)
+                .requestMatchers(org.springframework.http.HttpMethod.POST,
+                        "/api/v1/admin/users").hasAuthority("api:super-admin")
+                .requestMatchers(org.springframework.http.HttpMethod.PUT,
+                        "/api/v1/admin/users/**").hasAuthority("api:super-admin")
+                .requestMatchers(org.springframework.http.HttpMethod.DELETE,
+                        "/api/v1/admin/users/**").hasAuthority("api:super-admin")
                 .requestMatchers("/api/v1/admin/**").hasAuthority("api:admin")
                 // Paperclip / Ollama tool use 연동 검색 API — api:chat scope 필요
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/search")

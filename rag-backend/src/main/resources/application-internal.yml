@@ -27,6 +27,8 @@ rag:
   admin:
     # dev-bypass: X-Dev-Admin 헤더로 Admin UI 접근 허용 (사내 개발 환경에서도 허용).
     dev-bypass: true
+  bootstrap:
+    super-admin-email: ${BOOTSTRAP_SUPER_ADMIN_EMAIL:}
   mysql:
     host: ${INTERNAL_MYSQL_HOST:?INTERNAL_MYSQL_HOST를 .env.internal에 설정하세요}
     port: ${INTERNAL_MYSQL_PORT:-3306}

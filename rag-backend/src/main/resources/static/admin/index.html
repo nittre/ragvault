@@ -39,6 +39,7 @@
 <div id="root"></div>
 <script type="text/babel">
 const { useState, useEffect, useCallback, useMemo } = React;
+const RoleContext = React.createContext('ADMIN');
 
 // ────────────── API Helpers ──────────────
 // 인증: 운영에서는 Open WebUI 관리자 세션 쿠키(credentials:'include')로 api:admin 부여 (ADR-0009).
@@ -98,26 +99,51 @@ function Alert({ type='info', children }) {
 }
 
 // ────────────── 사용자 관리 ──────────────
+const ROLE_LABELS = { SUPER_ADMIN: '슈퍼어드민', ADMIN: '어드민', USER: '사용자' };
+const ROLE_COLORS = { SUPER_ADMIN: {bg:'#fef3c7', color:'#92400e'}, ADMIN: {bg:'#dbeafe', color:'#1e40af'}, USER: {bg:'#f3f4f6', color:'#6b7280'} };
+
 function UsersPage() {
-  const [users, setUsers] = useState([]);
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState(null);
+  const role = React.useContext(RoleContext);
+  const isSuperAdmin = role === 'SUPER_ADMIN';
+
+  const [users, setUsers]     = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg]         = useState(null);
+  const [err, setErr]         = useState(null);
+  const [form, setForm]       = useState({ email:'', name:'', role:'USER' });
+  const [editTarget, setEditTarget] = useState(null); // email being edited
+  const [editForm, setEditForm]     = useState({});
 
   const load = useCallback(() => {
     setLoading(true);
-    const q = search ? `?email=${encodeURIComponent(search)}` : '';
-    API.get(`/users${q}`).then(d => { setUsers(d.data || []); setLoading(false); });
-  }, [search]);
+    API.get('/users').then(d => { setUsers(Array.isArray(d) ? d : []); setLoading(false); });
+  }, []);
 
   useEffect(() => { load(); }, []);
 
-  async function uploadCsv(e) {
-    const file = e.target.files[0]; if (!file) return;
-    const fd = new FormData(); fd.append('file', file);
-    const r = await fetch('/api/v1/admin/users/csv', { method: 'POST', credentials: 'include', headers: authHeaders(), body: fd });
-    const d = await r.json();
-    setMsg(`CSV 업로드: ${d.queued}명 처리됨`);
+  function flash(setter, text) { setter(text); setTimeout(() => setter(null), 3000); }
+
+  async function createUser() {
+    if (!form.email) { flash(setErr, '이메일을 입력하세요'); return; }
+    const r = await API.post('/users', form);
+    if (r.error || r.message?.includes('이미')) { flash(setErr, r.message || r.error); return; }
+    flash(setMsg, `계정 생성 완료: ${r.email}`);
+    setForm({ email:'', name:'', role:'USER' });
+    load();
+  }
+
+  async function saveEdit(email) {
+    const r = await API.put(`/users/${encodeURIComponent(email)}`, editForm);
+    if (r.error) { flash(setErr, r.error); return; }
+    flash(setMsg, '수정 완료');
+    setEditTarget(null);
+    load();
+  }
+
+  async function deleteUser(email) {
+    if (!confirm(`${email} 계정을 삭제하시겠습니까?`)) return;
+    await API.del(`/users/${encodeURIComponent(email)}`);
+    flash(setMsg, '삭제 완료');
     load();
   }
 
@@ -125,30 +151,75 @@ function UsersPage() {
     <div>
       <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1rem'}}>
         <h2 style={{fontSize:'1.25rem', fontWeight:'700', color:'#111827'}}>사용자 관리</h2>
-        <label className="btn btn-primary" style={{cursor:'pointer'}}>
-          CSV 업로드 <input type="file" accept=".csv" style={{display:'none'}} onChange={uploadCsv} />
-        </label>
       </div>
       {msg && <Alert>{msg}</Alert>}
-      <div className="card">
-        <div style={{display:'flex', gap:'0.5rem', marginBottom:'1rem'}}>
-          <input className="input" style={{maxWidth:'16rem'}} placeholder="이메일 검색..." value={search} onChange={e=>setSearch(e.target.value)} />
-          <button className="btn btn-secondary" onClick={load}>검색</button>
+      {err && <Alert type="error">{err}</Alert>}
+
+      {isSuperAdmin && (
+        <div className="card" style={{marginBottom:'1rem'}}>
+          <h3 style={{fontSize:'0.875rem', fontWeight:'600', marginBottom:'0.75rem', color:'#374151'}}>새 계정 추가</h3>
+          <div style={{display:'flex', gap:'0.5rem', flexWrap:'wrap'}}>
+            <input className="input" style={{maxWidth:'14rem'}} placeholder="이메일 *" value={form.email}
+              onChange={e=>setForm(f=>({...f, email:e.target.value}))} />
+            <input className="input" style={{maxWidth:'10rem'}} placeholder="이름" value={form.name}
+              onChange={e=>setForm(f=>({...f, name:e.target.value}))} />
+            <select className="input" style={{maxWidth:'9rem'}} value={form.role}
+              onChange={e=>setForm(f=>({...f, role:e.target.value}))}>
+              <option value="USER">사용자</option>
+              <option value="ADMIN">어드민</option>
+              <option value="SUPER_ADMIN">슈퍼어드민</option>
+            </select>
+            <button className="btn btn-primary" onClick={createUser}>추가</button>
+          </div>
         </div>
+      )}
+
+      <div className="card">
         {loading ? <Spinner/> : (
           <table className="table">
-            <thead><tr><th>이메일</th><th>Key Prefix</th><th>Scope</th><th>상태</th><th>생성일</th></tr></thead>
+            <thead><tr><th>이메일</th><th>이름</th><th>역할</th><th>상태</th><th>등록일</th>{isSuperAdmin && <th>관리</th>}</tr></thead>
             <tbody>
-              {users.map((u,i) => (
-                <tr key={i}>
+              {users.map((u) => editTarget === u.email ? (
+                <tr key={u.email}>
                   <td>{u.email}</td>
-                  <td><code style={{background:'#f3f4f6', padding:'0 0.25rem', borderRadius:'0.25rem', fontSize:'0.75rem'}}>{u.keyPrefix}</code></td>
-                  <td>{u.scope}</td>
-                  <td><span className="badge" style={{background: u.active ? '#dcfce7' : '#f3f4f6', color: u.active ? '#166534' : '#6b7280'}}>{u.active ? '활성' : '비활성'}</span></td>
+                  <td><input className="input" style={{maxWidth:'8rem'}} value={editForm.name||''} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))} /></td>
+                  <td>
+                    <select className="input" style={{maxWidth:'9rem'}} value={editForm.role||u.role} onChange={e=>setEditForm(f=>({...f,role:e.target.value}))}>
+                      <option value="USER">사용자</option>
+                      <option value="ADMIN">어드민</option>
+                      <option value="SUPER_ADMIN">슈퍼어드민</option>
+                    </select>
+                  </td>
+                  <td>
+                    <select className="input" style={{maxWidth:'6rem'}} value={editForm.active!=null?String(editForm.active):String(u.active)} onChange={e=>setEditForm(f=>({...f,active:e.target.value==='true'}))}>
+                      <option value="true">활성</option>
+                      <option value="false">비활성</option>
+                    </select>
+                  </td>
                   <td style={{color:'#9ca3af'}}>{u.createdAt?.slice(0,10)}</td>
+                  <td style={{display:'flex', gap:'0.25rem'}}>
+                    <button className="btn btn-primary" style={{padding:'0.25rem 0.5rem', fontSize:'0.75rem'}} onClick={()=>saveEdit(u.email)}>저장</button>
+                    <button className="btn btn-secondary" style={{padding:'0.25rem 0.5rem', fontSize:'0.75rem'}} onClick={()=>setEditTarget(null)}>취소</button>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={u.email}>
+                  <td>{u.email}</td>
+                  <td>{u.name||'-'}</td>
+                  <td><span className="badge" style={ROLE_COLORS[u.role]||ROLE_COLORS.USER}>{ROLE_LABELS[u.role]||u.role}</span></td>
+                  <td><span className="badge" style={{background:u.active?'#dcfce7':'#f3f4f6', color:u.active?'#166534':'#6b7280'}}>{u.active?'활성':'비활성'}</span></td>
+                  <td style={{color:'#9ca3af'}}>{u.createdAt?.slice(0,10)}</td>
+                  {isSuperAdmin && (
+                    <td style={{display:'flex', gap:'0.25rem'}}>
+                      <button className="btn btn-secondary" style={{padding:'0.25rem 0.5rem', fontSize:'0.75rem'}}
+                        onClick={()=>{ setEditTarget(u.email); setEditForm({name:u.name,role:u.role,active:u.active}); }}>수정</button>
+                      <button className="btn btn-secondary" style={{padding:'0.25rem 0.5rem', fontSize:'0.75rem', color:'#dc2626'}}
+                        onClick={()=>deleteUser(u.email)}>삭제</button>
+                    </td>
+                  )}
                 </tr>
               ))}
-              {users.length===0 && <tr><td colSpan="5" style={{textAlign:'center', color:'#9ca3af', padding:'1rem'}}>데이터 없음</td></tr>}
+              {users.length===0 && <tr><td colSpan={isSuperAdmin?6:5} style={{textAlign:'center', color:'#9ca3af', padding:'1rem'}}>등록된 사용자 없음</td></tr>}
             </tbody>
           </table>
         )}
@@ -1392,32 +1463,66 @@ const PAGES = [
   { id:'param-limits',  label:'파라미터 한도',   icon:'P',  component: ParamLimitsPage },
 ];
 
+function AccessDeniedScreen() {
+  return (
+    <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'100vh', gap:'1rem', background:'#f9fafb'}}>
+      <div style={{fontSize:'3.5rem'}}>🚫</div>
+      <h2 style={{fontSize:'1.5rem', fontWeight:'700', color:'#111827'}}>접근 권한이 없습니다</h2>
+      <p style={{color:'#6b7280'}}>이 페이지는 어드민 이상 계정만 접근할 수 있습니다.</p>
+      <p style={{color:'#9ca3af', fontSize:'0.875rem'}}>접근이 필요하시면 시스템 관리자에게 문의하세요.</p>
+    </div>
+  );
+}
+
 function App() {
-  const [page, setPage] = useState('users');
+  const [page, setPage]   = useState('users');
+  const [role, setRole]   = useState(null); // null=로딩, 'ACCESS_DENIED', 'ADMIN', 'SUPER_ADMIN'
+
+  useEffect(() => {
+    API.get('/me')
+      .then(d => setRole(d.role || 'ACCESS_DENIED'))
+      .catch(() => setRole('ACCESS_DENIED'));
+  }, []);
+
+  if (role === null) return (
+    <div style={{display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh'}}>
+      <Spinner />
+    </div>
+  );
+
+  if (role === 'ACCESS_DENIED') return <AccessDeniedScreen />;
+
   const Current = PAGES.find(p => p.id === page)?.component || UsersPage;
+  const roleLabel = role === 'SUPER_ADMIN' ? '슈퍼어드민' : '어드민';
+  const roleStyle = role === 'SUPER_ADMIN'
+    ? {background:'#fef3c7', color:'#92400e'}
+    : {background:'#dbeafe', color:'#1e40af'};
 
   return (
-    <div style={{display:'flex', minHeight:'100vh'}}>
-      <aside style={{width:'14rem', background:'#fff', boxShadow:'2px 0 4px rgba(0,0,0,0.06)', flexShrink:0}}>
-        <div style={{padding:'1.25rem 1rem', borderBottom:'1px solid #e5e7eb'}}>
-          <h1 style={{fontSize:'1.125rem', fontWeight:'700', color:'#111827'}}>RAG Admin</h1>
-          <p style={{fontSize:'0.75rem', color:'#9ca3af', marginTop:'0.125rem'}}>Phase 0</p>
-        </div>
-        <nav style={{padding:'0.5rem'}}>
-          {PAGES.map(p => (
-            <div key={p.id}
-              className={`sidebar-item ${page===p.id ? 'active' : ''}`}
-              onClick={()=>setPage(p.id)}>
-              <span style={{fontSize:'0.75rem', width:'1.25rem', textAlign:'center', fontFamily:'monospace', background:'#e5e7eb', borderRadius:'0.25rem', padding:'0.125rem 0.25rem'}}>{p.icon}</span>
-              <span style={{fontSize:'0.875rem'}}>{p.label}</span>
-            </div>
-          ))}
-        </nav>
-      </aside>
-      <main style={{flex:1, padding:'2rem', overflowAuto:'scroll'}}>
-        <Current />
-      </main>
-    </div>
+    <RoleContext.Provider value={role}>
+      <div style={{display:'flex', minHeight:'100vh'}}>
+        <aside style={{width:'14rem', background:'#fff', boxShadow:'2px 0 4px rgba(0,0,0,0.06)', flexShrink:0}}>
+          <div style={{padding:'1.25rem 1rem', borderBottom:'1px solid #e5e7eb'}}>
+            <h1 style={{fontSize:'1.125rem', fontWeight:'700', color:'#111827'}}>RAG Admin</h1>
+            <p style={{fontSize:'0.75rem', color:'#9ca3af', marginTop:'0.125rem'}}>Phase 0</p>
+            <span className="badge" style={{...roleStyle, marginTop:'0.5rem', display:'inline-block'}}>{roleLabel}</span>
+          </div>
+          <nav style={{padding:'0.5rem'}}>
+            {PAGES.map(p => (
+              <div key={p.id}
+                className={`sidebar-item ${page===p.id ? 'active' : ''}`}
+                onClick={()=>setPage(p.id)}>
+                <span style={{fontSize:'0.75rem', width:'1.25rem', textAlign:'center', fontFamily:'monospace', background:'#e5e7eb', borderRadius:'0.25rem', padding:'0.125rem 0.25rem'}}>{p.icon}</span>
+                <span style={{fontSize:'0.875rem'}}>{p.label}</span>
+              </div>
+            ))}
+          </nav>
+        </aside>
+        <main style={{flex:1, padding:'2rem', overflowAuto:'scroll'}}>
+          <Current />
+        </main>
+      </div>
+    </RoleContext.Provider>
   );
 }
 
