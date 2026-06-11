@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var ADMIN_URL  = '/admin';
+  var ADMIN_URL  = window.location.protocol + '//' + window.location.hostname + ':18090';
   var ADMIN_TEXT = '관리자 패널';
   var BTN_ID     = 'ragvault-admin-btn';
 
