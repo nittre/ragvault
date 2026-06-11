@@ -16,3 +16,8 @@ COPY frontend/ /app/frontend/
 COPY frontend/static/elapsed-timer.js /app/backend/open_webui/static/elapsed-timer.js
 COPY scripts/inject_timer.py /tmp/inject_timer.py
 RUN python3 /tmp/inject_timer.py
+
+# 어드민 패널 메뉴 주입 — SUPER_ADMIN / ADMIN 에게만 노출 (admin-menu.js, ADR-0009)
+COPY frontend/static/admin-menu.js /app/backend/open_webui/static/admin-menu.js
+COPY scripts/inject_admin_menu.py /tmp/inject_admin_menu.py
+RUN python3 /tmp/inject_admin_menu.py

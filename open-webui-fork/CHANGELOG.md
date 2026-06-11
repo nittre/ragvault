@@ -40,3 +40,8 @@ date: 2026-05-28
 
 ## [fork/frontend] 클립 버튼 파일·이미지 통합 입력
 - 파일: frontend/src/lib/components/chat/MessageInput.svelte
+
+## [fork/frontend] 어드민 패널 메뉴 버튼 (ADR-0009)
+- 파일: frontend/static/admin-menu.js (신규), scripts/inject_admin_menu.py (신규)
+- 이유: 프로필 드롭다운에 "/admin" 링크 추가 — SUPER_ADMIN / ADMIN (Open WebUI role: admin) 에게만 노출
+- 주입 방식: inject_timer.py 와 동일한 패턴 — /auth/verify 로 is_admin 확인 후 MutationObserver 로 삽입
