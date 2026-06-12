@@ -1,0 +1,1 @@
+import{a as t}from"./client-V5j1tTS2.js";const n=a=>t.post("/api/v1/auth/login",a).then(o=>o.data),p=()=>t.post("/api/v1/auth/logout").then(()=>{}),h=a=>t.post("/api/v1/auth/change-password",a).then(()=>{});export{p as a,h as c,n as l};
