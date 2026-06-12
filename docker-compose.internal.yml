@@ -43,6 +43,7 @@ services:
       # ADR-0011: 자체 JWT 인증
       RAG_AUTH_JWT_SECRET: "${RAG_AUTH_JWT_SECRET:?RAG_AUTH_JWT_SECRET를 .env.internal에 설정하세요 (openssl rand -hex 32)}"
       # 최초 배포 시 기존 사용자 일괄 초기 비밀번호 (배포 후 즉시 변경 권장)
+      BOOTSTRAP_SUPER_ADMIN_EMAIL: "${BOOTSTRAP_SUPER_ADMIN_EMAIL:?BOOTSTRAP_SUPER_ADMIN_EMAIL를 .env.internal에 설정하세요}"
       BOOTSTRAP_INITIAL_PASSWORD: "${BOOTSTRAP_INITIAL_PASSWORD:?BOOTSTRAP_INITIAL_PASSWORD를 .env.internal에 설정하세요}"
       MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
       RAG_HYBRID_TIMEOUT_SEC: "120"
