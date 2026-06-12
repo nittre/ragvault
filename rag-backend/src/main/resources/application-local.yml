@@ -23,10 +23,6 @@ server:
     include-message: always
 
 rag:
-  admin:
-    # dev 전용: X-Dev-Admin 헤더로 Admin UI 접근 허용 (Open WebUI 세션 쿠키 cross-port 미전달 회피).
-    # 운영 프로파일(application-prod.yml)에는 두지 않음 → 기본 false.
-    dev-bypass: true
   mysql:
     host: localhost
     port: 3306

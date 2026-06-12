@@ -25,8 +25,8 @@ server:
 
 rag:
   admin:
-    # dev-bypass: X-Dev-Admin 헤더로 Admin UI 접근 허용 (사내 개발 환경에서도 허용).
-    dev-bypass: true
+    # ADR-0011: JWT 인증 전환으로 dev-bypass 비활성화. false 로 고정 필수.
+    dev-bypass: false
   bootstrap:
     super-admin-email: ${BOOTSTRAP_SUPER_ADMIN_EMAIL:}
   mysql:

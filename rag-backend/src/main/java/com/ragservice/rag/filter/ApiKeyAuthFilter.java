@@ -68,11 +68,16 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         if (path.startsWith("/api/v1/health") || path.startsWith("/actuator")) {
             return true;
         }
-        // Admin SPA 정적 셸(/admin/**)은 Bearer 불필요 (AdminSessionFilter 가 보호).
-        if (path.startsWith("/admin")) {
+        // ADR-0011: 로그인·로그아웃은 공개. change-password 는 JWT 인증 필요 → 여기서 skip 안 함
+        // (JwtAuthFilter 가 먼저 인증하므로 아래 existing auth 체크에서 skip 됨)
+        if (path.equals("/api/v1/auth/login") || path.equals("/api/v1/auth/logout")) {
             return true;
         }
-        // AdminSessionFilter 가 Open WebUI 세션으로 이미 인증한 경우(api:admin) Bearer 검증 생략.
+        // ADR-0011: SPA 정적 자산 — /api/ 또는 /v1/ 로 시작하지 않는 경로는 API Key 검증 불필요
+        if (!path.startsWith("/api/") && !path.startsWith("/v1/")) {
+            return true;
+        }
+        // JwtAuthFilter 가 이미 인증한 경우 Bearer 검증 생략
         var existing = SecurityContextHolder.getContext().getAuthentication();
         return existing != null && existing.isAuthenticated();
     }

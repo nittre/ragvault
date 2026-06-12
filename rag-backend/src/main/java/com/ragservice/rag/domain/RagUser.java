@@ -32,6 +32,12 @@ public class RagUser {
     @Column(nullable = false)
     private boolean active = true;
 
+    @Column(name = "password_hash", length = 255)
+    private String passwordHash;
+
+    @Column(name = "password_change_required", nullable = false)
+    private boolean passwordChangeRequired = false;
+
     @Column(name = "created_by", length = 255)
     private String createdBy;
 

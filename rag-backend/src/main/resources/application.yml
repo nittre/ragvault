@@ -61,10 +61,18 @@ spring.ai.ollama:
       timeout: 600
 
 rag:
+  auth:
+    # ADR-0011: 자체 JWT 인증. RAG_AUTH_JWT_SECRET 는 32 바이트 이상(openssl rand -hex 32).
+    jwt-secret: ${RAG_AUTH_JWT_SECRET:}
+    jwt-expiry-hours: ${RAG_AUTH_JWT_EXPIRY_HOURS:8}
   bootstrap:
     # 최초 배포 시 API Key 자동 등록. BOOTSTRAP_API_KEY 환경변수로 주입.
     # 동일 prefix 키가 이미 존재하면 무시 (멱등성 보장).
     api-key: ${BOOTSTRAP_API_KEY:}
+    # 최초 슈퍼어드민 이메일 (rag_users 에 없으면 자동 생성).
+    super-admin-email: ${BOOTSTRAP_SUPER_ADMIN_EMAIL:}
+    # 기존 사용자 일괄 초기 비밀번호 설정용. 배포 후 즉시 변경 권장.
+    initial-password: ${BOOTSTRAP_INITIAL_PASSWORD:}
   security:
     # W-3: 신뢰 프록시 CIDR — 이 대역의 요청에서만 X-User-* 헤더를 신뢰.
     # Docker Compose 컨테이너 네트워크(172.16.0.0/12)는 아래 CIDR에 포함.
@@ -77,8 +85,6 @@ rag:
   mail:
     support-email: ${RAG_SUPPORT_EMAIL:support@ragservice.com}
     service-url: ${RAG_SERVICE_URL:https://app.ragservice.com}
-  admin:
-    openwebui-verify-url: ${OPENWEBUI_VERIFY_URL:http://open-webui:8080/auth/verify}
   sync:
     discord-webhook-url: ${DISCORD_WEBHOOK_URL:}
   mysql:

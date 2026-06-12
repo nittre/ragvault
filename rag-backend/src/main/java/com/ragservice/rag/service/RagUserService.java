@@ -5,6 +5,7 @@ import com.ragservice.rag.domain.RagUser;
 import com.ragservice.rag.repository.RagUserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -26,6 +27,7 @@ import static org.springframework.http.HttpStatus.*;
 public class RagUserService {
 
     private final RagUserRepository ragUserRepository;
+    private final BCryptPasswordEncoder passwordEncoder;
 
     /**
      * 사용자 생성.
@@ -120,6 +122,37 @@ public class RagUserService {
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND,
                         "사용자를 찾을 수 없습니다."));
+    }
+
+    /**
+     * ADR-0011: 비밀번호 초기 설정 / 강제 초기화.
+     * password_hash 가 null 인 사용자에게 초기 비밀번호를 부여할 때 사용.
+     */
+    @Transactional
+    public void initPassword(String email, String rawPassword) {
+        RagUser user = getRequiredByEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setPasswordChangeRequired(true);
+        user.setUpdatedAt(Instant.now());
+        ragUserRepository.save(user);
+    }
+
+    /**
+     * ADR-0011: 사용자 본인 비밀번호 변경.
+     * 현재 비밀번호 불일치 → 401.
+     */
+    @Transactional
+    public void changePassword(String email, String currentRaw, String newRaw) {
+        RagUser user = getRequiredByEmail(email);
+        if (user.getPasswordHash() == null
+                || !passwordEncoder.matches(currentRaw, user.getPasswordHash())) {
+            throw new ResponseStatusException(UNAUTHORIZED, "현재 비밀번호가 올바르지 않습니다.");
+        }
+        user.setPasswordHash(passwordEncoder.encode(newRaw));
+        user.setPasswordChangeRequired(false);
+        user.setUpdatedAt(Instant.now());
+        ragUserRepository.save(user);
+        log.info("비밀번호 변경 완료 (hash={})", maskEmail(email));
     }
 
     /**

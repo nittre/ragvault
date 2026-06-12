@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -19,8 +20,8 @@ import java.util.UUID;
  * OpenAI 호환 /v1/chat/completions.
  * M4: images, fileIds 를 QueryRouterService 에 전달 → 6경로 분기.
  *
- * ADR-0006: TrustedHeaderFilter 가 X-User-* 외부 주입 차단
- * ADR-0010: responseId 응답에 포함
+ * ADR-0011: X-User-Email 헤더 → SecurityContext Authentication 으로 사용자 식별.
+ * ADR-0010: responseId 응답에 포함.
  */
 @Slf4j
 @RestController
@@ -37,10 +38,6 @@ public class ChatController {
     @Value("${rag.vlm.model:qwen2.5vl:7b}")
     private String defaultVlmModel;
 
-    /**
-     * OpenAI 호환 /v1/models — Open WebUI가 모델 목록 조회 시 호출.
-     * RAG 백엔드를 통해 사용 가능한 모델을 노출한다.
-     */
     @GetMapping("/models")
     public ResponseEntity<Map<String, Object>> listModels() {
         List<Map<String, Object>> models = List.of(
@@ -59,10 +56,12 @@ public class ChatController {
     @PostMapping("/chat/completions")
     public ResponseEntity<ChatCompletionResponse> chatCompletions(
             @RequestBody ChatCompletionRequest request,
-            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            Authentication authentication,
             @RequestHeader(value = "X-Conversation-Id", required = false) String conversationId) {
 
-        // 메시지에서 텍스트 + 이미지 추출
+        // ADR-0011: SecurityContext 에서 이메일 추출
+        String userEmail = authentication != null ? authentication.getName() : null;
+
         String userMessage = extractLastUserMessage(request.messages());
         List<String> images = mergeImages(request.messages(), request.images());
         List<MessageDto> history = extractHistory(request.messages());
@@ -73,7 +72,7 @@ public class ChatController {
                 images.size(),
                 request.fileIds() != null ? request.fileIds().size() : 0);
 
-        // M5-2: ADR-0005 7단계 파라미터 우선순위 체인 적용
+        // ADR-0005 7단계 파라미터 우선순위 체인 — 두 호출 모두 동일한 userEmail 전달
         EffectiveParams effectiveParams = parameterResolver.resolve(
                 userEmail,
                 conversationId,
@@ -89,7 +88,6 @@ public class ChatController {
         return ResponseEntity.ok(buildResponse(result, request.model()));
     }
 
-    /** 마지막 user 메시지의 텍스트를 추출한다 (멀티모달 포함). */
     private String extractLastUserMessage(List<ChatMessage> messages) {
         if (messages == null || messages.isEmpty()) return "";
         return messages.stream()
@@ -99,19 +97,13 @@ public class ChatController {
                 .orElse("");
     }
 
-    /**
-     * 마지막 user 메시지의 content 배열에서 이미지를 추출해 explicit 목록과 합친다.
-     * 히스토리(이전 메시지)의 이미지는 포함하지 않는다 — 포함하면 텍스트 전용 후속 메시지가
-     * IMAGE 경로로 잘못 라우팅된다.
-     */
     private List<String> mergeImages(List<ChatMessage> messages, List<String> explicit) {
         List<String> result = new ArrayList<>();
         if (explicit != null) result.addAll(explicit);
         if (messages != null) {
-            // 마지막 user 메시지에서만 이미지 추출
             messages.stream()
                     .filter(m -> "user".equals(m.role()))
-                    .reduce((first, second) -> second)  // 마지막 user 메시지
+                    .reduce((first, second) -> second)
                     .ifPresent(last -> result.addAll(last.extractImages()));
         }
         return result;
