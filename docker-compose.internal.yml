@@ -4,7 +4,7 @@
 #
 # Usage:
 #   cp .env.internal.example .env.internal
-#   # .env.internal 에 INTERNAL_OLLAMA_BASE_URL 등 채우기
+#   # .env.internal 에 환경변수 채우기
 #   docker compose -f docker-compose.internal.yml --env-file .env.internal up -d
 
 services:
@@ -38,8 +38,12 @@ services:
       INTERNAL_MYSQL_DATABASE: ${INTERNAL_MYSQL_DATABASE:-customer_sample}
       INTERNAL_MYSQL_USERNAME: ${INTERNAL_MYSQL_USERNAME:-raguser}
       INTERNAL_MYSQL_PASSWORD: "${INTERNAL_MYSQL_PASSWORD:?INTERNAL_MYSQL_PASSWORD를 .env.internal에 설정하세요}"
-      # 최초 배포 시 API Key 자동 bootstrap (open-webui 와 공유하는 키)
+      # 최초 배포 시 API Key 자동 bootstrap (외부 API 클라이언트용 — 계속 유지)
       BOOTSTRAP_API_KEY: "${RAG_BACKEND_API_KEY}"
+      # ADR-0011: 자체 JWT 인증
+      RAG_AUTH_JWT_SECRET: "${RAG_AUTH_JWT_SECRET:?RAG_AUTH_JWT_SECRET를 .env.internal에 설정하세요 (openssl rand -hex 32)}"
+      # 최초 배포 시 기존 사용자 일괄 초기 비밀번호 (배포 후 즉시 변경 권장)
+      BOOTSTRAP_INITIAL_PASSWORD: "${BOOTSTRAP_INITIAL_PASSWORD:?BOOTSTRAP_INITIAL_PASSWORD를 .env.internal에 설정하세요}"
       MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
       RAG_HYBRID_TIMEOUT_SEC: "120"
     extra_hosts:
@@ -54,35 +58,27 @@ services:
       start_period: 60s
     restart: unless-stopped
 
-  # Open WebUI (ADR-0006 X-User-* 헤더, ADR-0009 /auth/verify)
-  open-webui:
-    image: open-webui:latest
+  # React/Vite/TS SPA + Nginx 리버스 프록시 (ADR-0011: Open WebUI 대체)
+  rag-frontend:
+    image: rag-frontend:latest
     build:
-      context: ./open-webui-fork
+      context: ./rag-frontend
       dockerfile: Dockerfile
-    container_name: open-webui
+    container_name: rag-frontend
     ports:
-      - "18080:8080"
-    environment:
-      RAG_BACKEND_URL: http://rag-backend:8080
-      RAG_BACKEND_API_KEY: "${RAG_BACKEND_API_KEY:?RAG_BACKEND_API_KEY를 .env.internal에 설정하세요}"
-      OPENAI_API_BASE_URL: http://rag-backend:8080/v1
-      OPENAI_API_KEY: ${RAG_BACKEND_API_KEY}
-      ENABLE_OPENAI_API: "true"
-      ENABLE_OLLAMA_API: "false"
-      WEBUI_SECRET_KEY: "${WEBUI_SECRET_KEY:?WEBUI_SECRET_KEY를 .env.internal에 설정하세요}"
-      WEBUI_NAME: "RagVault Internal"
-    volumes:
-      - open_webui_data:/app/backend/data
+      - "18080:80"
     depends_on:
       rag-backend:
         condition: service_healthy
     networks:
       - rag-net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
-
-volumes:
-  open_webui_data:
 
 networks:
   rag-net:

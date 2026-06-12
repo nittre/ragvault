@@ -1,9 +1,14 @@
 # ADR-0006: 사용자 식별 헤더 — Open WebUI 백엔드 프록시에서 주입
 
-- **상태**: Accepted
+> **[SUPERSEDED]** 이 ADR은 **ADR-0011** (2026-06-11)에 의해 대체되었다.
+> Open WebUI 제거 후 `X-User-*` 헤더 주입 메커니즘은 더 이상 사용되지 않는다.
+> 사용자 식별은 Spring Boot `JwtAuthFilter`가 httpOnly Cookie JWT에서 직접 수행한다.
+> 기록 보존을 위해 내용은 유지한다.
+
+- **상태**: Superseded by ADR-0011
 - **결정일**: 2026-05-19
 - **결정자**: 시니어 백엔드 엔지니어 (사용자 옵션 A 채택)
-- **관련 ADR**: ADR-0002 (데이터 격리)
+- **관련 ADR**: ADR-0002 (데이터 격리), ADR-0011 (본 ADR 대체)
 - **영향 받는 문서**: `requirements/07-auth-security.md` 섹션 8·10, `requirements/09-user-parameter-tuning.md` 섹션 6
 
 ## 컨텍스트

@@ -53,11 +53,12 @@
 | [ADR-0003](docs/adr/0003-alb-multi-az-mandatory.md) | ALB Multi-AZ 의무, 컴퓨트 Single AZ |
 | [ADR-0004](docs/adr/0004-spring-ai-q4km.md) | Spring AI 전면 + Q4_K_M 양자화 |
 | [ADR-0005](docs/adr/0005-parameter-priority-7-stage.md) | 파라미터 7단계 우선순위 + Guard 분리 |
-| [ADR-0006](docs/adr/0006-user-header-backend-proxy.md) | 사용자 식별 헤더 — Open WebUI 백엔드 프록시 주입 |
+| [ADR-0006](docs/adr/0006-user-header-backend-proxy.md) | ~~사용자 식별 헤더 — Open WebUI 백엔드 프록시 주입~~ **[Superseded by ADR-0011]** |
 | [ADR-0007](docs/adr/0007-sql-pii-layer-1-3.md) | SQL 결과 PII 마스킹 — Layer 1 + Layer 3 |
 | [ADR-0008](docs/adr/0008-pii-masking-all-llm-paths.md) | PII 마스킹 — 모든 LLM 응답 경로 적용 |
-| [ADR-0009](docs/adr/0009-phase0-admin-web-ui.md) | Phase 0 Admin Web UI 도입 (`/admin/*` SPA) |
+| [ADR-0009](docs/adr/0009-phase0-admin-web-ui.md) | Phase 0 Admin Web UI 도입 (`/admin/*` SPA) — N2 인증 방식 ADR-0011로 개정 |
 | [ADR-0010](docs/adr/0010-short-lived-response-storage.md) | PII 마스킹 실패 진단 — 원본 응답 Short-lived Storage (Redis 30분 TTL) |
+| [ADR-0011](docs/adr/0011-jwt-auth-replace-openwebui-session.md) | 자체 JWT 인증 — Open WebUI 세션 교체, React SPA 도입 |
 
 추가 backfill 후보 + 전체 정책: [`docs/adr/README.md`](docs/adr/README.md)
 

@@ -1,9 +1,15 @@
 # ADR-0009: Phase 0 Admin Web UI 도입 (REST API + /admin/* SPA)
 
-- **상태**: Accepted
+> **[개정 노트 — 2026-06-11, ADR-0011]**
+> 본 ADR의 N2 결정("Open WebUI 세션 → `AdminSessionFilter` → `/auth/verify` 호출")은
+> ADR-0011에 의해 변경되었다. Admin Web UI 인증은 이제 Spring Boot `JwtAuthFilter`(httpOnly Cookie JWT)가 담당한다.
+> Open WebUI가 제거됨에 따라 `/auth/verify` 엔드포인트 구현 요건도 함께 삭제된다.
+> Admin Web UI 자체(10개 화면, `/admin/*` 경로)는 **자체 React SPA(`rag-frontend`)로 통합**되었다.
+
+- **상태**: Accepted (N2 결정 부분 개정됨 — ADR-0011 참고)
 - **결정일**: 2026-05-21
 - **결정자**: 시니어 UX 리서처 발견 → 사용자 결정
-- **관련 ADR**: ADR-0002 (데이터 격리 — admin UI 에서 data_sensitivity 가드)
+- **관련 ADR**: ADR-0002 (데이터 격리 — admin UI 에서 data_sensitivity 가드), ADR-0011 (인증 교체)
 - **영향 받는 문서**: `requirements/01-architecture.md` 섹션 11·14, `requirements/03-data-sync-pipeline.md`, `requirements/04-rag-search-strategy.md`, `requirements/07-auth-security.md`, `requirements/08-text-to-sql.md`, `requirements/09-user-parameter-tuning.md`
 
 ## 컨텍스트

@@ -1,0 +1,120 @@
+// RagVault — rag-frontend (React/Vite/TS) 배포 파이프라인
+// ADR-0011: Open WebUI 제거 후 자체 프론트엔드로 교체
+// 흐름: GitLab checkout → SCP 전송 → Docker 빌드 → docker compose up
+
+pipeline {
+    agent any
+
+    parameters {
+        booleanParam(
+            name: 'FORCE_RECREATE',
+            defaultValue: false,
+            description: 'true 시 --force-recreate 옵션으로 컨테이너 재생성'
+        )
+    }
+
+    environment {
+        COMPOSE_FILE    = 'docker-compose.internal.yml'
+        GITLAB_REPO_URL = 'http://59.29.231.14:20350/yjlee/ragvault.git'
+        DEV_SERVER      = 'largeai@59.29.231.14'
+        DEV_SERVER_PORT = '17222'
+        DEV_SERVER_DIR  = '/home/largeai/ragvault'
+    }
+
+    options {
+        timeout(time: 20, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
+    stages {
+
+        // ── Stage 1: Checkout ─────────────────────────────────────────────────
+        stage('Checkout') {
+            steps {
+                git(url: env.GITLAB_REPO_URL, branch: 'main', credentialsId: 'gitlab-token')
+                script {
+                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    echo "==> Commit : ${env.GIT_COMMIT_SHORT}"
+                }
+            }
+        }
+
+        // ── Stage 2: 파일 전송 ────────────────────────────────────────────────
+        stage('Transfer Files') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh-key']) {
+                    sh "ssh -o StrictHostKeyChecking=no -p ${env.DEV_SERVER_PORT} ${env.DEV_SERVER} 'rm -rf ${env.DEV_SERVER_DIR}/rag-frontend && mkdir -p ${env.DEV_SERVER_DIR}'"
+                    sh "scp -o StrictHostKeyChecking=no -P ${env.DEV_SERVER_PORT} -r rag-frontend ${env.DEV_SERVER}:${env.DEV_SERVER_DIR}/"
+                    sh "scp -o StrictHostKeyChecking=no -P ${env.DEV_SERVER_PORT} ${env.COMPOSE_FILE} ${env.DEV_SERVER}:${env.DEV_SERVER_DIR}/${env.COMPOSE_FILE}"
+                    echo "==> 파일 전송 완료"
+                }
+            }
+        }
+
+        // ── Stage 3: Docker 이미지 빌드 ───────────────────────────────────────
+        stage('Docker Build') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh-key']) {
+                    sh "ssh -o StrictHostKeyChecking=no -p ${env.DEV_SERVER_PORT} ${env.DEV_SERVER} 'cd ${env.DEV_SERVER_DIR} && docker build -f rag-frontend/Dockerfile -t rag-frontend:${env.GIT_COMMIT_SHORT} -t rag-frontend:latest rag-frontend/'"
+                    echo "==> Docker 이미지 빌드 완료: rag-frontend:${env.GIT_COMMIT_SHORT}"
+                }
+            }
+        }
+
+        // ── Stage 4: Deploy ───────────────────────────────────────────────────
+        stage('Deploy') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh-key']) {
+                    script {
+                        def recreateOpt = params.FORCE_RECREATE ? '--force-recreate' : ''
+                        sh "ssh -o StrictHostKeyChecking=no -p ${env.DEV_SERVER_PORT} ${env.DEV_SERVER} 'cd ${env.DEV_SERVER_DIR} && docker compose -f ${env.COMPOSE_FILE} --env-file .env.internal up -d --no-build --remove-orphans ${recreateOpt} rag-frontend'"
+                        sh "ssh -o StrictHostKeyChecking=no -p ${env.DEV_SERVER_PORT} ${env.DEV_SERVER} 'cd ${env.DEV_SERVER_DIR} && docker compose -f ${env.COMPOSE_FILE} --env-file .env.internal ps'"
+                        echo "==> 배포 완료"
+                    }
+                }
+            }
+        }
+
+        // ── Stage 5: Health Check ─────────────────────────────────────────────
+        stage('Health Check') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh-key']) {
+                    // Nginx 기동은 수 초 내 완료 → 10회 × 5초 = 50초
+                    sh """
+                        ssh -o StrictHostKeyChecking=no -p ${env.DEV_SERVER_PORT} ${env.DEV_SERVER} \
+                        'for i in \$(seq 1 10); do
+                            curl -sf http://localhost:18080/ > /dev/null && echo "==> Frontend Health OK" && exit 0
+                            echo "대기 중... \$i/10"
+                            sleep 5
+                        done
+                        echo "==> Health Check 실패"; exit 1'
+                    """
+                }
+            }
+        }
+
+        // ── Stage 6: 이미지 정리 ──────────────────────────────────────────────
+        stage('Cleanup') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh-key']) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no -p ${env.DEV_SERVER_PORT} ${env.DEV_SERVER} '
+                            docker image ls rag-frontend --format "{{.Tag}}" \
+                                | grep -v latest | sort | head -n -3 \
+                                | xargs -r -I{} docker rmi rag-frontend:{} 2>/dev/null || true
+                            docker image prune -f
+                        '
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success { echo "✅ 배포 성공 — 빌드 #${BUILD_NUMBER} (${env.GIT_COMMIT_SHORT ?: 'N/A'})" }
+        failure { echo "❌ 배포 실패 — 빌드 #${BUILD_NUMBER} 로그: ${BUILD_URL}console" }
+        always  { cleanWs() }
+    }
+
+} // end pipeline

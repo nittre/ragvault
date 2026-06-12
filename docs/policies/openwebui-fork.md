@@ -1,7 +1,13 @@
 # Open WebUI Fork 정책
 
-> Phase 0 UX 결정 누적으로 Open WebUI Fork 영역이 커짐.
-> **Fork 범위 명시·upstream 동기화 전략·Fork 깊이 최소화 원칙**.
+> **[SUPERSEDED — 2026-06-11]**
+> ADR-0011 결정에 의해 **Open WebUI가 완전히 제거**되었다.
+> 자체 React/Vite/TypeScript SPA(`rag-frontend/`)가 Chat UI + Admin UI를 모두 대체한다.
+> 이 문서는 Fork 정책의 역사적 기록 및 향후 오픈소스 UI 도입 시 참고용으로 보존된다.
+> **신규 작업에는 이 문서를 적용하지 않는다.**
+
+> ~~Phase 0 UX 결정 누적으로 Open WebUI Fork 영역이 커짐.~~
+> ~~**Fork 범위 명시·upstream 동기화 전략·Fork 깊이 최소화 원칙**.~~
 
 ## 배경
 

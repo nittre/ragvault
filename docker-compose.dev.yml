@@ -1,4 +1,4 @@
-# RagVault 로컬 개발 환경
+# RagVault 로컬 개발 환경 (ADR-0011: Open WebUI → rag-frontend)
 # Usage: docker compose -f docker-compose.dev.yml up -d
 # 모델 pull: docker exec -it ollama ollama pull qwen2.5:7b-instruct-q4_K_M
 #            docker exec -it ollama ollama pull bge-m3
@@ -99,9 +99,10 @@ services:
     build:
       context: ./rag-backend
       dockerfile: Dockerfile
+    image: rag-backend:latest
     container_name: rag-backend
     ports:
-      - "8080:8080"
+      - "18090:8080"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       SPRING_DATASOURCE_URL: jdbc:postgresql://pgvector:5432/ragdb
@@ -112,12 +113,21 @@ services:
       SPRING_AI_OLLAMA_BASE_URL: http://ollama:11434
       MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
       RAG_HYBRID_TIMEOUT_SEC: "120"
+      # ADR-0011: JWT 인증 (로컬 개발용 고정 시크릿 — 운영 배포 시 반드시 교체)
+      RAG_AUTH_JWT_SECRET: ${RAG_AUTH_JWT_SECRET:-dev-jwt-secret-localonly-do-not-use-in-prod!!}
+      # 최초 기동 시 슈퍼어드민 + 기존 사용자 비밀번호 초기화
+      BOOTSTRAP_SUPER_ADMIN_EMAIL: ${BOOTSTRAP_SUPER_ADMIN_EMAIL:-admin@dev.local}
+      BOOTSTRAP_INITIAL_PASSWORD: ${BOOTSTRAP_INITIAL_PASSWORD:-changeme123}
+      # 외부 API 클라이언트용 Bearer 키
+      BOOTSTRAP_API_KEY: ${RAG_BACKEND_API_KEY:-dev-api-key-change-in-prod}
     depends_on:
       pgvector:
         condition: service_healthy
       redis:
         condition: service_healthy
       ollama:
+        condition: service_healthy
+      mysql-sample:
         condition: service_healthy
     networks:
       - rag-net
@@ -129,36 +139,26 @@ services:
       start_period: 60s
     restart: unless-stopped
 
-  # Open WebUI (M5 Fork — ADR-0006 X-User-* 헤더, /v1/files 프록시, ADR-0009 /auth/verify)
-  open-webui:
+  # React/Vite/TS SPA + Nginx 리버스 프록시 (ADR-0011: Open WebUI 대체)
+  rag-frontend:
     build:
-      context: ./open-webui-fork
+      context: ./rag-frontend
       dockerfile: Dockerfile
-    # image: ghcr.io/open-webui/open-webui:v0.6.5  # Fork 빌드로 교체됨
-    container_name: open-webui
+    image: rag-frontend:latest
+    container_name: rag-frontend
     ports:
-      - "3000:8080"
-    environment:
-      # Spring Boot RAG 백엔드 프록시 (ADR-0006)
-      RAG_BACKEND_URL: http://rag-backend:8080
-      RAG_BACKEND_API_KEY: "${RAG_BACKEND_API_KEY:?RAG_BACKEND_API_KEY를 .env 파일에 설정하세요 (예: sk-rag-xxxxx)}"
-      # 모든 챗을 rag-backend(/v1)로 라우팅 — 직접 Ollama 우회 차단
-      OPENAI_API_BASE_URL: http://rag-backend:8080/v1
-      OPENAI_API_KEY: ${RAG_BACKEND_API_KEY}
-      ENABLE_OPENAI_API: "true"
-      # Ollama 직접 연결 비활성화 (드롭다운에 RAG 모델만 노출)
-      ENABLE_OLLAMA_API: "false"
-      WEBUI_SECRET_KEY: "${WEBUI_SECRET_KEY:?WEBUI_SECRET_KEY를 .env 파일에 설정하세요 (openssl rand -hex 32)}"
-      WEBUI_NAME: "RagVault Dev"
-    volumes:
-      - open_webui_data:/app/backend/data
+      - "18080:80"
     depends_on:
-      ollama:
-        condition: service_healthy
       rag-backend:
         condition: service_healthy
     networks:
       - rag-net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
 volumes:
@@ -166,7 +166,6 @@ volumes:
   pgvector_data:
   redis_data:
   mysql_data:
-  open_webui_data:
 
 networks:
   rag-net:
