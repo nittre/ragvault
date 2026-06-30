@@ -1,6 +1,6 @@
 package com.ragvault.widget;
 
-import com.ragvault.widget.service.FaqChunkingService;
+import com.ragvault.widget.service.KnowledgeIngestionService;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.ai.chat.client.ChatClient;
@@ -47,9 +47,8 @@ class WidgetBackendApplicationTests {
 
         @Bean
         @Primary
-        FaqChunkingService faqChunkingService(OllamaEmbeddingModel embeddingModel,
-                com.ragvault.core.repository.DocumentChunkRepository repo) {
-            return Mockito.mock(FaqChunkingService.class);
+        KnowledgeIngestionService knowledgeIngestionService() {
+            return Mockito.mock(KnowledgeIngestionService.class);
         }
     }
 

@@ -28,7 +28,7 @@ import java.util.stream.IntStream;
  * 6. LLM 호출 (ChatClient — Spring AI)
  * 7. PII 마스킹 (ADR-0008)
  *
- * SQL/멀티모달/파일/URL 경로 없음 — FAQ RAG 전용.
+ * SQL/멀티모달/파일/URL 경로 없음 — 지식문서 RAG 전용.
  */
 @Slf4j
 @Service

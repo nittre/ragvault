@@ -39,9 +39,10 @@ widget:
   bootstrap:
     admin-email: test-admin@widget.local
     admin-password: test-password-123
-  faq:
-    directory: faq
+  knowledge:
+    directory: knowledge
     auto-load: false
+    vision-model: ""
   search:
     default-top-k: 5
     default-threshold: 0.60

@@ -2,9 +2,13 @@ package com.ragvault.widget.service;
 
 import com.ragvault.core.domain.DocumentChunk;
 import com.ragvault.core.repository.DocumentChunkRepository;
+import com.ragvault.core.service.ImageCaptioningService;
+import com.ragvault.core.service.parser.DocumentParserRouter;
+import com.ragvault.core.service.parser.ParsedDocument;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.ollama.OllamaEmbeddingModel;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -13,36 +17,100 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * FAQ 마크다운 파일 청킹 + 임베딩 + pgvector UPSERT 서비스.
+ * 지식문서 청킹 + 임베딩 + pgvector UPSERT 서비스.
  *
- * FaqLoaderRunner 또는 POST /admin/faq/reload 에서 호출.
- * rag-practice ChunkingService 에서 MySQL 의존성 제거 후 단순화.
+ * 지원 포맷: .md / .txt / .docx / .xlsx / .pptx / .pdf
+ * 이미지가 포함된 경우 비전 모델로 캡셔닝하여 마크다운에 인라인 삽입.
+ *
+ * - {@link #ingestMarkdown(String, String)}: 마크다운/텍스트 직접 인입 (기존 FAQ 경로 유지).
+ * - {@link #ingestFile(String, byte[], String)}: 바이너리 파일 → 파싱 → 인입.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class FaqChunkingService {
+public class KnowledgeIngestionService {
 
     private final OllamaEmbeddingModel embeddingModel;
     private final DocumentChunkRepository chunkRepository;
+    private final DocumentParserRouter parserRouter;
+    private final ImageCaptioningService captioningService;
 
+    private static final String SOURCE_TABLE = "knowledge_doc";
     private static final String EMBEDDING_MODEL = "bge-m3";
-    private static final String SOURCE_TABLE = "faq_markdown";
+
+    @Value("${widget.knowledge.vision-model:}")
+    private String visionModel;
+
+    // -------------------------------------------------------------------------
+    // 공개 인입 API
+    // -------------------------------------------------------------------------
 
     /**
-     * 마크다운 텍스트 → 청킹 → 임베딩 → UPSERT.
+     * 마크다운/텍스트 직접 인입 (기존 FAQ 경로 호환).
      *
-     * @param fileId   파일 식별자 (파일명 등)
+     * @param docId    문서 식별자
      * @param markdown 마크다운 원문
-     * @param chunkSize 청크당 최대 문자 수 (기본 1200)
-     * @param overlap   오버랩 문자 수 (기본 200)
      */
-    public void ingest(String fileId, String markdown, int chunkSize, int overlap) {
-        // 기존 청크 삭제 (re-ingest 멱등성)
-        chunkRepository.deleteBySourceTableAndSourceId(SOURCE_TABLE, fileId);
+    public void ingestMarkdown(String docId, String markdown) {
+        ingestMarkdown(docId, markdown, 1200, 200);
+    }
+
+    public void ingestMarkdown(String docId, String markdown, int chunkSize, int overlap) {
+        chunkRepository.deleteBySourceTableAndSourceId(SOURCE_TABLE, docId);
+        upsertChunks(docId, markdown, "markdown", chunkSize, overlap);
+    }
+
+    /**
+     * 바이너리 파일 인입 — 파싱 → 이미지 캡셔닝 → 청킹 → UPSERT.
+     *
+     * @param docId    문서 식별자 (파일명 등)
+     * @param bytes    원본 파일 바이트
+     * @param filename 파일명 (확장자 포함, 파서 선택·메타데이터용)
+     */
+    public void ingestFile(String docId, byte[] bytes, String filename) {
+        chunkRepository.deleteBySourceTableAndSourceId(SOURCE_TABLE, docId);
+
+        ParsedDocument parsed;
+        try {
+            parsed = parserRouter.parse(bytes, filename);
+        } catch (Exception e) {
+            log.error("문서 파싱 실패 '{}': {}", docId, e.getMessage());
+            return;
+        }
+
+        String markdown = inlineCaptions(parsed);
+        String ext = DocumentParserRouter.extensionOf(filename);
+        upsertChunks(docId, markdown, ext, 1200, 200);
+    }
+
+    // -------------------------------------------------------------------------
+    // 내부 헬퍼
+    // -------------------------------------------------------------------------
+
+    /** 추출된 이미지들을 캡셔닝하여 마크다운 끝에 인라인 삽입. */
+    private String inlineCaptions(ParsedDocument parsed) {
+        if (parsed.images().isEmpty()) return parsed.markdown();
+
+        StringBuilder sb = new StringBuilder(parsed.markdown());
+        for (ParsedDocument.ExtractedImage img : parsed.images()) {
+            String caption = captioningService.caption(img, visionModel);
+            if (caption != null && !caption.isBlank()) {
+                sb.append("\n\n> **[이미지]** ").append(caption.trim());
+            }
+        }
+        return sb.toString();
+    }
+
+    /** 마크다운 텍스트 → 청킹 → 임베딩 → UPSERT. */
+    private void upsertChunks(String docId, String markdown, String sourceType,
+                               int chunkSize, int overlap) {
+        if (markdown == null || markdown.isBlank()) {
+            log.warn("문서 '{}' 내용이 비어 있음, 청킹 건너뜀", docId);
+            return;
+        }
 
         List<String> chunks = split(markdown, chunkSize, overlap);
-        log.info("Ingesting FAQ '{}': {} chunks", fileId, chunks.size());
+        log.info("지식문서 '{}' 인입: {} 청크 (sourceType={})", docId, chunks.size(), sourceType);
 
         for (int i = 0; i < chunks.size(); i++) {
             String chunk = chunks.get(i);
@@ -51,8 +119,8 @@ public class FaqChunkingService {
 
             DocumentChunk dc = DocumentChunk.builder()
                     .sourceTable(SOURCE_TABLE)
-                    .sourceId(fileId)
-                    .sourceType("faq")
+                    .sourceId(docId)
+                    .sourceType(sourceType)
                     .chunkIndex(i)
                     .content(chunk)
                     .contentHash(hash)
@@ -64,24 +132,12 @@ public class FaqChunkingService {
 
             chunkRepository.upsertChunk(dc, embedding);
         }
-        log.info("FAQ '{}' ingested successfully ({} chunks)", fileId, chunks.size());
+        log.info("지식문서 '{}' 인입 완료 ({} 청크)", docId, chunks.size());
     }
-
-    /**
-     * 기본 파라미터로 ingest.
-     */
-    public void ingest(String fileId, String markdown) {
-        ingest(fileId, markdown, 1200, 200);
-    }
-
-    // -------------------------------------------------------------------------
-    // 내부 헬퍼
-    // -------------------------------------------------------------------------
 
     /**
      * 마크다운 텍스트 청킹 — 헤더 경계 우선 분할.
-     *
-     * 구분자 우선순위: "\n## " > "\n### " > "\n\n" > "\n" > ""
+     * 구분자 우선순위: "\n## " > "\n### " > "\n\n" > "\n"
      */
     private List<String> split(String text, int chunkChars, int overlapChars) {
         if (text == null || text.isBlank()) return List.of();
@@ -96,16 +152,13 @@ public class FaqChunkingService {
     private void splitRecursive(String text, String[] separators, int sepIdx,
                                  int chunkChars, int overlapChars, List<String> result) {
         if (text.length() <= chunkChars) {
-            String trimmed = text.trim();
-            if (!trimmed.isEmpty()) result.add(trimmed);
+            String t = text.trim();
+            if (!t.isEmpty()) result.add(t);
             return;
         }
         if (sepIdx >= separators.length) {
-            int pos = 0;
-            while (pos < text.length()) {
-                int end = Math.min(pos + chunkChars, text.length());
-                result.add(text.substring(pos, end).trim());
-                pos += Math.max(1, chunkChars - overlapChars);
+            for (int pos = 0; pos < text.length(); pos += Math.max(1, chunkChars - overlapChars)) {
+                result.add(text.substring(pos, Math.min(pos + chunkChars, text.length())).trim());
             }
             return;
         }
@@ -126,11 +179,10 @@ public class FaqChunkingService {
                 if (!current.isEmpty()) {
                     String chunk = current.toString().trim();
                     if (!chunk.isEmpty()) {
-                        if (chunk.length() > chunkChars) {
+                        if (chunk.length() > chunkChars)
                             splitRecursive(chunk, separators, sepIdx + 1, chunkChars, overlapChars, result);
-                        } else {
+                        else
                             result.add(chunk);
-                        }
                     }
                 }
                 if (!result.isEmpty() && overlapChars > 0) {
@@ -146,11 +198,10 @@ public class FaqChunkingService {
         if (!current.isEmpty()) {
             String chunk = current.toString().trim();
             if (!chunk.isEmpty()) {
-                if (chunk.length() > chunkChars) {
+                if (chunk.length() > chunkChars)
                     splitRecursive(chunk, separators, sepIdx + 1, chunkChars, overlapChars, result);
-                } else {
+                else
                     result.add(chunk);
-                }
             }
         }
     }
@@ -168,7 +219,6 @@ public class FaqChunkingService {
     }
 
     private int estimateTokens(String text) {
-        if (text == null || text.isBlank()) return 0;
-        return text.split("\\s+").length;
+        return text == null || text.isBlank() ? 0 : text.split("\\s+").length;
     }
 }
