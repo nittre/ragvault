@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>고객사 데모 페이지 — RagVault 위젯 테스트</title>
+<style>
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; margin:0; color:#1f2937; line-height:1.6; }
+  .hero { background:linear-gradient(135deg,#0f172a,#1e3a8a); color:#fff; padding:80px 24px; text-align:center; }
+  .hero h1 { font-size:34px; margin:0 0 12px; }
+  .hero p { opacity:.85; font-size:17px; }
+  .wrap { max-width:760px; margin:0 auto; padding:48px 24px; }
+  .note { background:#f1f5f9; border-left:4px solid #2563eb; padding:14px 18px; border-radius:6px; font-size:14px; }
+  h2 { margin-top:40px; }
+</style>
+</head>
+<body>
+  <div class="hero">
+    <h1>예시 고객사 홈페이지</h1>
+    <p>이 페이지는 위젯이 붙는 "외부 웹사이트"를 흉내 낸 데모입니다.</p>
+  </div>
+  <div class="wrap">
+    <div class="note">
+      우하단의 💬 버블을 클릭해 보세요. 우리 도메인의 채팅 UI가 <b>iframe</b>으로 떠야 합니다.<br>
+      (백엔드 연결 전이라 현재는 목 응답입니다.)
+    </div>
+    <h2>회사 소개</h2>
+    <p>여기는 고객사의 실제 콘텐츠가 들어갈 자리입니다. 위젯은 이 페이지의 스타일과 충돌하지 않습니다.</p>
+    <h2>제품 안내</h2>
+    <p>방문자는 페이지를 보다가 궁금한 점이 생기면 챗봇 버블을 눌러 질문할 수 있습니다.</p>
+  </div>
+
+  <!-- ▼▼▼ 고객사가 붙이는 단 한 줄 (실제 배포 시 src 는 위젯 호스트 도메인) ▼▼▼ -->
+  <!-- data-api-base 는 개발/데모 전용(백엔드가 다른 포트). 운영에선 같은 도메인이라 생략 -->
+  <script src="./loader.js"
+          data-site-key="pk_test_widget_dev"
+          data-api-base="http://localhost:8081" async></script>
+</body>
+</html>

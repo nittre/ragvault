@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>RagVault 챗봇</title>
+<style>
+  :root { --brand:#2563eb; --bg:#f7f8fa; --bot:#fff; --user:#2563eb; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Apple SD Gothic Neo",sans-serif; }
+  body { display:flex; flex-direction:column; background:var(--bg); }
+  header { background:var(--brand); color:#fff; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  header .header-left { display:flex; align-items:center; gap:8px; min-width:0; }
+  header .logo-img { width:32px; height:32px; border-radius:50%; object-fit:cover; shrink:0; }
+  header h1 { font-size:15px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  header button { background:transparent; border:none; color:#fff; font-size:18px; cursor:pointer; shrink:0; }
+  #log { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; }
+  .msg { max-width:80%; padding:10px 13px; border-radius:14px; font-size:14px; line-height:1.45; white-space:pre-wrap; word-break:break-word; }
+  .msg.bot { background:var(--bot); color:#1f2937; align-self:flex-start; border:1px solid #e5e7eb; border-bottom-left-radius:4px; }
+  .msg.user { background:var(--user); color:#fff; align-self:flex-end; border-bottom-right-radius:4px; }
+  .msg.typing { color:#9ca3af; font-style:italic; }
+  footer { padding:10px; background:#fff; border-top:1px solid #e5e7eb; display:flex; gap:8px; }
+  #input { flex:1; resize:none; border:1px solid #d1d5db; border-radius:10px; padding:9px 11px; font-size:14px; font-family:inherit; max-height:96px; }
+  #send { background:var(--brand); color:#fff; border:none; border-radius:10px; padding:0 16px; font-size:14px; cursor:pointer; }
+  #send:disabled { opacity:.5; cursor:default; }
+  .disclaimer { font-size:11px; color:#9ca3af; text-align:center; padding:0 0 6px; background:#fff; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <h1 id="bot-name">무엇이든 물어보세요 👋</h1>
+    </div>
+    <button id="close" aria-label="닫기">✕</button>
+  </header>
+  <div id="log"></div>
+  <div class="disclaimer">AI가 생성한 답변입니다. 정확하지 않을 수 있어요.</div>
+  <footer>
+    <textarea id="input" rows="1" placeholder="메시지를 입력하세요…"></textarea>
+    <button id="send">전송</button>
+  </footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // 기존 하드코딩 기본값
+  var DEFAULT_GREETING = '안녕하세요! 자주 묻는 질문이나 안내가 필요한 내용을 입력해 주세요.';
+  var DEFAULT_BOT_NAME = '무엇이든 물어보세요 👋';
+
+  // site key (loader 가 ?site=... 로 전달)
+  var siteKey = new URLSearchParams(location.search).get('site') || '';
+
+  // 백엔드 위젯 엔드포인트.
+  // 운영: chat.html 과 백엔드가 같은 origin → 상대경로.
+  // 개발/데모: loader 가 ?api=http://localhost:8081 로 백엔드 origin 을 주입.
+  var apiBase = new URLSearchParams(location.search).get('api') || '';
+  var API_URL = apiBase + '/v1/widget/chat';
+
+  var log = document.getElementById('log');
+  var input = document.getElementById('input');
+  var send = document.getElementById('send');
+  var history = [];
+
+  function bubble(text, who) {
+    var el = document.createElement('div');
+    el.className = 'msg ' + who;
+    el.textContent = text;
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+    return el;
+  }
+
+  async function loadConfig() {
+    if (!siteKey) return null;
+    try {
+      var configUrl = apiBase + '/v1/widget/config';
+      var res = await fetch(configUrl, {
+        headers: { 'X-Site-Key': siteKey }
+      });
+      if (!res.ok) return null;
+      var cfg = await res.json();
+      if (cfg.brandColor) {
+        document.documentElement.style.setProperty('--brand', cfg.brandColor);
+        document.documentElement.style.setProperty('--user', cfg.brandColor);
+      }
+      if (cfg.botName) {
+        document.getElementById('bot-name').textContent = cfg.botName;
+      }
+      if (cfg.logoUrl) {
+        var headerLeft = document.querySelector('header .header-left');
+        var img = document.createElement('img');
+        img.src = cfg.logoUrl;
+        img.alt = '';
+        img.className = 'logo-img';
+        headerLeft.insertBefore(img, headerLeft.firstChild);
+      }
+      return cfg;
+    } catch (e) {
+      // 실패 시 기본값 유지
+      return null;
+    }
+  }
+
+  // 초기화: config 로드 후 인사말 bubble 추가
+  (async function init() {
+    var cfg = await loadConfig();
+    var greeting = (cfg && cfg.greeting) ? cfg.greeting : DEFAULT_GREETING;
+    bubble(greeting, 'bot');
+  })();
+
+  document.getElementById('close').addEventListener('click', function () {
+    parent.postMessage({ type: 'ragvault:close' }, '*');
+  });
+
+  input.addEventListener('input', function () {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 96) + 'px';
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
+  });
+  send.addEventListener('click', submit);
+
+  async function submit() {
+    var text = input.value.trim();
+    if (!text) return;
+    input.value = ''; input.style.height = 'auto';
+    bubble(text, 'user');
+    history.push({ role: 'user', content: text });
+    send.disabled = true;
+
+    var typing = bubble('입력 중…', 'bot typing');
+    try {
+      var reply = await ask(text);
+      typing.remove();
+      bubble(reply, 'bot');
+      history.push({ role: 'assistant', content: reply });
+    } catch (err) {
+      typing.remove();
+      bubble('일시적인 오류가 발생했어요. 잠시 후 다시 시도해 주세요.', 'bot');
+      console.error('[ragvault-widget]', err);
+    } finally {
+      send.disabled = false;
+      input.focus();
+    }
+  }
+
+  // 백엔드 호출. 미구현/네트워크 실패 시 목 응답 반환 (데모용).
+  async function ask(text) {
+    try {
+      var res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Site-Key': siteKey },
+        body: JSON.stringify({ messages: history })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      // OpenAI 호환 형태 가정
+      return data.choices?.[0]?.message?.content || JSON.stringify(data);
+    } catch (e) {
+      // --- 데모 목 응답 (백엔드 연결 전까지) ---
+      await new Promise(r => setTimeout(r, 600));
+      return '[데모 응답] 백엔드가 아직 연결되지 않았어요.\n실제로는 FAQ·안내 문서를 검색해 답변합니다.\n\n(받은 질문: "' + text + '")';
+    }
+  }
+})();
+</script>
+</body>
+</html>

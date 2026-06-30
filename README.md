@@ -10,15 +10,20 @@
 ```
 ragvault/
 ├── settings.gradle      # composite build (includeBuild)
+├── core/                # 공유: RAG·text-to-sql·웹검색·embedding·문서 파싱·AccessPolicy
 ├── app-internal/        # 사내 RagVault   (구 rag-practice/rag-backend)
-│                        #   JWT/ApiKey 인증, Open WebUI, 전체 기능
-├── app-widget/          # 외부 임베드 위젯 (구 ragvault-chatbot/backend, 미커밋 작업 포함)
-│                        #   site-key 인증, FAQ 관리, RAG→점진 확장
-└── (예정) core/         # 공유: RAG·text-to-sql·웹검색·embedding·AccessPolicy(default-deny)
+│                        #   JWT/ApiKey 인증, 전체 기능
+├── app-widget/          # 외부 임베드 위젯 (구 ragvault-chatbot/backend)
+│                        #   site-key 인증, 지식문서(멀티포맷) 관리, RAG→점진 확장
+├── frontend/            # 프론트엔드 (각 앱 자체 Dockerfile 독립 빌드)
+│   ├── widget-admin/    #   위젯 어드민 SPA   (구 ragvault-chatbot/admin)
+│   └── widget-embed/    #   위젯 임베드/데모  (구 ragvault-chatbot/widget)
+└── infra/               # compose.base + 제품별 overlay
 ```
 
 원본 repo(`rag-practice`, `ragvault-chatbot`)는 **히스토리 아카이브로 보존**한다.
-두 백엔드는 현재 워킹트리를 그대로 import 한 상태(빌드 환경 동일: Spring Boot 3.5.0 / Java 21 / Spring AI 1.0.0).
+백엔드·프론트엔드 모두 현재 워킹트리를 그대로 import 한 상태(빌드 환경 동일: Spring Boot 3.5.0 / Java 21 / Spring AI 1.0.0).
+`internal` 프론트엔드(`rag-practice/rag-frontend`, chat+admin 통합 SPA)는 후속 이관 예정.
 
 ## 빌드 (각 app 독립)
 

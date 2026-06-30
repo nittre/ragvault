@@ -3,6 +3,10 @@
 **/build/
 !gradle/wrapper/gradle-wrapper.jar
 
+# Node (frontend/*)
+node_modules/
+dist/
+
 # IDE
 .idea/
 *.iml
