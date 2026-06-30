@@ -1,0 +1,51 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: false
+  flyway:
+    enabled: false
+  main:
+    allow-bean-definition-overriding: true
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        options:
+          model: test-model
+      embedding:
+        options:
+          model: test-model
+
+widget:
+  security:
+    allowed-site-keys:
+      - pk_test_widget_dev
+  cors:
+    allowed-origins:
+      - http://localhost:3000
+  admin:
+    cors:
+      allowed-origins: http://localhost:5173
+  auth:
+    jwt-secret: test-secret-key-for-unit-tests-only-32bytes
+    jwt-expiry-hours: 1
+  bootstrap:
+    admin-email: test-admin@widget.local
+    admin-password: test-password-123
+  faq:
+    directory: faq
+    auto-load: false
+  search:
+    default-top-k: 5
+    default-threshold: 0.60
+  prompts:
+    system: "Test system prompt"
+    no-results-response: "No results found."
+    injection-blocked-response: "Blocked."

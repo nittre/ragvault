@@ -1,0 +1,2 @@
+ALTER TABLE datasource_config
+    ADD COLUMN IF NOT EXISTS is_internal BOOLEAN NOT NULL DEFAULT FALSE;

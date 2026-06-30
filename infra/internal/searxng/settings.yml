@@ -1,0 +1,47 @@
+# SearXNG 설정 — RAGVault 내부망 웹 검색 엔진
+# 공식 문서: https://docs.searxng.org/admin/settings/settings.html
+#
+# Docker 볼륨 마운트: ./searxng:/etc/searxng:rw
+# JSON API 활성화(format=json)가 핵심 설정.
+
+use_default_settings: true
+
+server:
+  # 운영 환경에서 반드시 랜덤 값으로 교체: openssl rand -hex 32
+  secret_key: "${SEARXNG_SECRET_KEY:-change-me-use-openssl-rand-hex-32}"
+  limiter: false        # 내부망 전용 — 속도 제한 비활성화
+  image_proxy: false
+
+search:
+  # JSON 형식 활성화 — RAG 백엔드가 JSON API로 호출
+  formats:
+    - html
+    - json
+  default_lang: "ko-KR"
+  autocomplete: ""
+
+# 주요 검색 엔진만 활성화 (빠른 응답 우선)
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    disabled: false
+
+  - name: bing
+    engine: bing
+    shortcut: b
+    disabled: false
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: d
+    disabled: false
+
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    disabled: false
+
+ui:
+  static_use_hash: true
+  default_locale: "ko"

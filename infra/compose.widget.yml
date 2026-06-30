@@ -1,0 +1,116 @@
+# ragvault — app-widget 전용 오버레이
+#
+# Usage: (ragvault/ 루트에서 실행)
+#   docker compose -f infra/compose.base.yml -f infra/compose.widget.yml up -d
+#
+# 환경변수 (필수):
+#   WIDGET_AUTH_JWT_SECRET    JWT 시크릿 (최소 32바이트, openssl rand -hex 32)
+#   WIDGET_ENCRYPTION_KEY     AES 암호화 키 (32바이트, openssl rand -base64 32)
+#
+# 환경변수 (선택):
+#   WIDGET_DB_PASSWORD        widget_db 비밀번호 (기본: widget)
+#   WIDGET_ALLOWED_SITE_KEYS  허용 site key 콤마 목록 (기본: pk_test_widget_dev)
+#   WIDGET_CORS_ORIGINS       위젯 삽입 고객 도메인 목록
+#   BOOTSTRAP_ADMIN_EMAIL     관리자 이메일 (기본: admin@widget.local)
+#   BOOTSTRAP_ADMIN_PASSWORD  관리자 초기 비밀번호 (기본: changeme123)
+#
+# 프론트엔드 빌드/서빙 경로: ../../ragvault-chatbot/{admin,widget} (monorepo 외부, 현 위치 유지)
+
+services:
+
+  shop-mariadb:
+    image: mariadb:11
+    container_name: widget-shop-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: shop_db
+      MARIADB_USER: shop
+      MARIADB_PASSWORD: shop
+    ports:
+      - "3308:3306"
+    volumes:
+      - widget_mariadb_data:/var/lib/mysql
+      - ./widget/mariadb-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  app-widget:
+    build:
+      context: ..
+      dockerfile: app-widget/Dockerfile
+    image: app-widget:latest
+    container_name: app-widget
+    ports:
+      - "8081:8081"
+    environment:
+      WIDGET_DB_URL: jdbc:postgresql://pgvector:5432/widget_db
+      WIDGET_DB_USERNAME: widget
+      WIDGET_DB_PASSWORD: ${WIDGET_DB_PASSWORD:-widget}
+      OLLAMA_BASE_URL: http://ollama:11434
+      WIDGET_AUTH_JWT_SECRET: ${WIDGET_AUTH_JWT_SECRET:?WIDGET_AUTH_JWT_SECRET 를 설정하세요 (openssl rand -hex 32)}
+      WIDGET_ENCRYPTION_KEY: ${WIDGET_ENCRYPTION_KEY:?WIDGET_ENCRYPTION_KEY 를 설정하세요 (openssl rand -base64 32)}
+      WIDGET_ALLOWED_SITE_KEYS: ${WIDGET_ALLOWED_SITE_KEYS:-pk_test_widget_dev}
+      WIDGET_CORS_ORIGINS: ${WIDGET_CORS_ORIGINS:-http://localhost:3000,http://localhost:8080}
+      WIDGET_ADMIN_CORS_ORIGINS: ${WIDGET_ADMIN_CORS_ORIGINS:-http://localhost:5173}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@widget.local}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-changeme123}
+    depends_on:
+      pgvector:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      shop-mariadb:
+        condition: service_healthy
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  admin:
+    build:
+      context: ../../ragvault-chatbot/admin
+      dockerfile: Dockerfile
+    image: widget-admin:latest
+    container_name: widget-admin
+    ports:
+      - "5173:80"
+    depends_on:
+      app-widget:
+        condition: service_healthy
+    networks:
+      - rag-net
+    restart: unless-stopped
+
+  widget-demo:
+    image: nginx:alpine
+    container_name: widget-demo
+    ports:
+      - "8080:80"
+    volumes:
+      - ../../ragvault-chatbot/widget:/usr/share/nginx/html:ro
+      - ./widget/nginx/widget-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      app-widget:
+        condition: service_healthy
+    networks:
+      - rag-net
+    restart: unless-stopped
+
+volumes:
+  widget_mariadb_data:
+
+networks:
+  rag-net:
+    driver: bridge

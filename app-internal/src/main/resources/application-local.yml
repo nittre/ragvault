@@ -1,0 +1,39 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://pgvector:5432/ragdb
+    username: raguser
+    password: ${SPRING_DATASOURCE_PASSWORD:-ragpassword}
+  data:
+    redis:
+      host: redis
+      port: 6379
+  mvc:
+    async:
+      # CPU 추론(qwen2.5vl:7b)이 느려 IMAGE_RAG→HYBRID 전체 파이프라인
+      # (VLM + 분류 + HYBRID 600s + 종합)이 길다. HTTP 요청이 중간에 끊기지 않도록 20분으로 상향.
+      request-timeout: 1200000
+  ai:
+    ollama:
+      base-url: http://ollama:11434
+      chat:
+        options:
+          # 단일 LLM 호출 타임아웃 — 병렬 경합 시 한 호출이 길어질 수 있어 로컬에서 상향.
+          timeout: 900
+          # B안: 멀티모달 qwen2.5-vl 하나로 chat(SQL/RAG/분류/종합)·VLM(이미지) 통합.
+          # gemma3:4b는 필터 JOIN에서 존재하지 않는 컬럼을 생성(환각)해 교체.
+          model: qwen2.5vl:7b
+          # SQL 생성 프롬프트(스키마+비즈니스 규칙+few-shot)가 길어 기본 num_ctx(2048)에
+          # 잘리면 컬럼 환각의 원인이 됨 → 넉넉히 확보. vlmChatClient(AiConfig)와 동일 값 유지(재로드 방지).
+          num-ctx: 8192
+
+server:
+  error:
+    # Admin API 검증 메시지를 UI 에 전달하기 위해 로컬에서만 활성화.
+    include-message: always
+
+rag:
+  chat:
+    model: qwen2.5vl:7b
+  vlm:
+    # chat과 동일 모델로 통합 → Ollama가 모델 1개만 로드(이미지↔SQL 전환 시 재로드 없음).
+    model: qwen2.5vl:7b

@@ -1,0 +1,179 @@
+# ragvault — app-internal 전용 오버레이
+#
+# Usage: (ragvault/ 루트에서 실행)
+#   docker compose -f infra/compose.base.yml -f infra/compose.internal.yml up -d
+#
+# 환경변수 (필수):
+#   SPRING_DATASOURCE_PASSWORD    pgvector ragdb 비밀번호 (기본: ragpassword)
+#   RAG_AUTH_JWT_SECRET           JWT 시크릿 (최소 32바이트, openssl rand -hex 32)
+#   RAG_DATASOURCE_ENC_KEY        AES 암호화 키 (Base64 32바이트, openssl rand -base64 32)
+#   BOOTSTRAP_SUPER_ADMIN_EMAIL   최초 슈퍼어드민 이메일
+#   BOOTSTRAP_INITIAL_PASSWORD    최초 사용자 초기 비밀번호
+#
+# 프론트엔드 빌드 경로: ../../rag-practice/rag-frontend (monorepo 외부, 현 위치 유지)
+
+services:
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  mysql-sample:
+    image: mysql:8.0
+    container_name: mysql-sample
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: customer_sample
+      MYSQL_USER: raguser
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-ragpassword}
+    ports:
+      - "3306:3306"
+    command: >
+      --gtid-mode=ON
+      --enforce-gtid-consistency=ON
+      --log-bin=mysql-bin
+      --binlog-format=ROW
+      --binlog-row-image=FULL
+      --server-id=1
+      --binlog-expire-logs-seconds=604800
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./internal/mysql-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root --password=$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  mariadb-board:
+    image: mariadb:11
+    container_name: mariadb-board
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-rootpassword}
+      MARIADB_DATABASE: board_db
+      MARIADB_USER: boarduser
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-boardpassword}
+    ports:
+      - "3307:3306"
+    command: >
+      --log-bin=mariadb-bin
+      --binlog-format=ROW
+      --binlog-row-image=FULL
+      --server-id=2
+      --expire-logs-days=7
+    volumes:
+      - mariadb_board_data:/var/lib/mysql
+      - ./internal/mariadb-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh --connect --innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    ports:
+      - "18081:8080"
+    volumes:
+      - ./internal/searxng:/etc/searxng:rw
+    environment:
+      - SEARXNG_BASE_URL=http://searxng:8080/
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  app-internal:
+    build:
+      context: ..
+      dockerfile: app-internal/Dockerfile
+    image: app-internal:latest
+    container_name: app-internal
+    ports:
+      - "18090:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-ragpassword}
+      RAG_AUTH_JWT_SECRET: ${RAG_AUTH_JWT_SECRET:?RAG_AUTH_JWT_SECRET 를 설정하세요 (openssl rand -hex 32)}
+      RAG_DATASOURCE_ENC_KEY: ${RAG_DATASOURCE_ENC_KEY:?RAG_DATASOURCE_ENC_KEY 를 설정하세요 (openssl rand -base64 32)}
+      BOOTSTRAP_SUPER_ADMIN_EMAIL: ${BOOTSTRAP_SUPER_ADMIN_EMAIL:-admin@dev.local}
+      BOOTSTRAP_INITIAL_PASSWORD: ${BOOTSTRAP_INITIAL_PASSWORD:-changeme123}
+      BOOTSTRAP_API_KEY: ${RAG_BACKEND_API_KEY:-dev-api-key-change-in-prod}
+      RAG_HYBRID_TIMEOUT_SEC: "600"
+      RAG_SEARXNG_URL: http://searxng:8080
+    depends_on:
+      pgvector:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      mysql-sample:
+        condition: service_healthy
+      searxng:
+        condition: service_healthy
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  rag-frontend:
+    build:
+      context: ../../rag-practice/rag-frontend
+      dockerfile: Dockerfile
+    image: rag-frontend:latest
+    container_name: rag-frontend
+    ports:
+      - "18080:80"
+    depends_on:
+      app-internal:
+        condition: service_healthy
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  mysql_data:
+  mariadb_board_data:
+
+networks:
+  rag-net:
+    driver: bridge

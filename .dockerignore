@@ -1,0 +1,19 @@
+# 빌드 불필요 항목 제외
+.git/
+.gradle/
+infra/
+
+# 각 모듈 빌드 산출물
+*/build/
+*/.gradle/
+
+# 테스트 소스 (Docker 빌드 시 제외)
+*/src/test/
+
+# 문서 / IDE
+*.md
+.idea/
+*.iml
+
+# 프론트엔드 (백엔드 이미지에 불필요)
+app-widget/admin/

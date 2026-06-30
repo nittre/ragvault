@@ -1,0 +1,138 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.0'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.ragservice'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+    all {
+        // Tika 2.9.2 는 PDFBox 2.x API 를 사용한다.
+        // 다른 의존성이 PDFBox 3.x 를 끌어올리면 NoSuchMethodError 가 발생하므로
+        // 2.0.31 로 강제 고정한다.
+        resolutionStrategy {
+            force 'org.apache.pdfbox:pdfbox:2.0.31'
+            force 'org.apache.pdfbox:fontbox:2.0.31'
+            force 'org.apache.pdfbox:pdfbox-tools:2.0.31'
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url 'https://repo.spring.io/milestone' }
+}
+
+ext {
+    set('springAiVersion', '1.0.0')
+    set('shedlockVersion', '5.16.0')
+}
+
+dependencies {
+    // 공유 코어 모듈
+    implementation 'com.ragvault:core'
+
+    // Spring Boot starters
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // Spring AI — Ollama (1.0.0 GA 기준 신규 아티팩트명)
+    implementation 'org.springframework.ai:spring-ai-starter-model-ollama'
+
+    // DB
+    runtimeOnly 'org.postgresql:postgresql'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+
+    // ShedLock (분산 스케줄 락 — Redis 저장소)
+    implementation "net.javacrumbs.shedlock:shedlock-spring:${shedlockVersion}"
+    implementation "net.javacrumbs.shedlock:shedlock-provider-redis-spring:${shedlockVersion}"
+
+    // Spring Retry
+    implementation 'org.springframework.retry:spring-retry'
+    implementation 'org.springframework:spring-aspects'
+
+    // MySQL Binlog Connector (ADR-0001)
+    implementation 'com.zendesk:mysql-binlog-connector-java:0.29.2'
+
+    // MySQL JDBC (초기 동기화 풀 스냅샷용)
+    runtimeOnly 'com.mysql:mysql-connector-j:9.3.0'
+
+    // MariaDB JDBC (멀티 데이터소스 지원)
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client:3.5.2'
+
+    // LangChain4j 텍스트 분할기
+    implementation 'dev.langchain4j:langchain4j:0.36.2'
+
+    // JSqlParser (M3 SqlValidator 용)
+    implementation 'com.github.jsqlparser:jsqlparser:4.9'
+
+    // M4: URL Fetch
+    implementation 'net.dankito.readability4j:readability4j:1.0.8'
+    implementation 'org.jsoup:jsoup:1.18.3'
+
+    // M4: 파일 처리 (Apache Tika)
+    implementation 'org.apache.tika:tika-core:2.9.2'
+    implementation 'org.apache.tika:tika-parsers-standard-package:2.9.2'
+
+    // M4: OCR (Tess4j — native Tesseract wrapper)
+    implementation 'net.sourceforge.tess4j:tess4j:5.12.0'
+
+    // M4: AWS S3 (파일 임시 저장 24h)
+    implementation platform('software.amazon.awssdk:bom:2.25.60')
+    implementation 'software.amazon.awssdk:s3'
+
+    // Micrometer Prometheus (metrics export)
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // Mail + Thymeleaf (계정 발급·비밀번호 재설정 메일 템플릿)
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+
+    // SSH 터널링 (외부 DB Bastion 접속)
+    implementation 'org.apache.sshd:sshd-core:2.13.2'
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.78.1'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+
+    // JWT (ADR-0011)
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Test
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'com.h2database:h2'
+    testImplementation 'org.mockito:mockito-core'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

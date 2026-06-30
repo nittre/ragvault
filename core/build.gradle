@@ -1,0 +1,60 @@
+plugins {
+    id 'java-library'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.ragvault'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    set('springAiVersion', '1.0.0')
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.boot:spring-boot-dependencies:3.5.0"
+        mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
+    }
+}
+
+dependencies {
+    api 'org.springframework.boot:spring-boot-starter-data-jpa'
+    api 'com.fasterxml.jackson.core:jackson-databind'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // JWT (JwtService)
+    api 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+    // Spring AI Ollama (RoutingEmbeddingService)
+    api 'org.springframework.ai:spring-ai-starter-model-ollama'
+
+    // Spring AI ChatClient (SensitivityAnalysisService, SchemaDescriptionService, SqlGeneratorService, RagColumnSuggestionService, DataSourceRouterService)
+    // spring-ai-starter-model-ollama 가 ChatClient 를 포함하므로 별도 추가 불필요
+
+    // Async (@Async — SensitivityAnalysisService, SchemaDescriptionService, RagColumnSuggestionService)
+    api 'org.springframework.boot:spring-boot-starter'
+
+    // Spring Security (RagUserService — BCryptPasswordEncoder)
+    api 'org.springframework.boot:spring-boot-starter-security'
+
+    // SQL 파싱 (SqlValidator)
+    api 'com.github.jsqlparser:jsqlparser:4.9'
+
+    // SSH 터널 (SshTunnelService, DataSourceConfigService)
+    api 'org.apache.sshd:sshd-core:2.13.2'
+    api 'org.bouncycastle:bcpkix-jdk18on:1.78.1'
+    api 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+}

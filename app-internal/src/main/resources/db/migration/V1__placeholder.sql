@@ -1,0 +1,3 @@
+-- M0 placeholder migration
+-- Actual schema migrations will be added in M1
+-- V2__core_schema.sql will create: document_chunks, access_groups, api_keys, etc.

@@ -1,0 +1,18 @@
+# CI용 Dockerfile — Jenkins에서 빌드된 JAR을 그대로 패키징
+# 소스 빌드 없이 전달받은 app.jar만 이미지에 포함
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+RUN addgroup -S raggroup && adduser -S raguser -G raggroup
+USER raguser
+
+ARG JAR_FILE=build/libs/app.jar
+COPY ${JAR_FILE} app.jar
+
+EXPOSE 8080
+
+ENTRYPOINT ["java", \
+    "-XX:+UseContainerSupport", \
+    "-XX:MaxRAMPercentage=75.0", \
+    "-Djava.security.egd=file:/dev/./urandom", \
+    "-jar", "app.jar"]

@@ -1,0 +1,8 @@
+rootProject.name = 'widget-backend'
+
+// standalone 빌드 시 core 를 로컬에서 해소 (composite build)
+includeBuild('../core') {
+    dependencySubstitution {
+        substitute module('com.ragvault:core') using project(':')
+    }
+}

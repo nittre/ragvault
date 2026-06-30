@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 30000
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+  ai:
+    ollama:
+      base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://ollama-svc.rag.svc.cluster.local:11434}
+      chat:
+        options:
+          model: qwen2.5:14b-instruct-q4_K_M
+
+rag:
+  chat:
+    model: qwen2.5:14b-instruct-q4_K_M
+  vlm:
+    model: qwen2.5-vl:7b-instruct-q4_K_M
+
+logging:
+  level:
+    com.ragservice: INFO

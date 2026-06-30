@@ -1,0 +1,82 @@
+# ragvault — 공통 기반 서비스
+#
+# 직접 실행하지 않음. 오버레이와 함께 사용:
+#   docker compose -f infra/compose.base.yml -f infra/compose.internal.yml up -d
+#   docker compose -f infra/compose.base.yml -f infra/compose.widget.yml up -d
+#
+# 포함: ollama, pgvector (app-internal + app-widget 공용)
+# pgvector 초기화: pg-init/01-widget-db.sql 이 widget_db·widget 사용자 자동 생성
+
+services:
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_FLASH_ATTENTION=1
+      # chat/VLM(qwen2.5-vl) + 임베딩(bge-m3) 동시 상주 (재로드 방지)
+      - OLLAMA_MAX_LOADED_MODELS=2
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  pgvector:
+    image: pgvector/pgvector:pg16
+    container_name: pgvector
+    environment:
+      POSTGRES_DB: ragdb
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ragpassword}
+      WIDGET_DB_PASSWORD: ${WIDGET_DB_PASSWORD:-widget}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+      - ./pg-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - rag-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ollama 모델 자동 다운로드 — ollama healthy 후 1회 실행
+  # 모델은 ollama_data 볼륨에 저장되므로 컨테이너 재시작 시 재다운로드 불필요
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        pull() { until ollama pull "$$1"; do echo "retrying $$1..."; sleep 5; done; }
+        pull bge-m3
+        pull qwen2.5:3b
+    networks:
+      - rag-net
+    restart: "no"
+
+volumes:
+  ollama_data:
+  pgvector_data:
+
+networks:
+  rag-net:
+    driver: bridge

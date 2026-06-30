@@ -1,0 +1,33 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:?SPRING_DATASOURCE_URL를 .env.dev에 설정하세요}
+    username: ${SPRING_DATASOURCE_USERNAME:-raguser}
+    password: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD를 .env.dev에 설정하세요}
+  data:
+    redis:
+      host: redis
+      port: 6379
+  ai:
+    ollama:
+      base-url: ${DEV_OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        options:
+          model: ${DEV_CHAT_MODEL:qwen3:8b}
+
+server:
+  error:
+    # Admin API 검증 메시지를 UI 에 전달하기 위해 dev 에서만 활성화.
+    include-message: always
+
+rag:
+  admin:
+    # ADR-0011: JWT 인증 전환으로 dev-bypass 비활성화. false 로 고정 필수.
+    dev-bypass: false
+  bootstrap:
+    super-admin-email: ${BOOTSTRAP_SUPER_ADMIN_EMAIL:}
+  chat:
+    model: ${DEV_CHAT_MODEL:qwen3:8b}
+  vlm:
+    # vision 모델이 없으면 일반 chat 모델로 fallback.
+    # 이미지 입력 시 텍스트 응답만 반환되거나 오류가 발생할 수 있음.
+    model: ${DEV_VLM_MODEL:qwen3:8b}

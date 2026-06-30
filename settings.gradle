@@ -1,0 +1,11 @@
+// ragvault — 단일 코드베이스 (모듈러 모놀리스 / 제품 라인)
+//
+// Phase 0: composite build. 각 백엔드를 독립 standalone 빌드로 두고 루트에서 묶기만 한다.
+//   - app-internal : 사내 RagVault (구 rag-practice/rag-backend)
+//   - app-widget   : 외부 임베드 위젯 (구 ragvault-chatbot/backend)
+//
+rootProject.name = 'ragvault'
+
+includeBuild 'core'
+includeBuild 'app-internal'
+includeBuild 'app-widget'
