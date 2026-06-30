@@ -16,12 +16,14 @@ import {
   BookOpen,
   ChevronDown,
   ChevronRight,
+  BookMarked,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { getDataSources } from '../../api/admin/dataSources'
 
 const GLOBAL_NAV = [
   { to: '/admin/users', label: '사용자 관리', icon: Users },
+  { to: '/admin/knowledge', label: '지식문서', icon: BookMarked },
   { to: '/admin/audit-logs', label: '감사 로그', icon: FileText },
   { to: '/admin/sql-logs', label: 'SQL 실행 로그', icon: Table2 },
   { to: '/admin/usage-stats', label: '사용량 통계', icon: BarChart2 },

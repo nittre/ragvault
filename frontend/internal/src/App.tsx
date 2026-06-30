@@ -19,6 +19,7 @@ const SqlLogsPage = lazy(() => import('./pages/admin/SqlLogsPage'))
 const UsageStatsPage = lazy(() => import('./pages/admin/UsageStatsPage'))
 const ApiKeysPage = lazy(() => import('./pages/admin/ApiKeysPage'))
 const ParamLimitsPage = lazy(() => import('./pages/admin/ParamLimitsPage'))
+const KnowledgeDocsPage = lazy(() => import('./pages/admin/KnowledgeDocsPage'))
 
 function LoadingFallback() {
   return (
@@ -54,6 +55,7 @@ export default function App() {
 
             {/* 전역 */}
             <Route path="users" element={<UsersPage />} />
+            <Route path="knowledge" element={<KnowledgeDocsPage />} />
             <Route path="audit-logs" element={<AuditLogsPage />} />
             <Route path="sql-logs" element={<SqlLogsPage />} />
             <Route path="usage-stats" element={<UsageStatsPage />} />
