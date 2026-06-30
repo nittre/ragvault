@@ -10,7 +10,7 @@
 #   BOOTSTRAP_SUPER_ADMIN_EMAIL   최초 슈퍼어드민 이메일
 #   BOOTSTRAP_INITIAL_PASSWORD    최초 사용자 초기 비밀번호
 #
-# 프론트엔드 빌드 경로: ../../rag-practice/rag-frontend (monorepo 외부, 현 위치 유지)
+# 프론트엔드 빌드 경로: ../frontend/internal (monorepo 내부)
 
 services:
 
@@ -150,7 +150,7 @@ services:
 
   rag-frontend:
     build:
-      context: ../../rag-practice/rag-frontend
+      context: ../frontend/internal
       dockerfile: Dockerfile
     image: rag-frontend:latest
     container_name: rag-frontend

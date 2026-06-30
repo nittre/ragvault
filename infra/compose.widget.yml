@@ -14,7 +14,7 @@
 #   BOOTSTRAP_ADMIN_EMAIL     관리자 이메일 (기본: admin@widget.local)
 #   BOOTSTRAP_ADMIN_PASSWORD  관리자 초기 비밀번호 (기본: changeme123)
 #
-# 프론트엔드 빌드/서빙 경로: ../../ragvault-chatbot/{admin,widget} (monorepo 외부, 현 위치 유지)
+# 프론트엔드 빌드/서빙 경로: ../frontend/{widget-admin,widget-embed} (monorepo 내부)
 
 services:
 
@@ -61,6 +61,8 @@ services:
       WIDGET_ADMIN_CORS_ORIGINS: ${WIDGET_ADMIN_CORS_ORIGINS:-http://localhost:5173}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@widget.local}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-changeme123}
+    volumes:
+      - widget_knowledge_data:/app/knowledge
     depends_on:
       pgvector:
         condition: service_healthy
@@ -80,7 +82,7 @@ services:
 
   admin:
     build:
-      context: ../../ragvault-chatbot/admin
+      context: ../frontend/widget-admin
       dockerfile: Dockerfile
     image: widget-admin:latest
     container_name: widget-admin
@@ -99,7 +101,7 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - ../../ragvault-chatbot/widget:/usr/share/nginx/html:ro
+      - ../frontend/widget-embed:/usr/share/nginx/html:ro
       - ./widget/nginx/widget-nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       app-widget:
@@ -110,6 +112,7 @@ services:
 
 volumes:
   widget_mariadb_data:
+  widget_knowledge_data:
 
 networks:
   rag-net:

@@ -22,6 +22,8 @@ configurations {
 repositories {
     mavenCentral()
     maven { url 'https://repo.spring.io/milestone' }
+    // opendataloader-pdf-core 의 verapdf 의존성 저장소
+    maven { url 'https://artifactory.openpreservation.org/artifactory/vera-dev' }
 }
 
 ext {
@@ -79,4 +81,9 @@ dependencyManagement {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+// Tika가 JAXB 등 중복 JAR을 끌어와 bootJar 충돌 방지
+tasks.named('bootJar') {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
