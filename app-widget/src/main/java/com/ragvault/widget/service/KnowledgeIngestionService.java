@@ -87,18 +87,44 @@ public class KnowledgeIngestionService {
     // 내부 헬퍼
     // -------------------------------------------------------------------------
 
-    /** 추출된 이미지들을 캡셔닝하여 마크다운 끝에 인라인 삽입. */
+    /**
+     * 추출된 이미지를 캡셔닝하여 마크다운 내 이미지 참조 위치에 인라인 치환.
+     * locationHint(파일명)로 ![...](path) 패턴을 찾아 교체하고,
+     * 참조가 없는 이미지는 문서 끝에 추가한다.
+     */
     private String inlineCaptions(ParsedDocument parsed) {
         if (parsed.images().isEmpty()) return parsed.markdown();
 
-        StringBuilder sb = new StringBuilder(parsed.markdown());
+        String result = parsed.markdown();
+        List<String> orphanCaptions = new ArrayList<>();
+
         for (ParsedDocument.ExtractedImage img : parsed.images()) {
             String caption = captioningService.caption(img, visionModel);
-            if (caption != null && !caption.isBlank()) {
-                sb.append("\n\n> **[이미지]** ").append(caption.trim());
+            if (caption == null || caption.isBlank()) continue;
+
+            String captionBlock = "> **[이미지]** " + caption.trim();
+            String hint = img.locationHint();
+
+            if (hint != null && !hint.isBlank()) {
+                String escaped = java.util.regex.Pattern.quote(hint);
+                String replaced = result.replaceAll("!\\[[^\\]]*]\\([^)]*" + escaped + "\\)", captionBlock);
+                if (!replaced.equals(result)) {
+                    result = replaced;
+                    continue;
+                }
             }
+            orphanCaptions.add(captionBlock);
         }
-        return sb.toString();
+
+        if (!orphanCaptions.isEmpty()) {
+            StringBuilder sb = new StringBuilder(result);
+            for (String c : orphanCaptions) {
+                sb.append("\n\n").append(c);
+            }
+            result = sb.toString();
+        }
+
+        return result;
     }
 
     /** 마크다운 텍스트 → 청킹 → 임베딩 → UPSERT. */
