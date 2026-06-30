@@ -1,0 +1,58 @@
+// 챗 백엔드(app-internal) 수동 배포 파이프라인
+// Jenkins 설정: Pipeline script from SCM → Script Path: jenkins/Jenkinsfile.chat-backend
+// 사전 준비: Manage Jenkins → Credentials → SSH Username with private key (ID: dev-server-ssh)
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'BRANCH', defaultValue: 'main', description: '배포할 브랜치')
+    }
+
+    environment {
+        DEPLOY_USER  = 'largeai'
+        DEPLOY_HOST  = '59.29.231.14'
+        DEPLOY_PORT  = '17222'
+        WORK_DIR     = '/home/largeai/ragvault'
+        COMPOSE_CMD  = 'docker compose -f infra/compose.dev.yml --env-file infra/.env.dev'
+        SERVICE      = 'app-internal'
+    }
+
+    stages {
+        stage('Pull') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh']) {
+                    sh "ssh -p ${DEPLOY_PORT} ${DEPLOY_USER}@${DEPLOY_HOST} 'cd ${WORK_DIR} && git fetch origin && git checkout ${params.BRANCH} && git pull origin ${params.BRANCH}'"
+                }
+            }
+        }
+        stage('Build') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh']) {
+                    sh "ssh -p ${DEPLOY_PORT} ${DEPLOY_USER}@${DEPLOY_HOST} 'cd ${WORK_DIR} && ${COMPOSE_CMD} build ${SERVICE}'"
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh']) {
+                    sh "ssh -p ${DEPLOY_PORT} ${DEPLOY_USER}@${DEPLOY_HOST} 'cd ${WORK_DIR} && ${COMPOSE_CMD} up -d --no-deps ${SERVICE}'"
+                }
+            }
+        }
+        stage('Verify') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh']) {
+                    sh "ssh -p ${DEPLOY_PORT} ${DEPLOY_USER}@${DEPLOY_HOST} 'cd ${WORK_DIR} && ${COMPOSE_CMD} ps ${SERVICE}'"
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            sshagent(credentials: ['dev-server-ssh']) {
+                sh "ssh -p ${DEPLOY_PORT} ${DEPLOY_USER}@${DEPLOY_HOST} 'cd ${WORK_DIR} && ${COMPOSE_CMD} logs --tail=100 ${SERVICE}'"
+            }
+        }
+    }
+}

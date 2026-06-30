@@ -1,0 +1,60 @@
+// 위젯 프론트엔드(widget-admin + widget-demo) 수동 배포 파이프라인
+// Jenkins 설정: Pipeline script from SCM → Script Path: jenkins/Jenkinsfile.widget-frontend
+// 사전 준비: Manage Jenkins → Credentials → SSH Username with private key (ID: dev-server-ssh)
+//
+// widget-demo 는 nginx + 정적 파일 볼륨 마운트이므로 별도 빌드 없이 재시작만 수행
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'BRANCH', defaultValue: 'main', description: '배포할 브랜치')
+    }
+
+    environment {
+        DEPLOY_USER  = 'largeai'
+        DEPLOY_HOST  = '59.29.231.14'
+        DEPLOY_PORT  = '17222'
+        WORK_DIR     = '/home/largeai/ragvault'
+        COMPOSE_CMD  = 'docker compose -f infra/compose.dev.yml --env-file infra/.env.dev'
+    }
+
+    stages {
+        stage('Pull') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh']) {
+                    sh "ssh -p ${DEPLOY_PORT} ${DEPLOY_USER}@${DEPLOY_HOST} 'cd ${WORK_DIR} && git fetch origin && git checkout ${params.BRANCH} && git pull origin ${params.BRANCH}'"
+                }
+            }
+        }
+        stage('Build') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh']) {
+                    // widget-admin 만 Docker 이미지 빌드 (widget-demo 는 stock nginx)
+                    sh "ssh -p ${DEPLOY_PORT} ${DEPLOY_USER}@${DEPLOY_HOST} 'cd ${WORK_DIR} && ${COMPOSE_CMD} build widget-admin'"
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh']) {
+                    sh "ssh -p ${DEPLOY_PORT} ${DEPLOY_USER}@${DEPLOY_HOST} 'cd ${WORK_DIR} && ${COMPOSE_CMD} up -d --no-deps widget-admin widget-demo'"
+                }
+            }
+        }
+        stage('Verify') {
+            steps {
+                sshagent(credentials: ['dev-server-ssh']) {
+                    sh "ssh -p ${DEPLOY_PORT} ${DEPLOY_USER}@${DEPLOY_HOST} 'cd ${WORK_DIR} && ${COMPOSE_CMD} ps widget-admin widget-demo'"
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            sshagent(credentials: ['dev-server-ssh']) {
+                sh "ssh -p ${DEPLOY_PORT} ${DEPLOY_USER}@${DEPLOY_HOST} 'cd ${WORK_DIR} && ${COMPOSE_CMD} logs --tail=100 widget-admin widget-demo'"
+            }
+        }
+    }
+}
