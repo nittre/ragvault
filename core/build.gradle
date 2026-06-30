@@ -14,6 +14,8 @@ java {
 
 repositories {
     mavenCentral()
+    // opendataloader-pdf-core 의 verapdf 의존성 저장소
+    maven { url 'https://artifactory.openpreservation.org/artifactory/vera-dev' }
 }
 
 ext {
@@ -57,4 +59,11 @@ dependencies {
     api 'org.apache.sshd:sshd-core:2.13.2'
     api 'org.bouncycastle:bcpkix-jdk18on:1.78.1'
     api 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+
+    // 멀티포맷 문서 파싱 (DocumentParser 계층)
+    // Office/CSV/TXT → 텍스트 + 임베디드 이미지 추출 (Tika + POI)
+    api 'org.apache.tika:tika-core:2.9.2'
+    api 'org.apache.tika:tika-parsers-standard-package:2.9.2'
+    // PDF → Markdown(표 구조 보존) + 이미지 (opendataloader-pdf, Apache 2.0)
+    api 'org.opendataloader:opendataloader-pdf-core:1.11.0'
 }
