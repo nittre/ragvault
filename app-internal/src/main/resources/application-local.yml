@@ -37,3 +37,5 @@ rag:
   vlm:
     # chat과 동일 모델로 통합 → Ollama가 모델 1개만 로드(이미지↔SQL 전환 시 재로드 없음).
     model: qwen2.5vl:7b
+  knowledge:
+    vision-model: qwen2.5vl:7b

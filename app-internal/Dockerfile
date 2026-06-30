@@ -23,7 +23,9 @@ RUN cd app-internal && ./gradlew clean build -x test --no-daemon
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-RUN addgroup -S raggroup && adduser -S raguser -G raggroup
+RUN addgroup -S raggroup && adduser -S raguser -G raggroup && \
+    mkdir -p /app/knowledge-internal && \
+    chown raguser:raggroup /app/knowledge-internal
 USER raguser
 
 COPY --from=builder /workspace/app-internal/build/libs/*.jar app.jar

@@ -26,7 +26,7 @@ spring:
       chat:
         options:
           timeout: 600
-          model: ${WIDGET_CHAT_MODEL:qwen2.5:3b}
+          model: ${WIDGET_CHAT_MODEL:qwen2.5vl:7b}
       embedding:
         options:
           timeout: 600
@@ -78,7 +78,7 @@ widget:
     directory: ${WIDGET_KNOWLEDGE_DIR:knowledge}
     auto-load: ${WIDGET_KNOWLEDGE_AUTO_LOAD:true}
     # 이미지 캡셔닝용 비전 모델 (비어 있으면 캡셔닝 건너뜀)
-    vision-model: ${WIDGET_VISION_MODEL:}
+    vision-model: ${WIDGET_VISION_MODEL:qwen2.5vl:7b}
 
   # RAG 검색 파라미터
   search:

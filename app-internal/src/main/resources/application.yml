@@ -59,7 +59,7 @@ spring.ai.ollama:
   chat:
     options:
       timeout: 600
-      model: "qwen2.5:3b"
+      model: "qwen2.5vl:7b"
   embedding:
     options:
       timeout: 600
@@ -98,9 +98,12 @@ rag:
     # 생성: openssl rand -base64 32
     enc-key: ${RAG_DATASOURCE_ENC_KEY:}
   chat:
-    model: "qwen2.5:3b"
+    model: "qwen2.5vl:7b"
   vlm:
-    model: "qwen2.5:3b"
+    model: "qwen2.5vl:7b"
+  knowledge:
+    directory: ${RAG_KNOWLEDGE_DIR:knowledge-internal}
+    vision-model: ${RAG_KNOWLEDGE_VISION_MODEL:}
   storage:
     s3:
       bucket: ${RAG_S3_BUCKET:rag-files-bucket}

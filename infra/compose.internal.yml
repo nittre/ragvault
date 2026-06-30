@@ -127,6 +127,9 @@ services:
       BOOTSTRAP_API_KEY: ${RAG_BACKEND_API_KEY:-dev-api-key-change-in-prod}
       RAG_HYBRID_TIMEOUT_SEC: "600"
       RAG_SEARXNG_URL: http://searxng:8080
+      RAG_KNOWLEDGE_VISION_MODEL: qwen2.5vl:7b
+    volumes:
+      - internal_knowledge_data:/app/knowledge-internal
     depends_on:
       pgvector:
         condition: service_healthy
@@ -173,7 +176,8 @@ volumes:
   redis_data:
   mysql_data:
   mariadb_board_data:
+  internal_knowledge_data:
 
 networks:
   rag-net:
-    driver: bridge
+    external: true
