@@ -207,7 +207,7 @@ public class KnowledgeAdminController {
             chunkRepository.deleteBySourceTableAndSourceId("knowledge_doc", name);
             auditLog(auth, "KNOWLEDGE_DELETE", name, httpReq);
             return ResponseEntity.ok(Map.of("name", name, "status", "deleted"));
-        } catch (IOException e) {
+        } catch (Exception e) {
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", "파일 삭제 실패: " + e.getMessage()));
         }
