@@ -203,7 +203,7 @@ export default function MessageInput({ onSend, disabled, history = [] }: Message
       )}
 
       <div className="flex items-end gap-2">
-        <input ref={fileInputRef} type="file" accept="*/*" multiple className="hidden" onChange={handleFileChange} />
+        <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.txt,.md,.csv" multiple className="hidden" onChange={handleFileChange} />
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={disabled}

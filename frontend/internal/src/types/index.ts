@@ -9,6 +9,7 @@ export interface Message {
   citations?: CitationSource[]; intent?: Intent; responseId?: string
   generatedSql?: string | null; sourceUrls?: string[] | null; timestamp: number; elapsedMs?: number
   routingHint?: 'FORCE_RAG' | 'FORCE_WEB' | 'FORCE_SQL'
+  attachedFileNames?: string[]
 }
 export interface Conversation { id: string; title: string; createdAt: number; updatedAt: number; pinned?: boolean }
 export interface RagParams {

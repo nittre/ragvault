@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Clock, Download } from 'lucide-react'
+import { Clock, Download, Paperclip } from 'lucide-react'
 import type { Message, Intent } from '../../types'
 import CitationCard from './CitationCard'
 
@@ -84,6 +84,18 @@ export default function MessageList({ messages, isLoading, loadingStartTime }: M
                   : msg.routingHint === 'FORCE_SQL' ? '📊 /sql'
                   : '📄 /rag'}
               </span>
+            )}
+
+            {/* 첨부 파일 칩 (user) */}
+            {msg.role === 'user' && msg.attachedFileNames && msg.attachedFileNames.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-1.5">
+                {msg.attachedFileNames.map((name, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 text-xs bg-white/20 text-white rounded-full px-2 py-0.5">
+                    <Paperclip size={10} />
+                    <span className="max-w-[120px] truncate">{name}</span>
+                  </span>
+                ))}
+              </div>
             )}
 
             {/* intent 배지 */}

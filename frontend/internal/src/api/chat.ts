@@ -12,7 +12,7 @@ interface ChatResponse {
   choices: Array<{ index: number; message: ChatMessage; finish_reason: string }>
   citations: CitationSource[]; intent: Intent; responseId: string; generatedSql?: string | null; sourceUrls?: string[] | null
 }
-export interface FileUploadResponse { id: string; filename: string; size: number }
+export interface FileUploadResponse { id: string; object: string; status: string; token_count: number }
 
 export const sendMessage = (req: ChatRequest) =>
   apiClient.post<ChatResponse>('/v1/chat/completions', req).then(r => r.data)

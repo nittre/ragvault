@@ -36,6 +36,8 @@ export default function ChatPage() {
   const isLoading = activeConvId ? pendingConvIds.includes(activeConvId) : false
   const loadingStartTime = activeConvId ? (pendingStartTimes[activeConvId] ?? null) : null
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   // 대화방 타이틀 인라인 편집
   const [isTitleEditing, setIsTitleEditing] = useState(false)
@@ -95,12 +97,22 @@ export default function ChatPage() {
 
     // 파일 업로드
     const fileIds: string[] = []
-    for (const file of files) {
-      try {
-        const res = await uploadFile(file)
-        fileIds.push(res.id)
-      } catch {
-        // 파일 업로드 실패 시 무시하고 계속
+    const failedFiles: string[] = []
+    if (files.length > 0) {
+      setIsUploading(true)
+      setUploadError(null)
+      for (const file of files) {
+        try {
+          const res = await uploadFile(file)
+          fileIds.push(res.id)
+        } catch {
+          failedFiles.push(file.name)
+        }
+      }
+      setIsUploading(false)
+      if (failedFiles.length > 0) {
+        setUploadError(`업로드 실패: ${failedFiles.join(', ')}`)
+        if (fileIds.length === 0 && !text.trim()) return
       }
     }
 
@@ -111,6 +123,7 @@ export default function ChatPage() {
       content: text,
       timestamp: Date.now(),
       routingHint: routingHint as Message['routingHint'],
+      attachedFileNames: files.length > 0 ? files.map(f => f.name) : undefined,
     }
     addMessage(convId, userMsg)
 
@@ -262,10 +275,18 @@ export default function ChatPage() {
         {/* 메시지 영역 */}
         <MessageList messages={currentMessages} isLoading={isLoading} loadingStartTime={loadingStartTime} />
 
+        {/* 업로드 에러 배너 */}
+        {uploadError && (
+          <div className="mx-4 mb-1 px-3 py-2 bg-red-50 border border-red-200 text-red-600 text-xs rounded-lg flex items-center justify-between">
+            <span>{uploadError}</span>
+            <button onClick={() => setUploadError(null)} className="ml-3 text-red-400 hover:text-red-600">×</button>
+          </div>
+        )}
+
         {/* 입력 영역 */}
         <MessageInput
           onSend={handleSend}
-          disabled={isLoading}
+          disabled={isLoading || isUploading}
           history={currentMessages.filter(m => m.role === 'user').map(m => m.content)}
         />
       </div>
