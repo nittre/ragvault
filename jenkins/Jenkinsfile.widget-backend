@@ -38,7 +38,7 @@ pipeline {
 
         stage('Sync Configs') {
             steps {
-                sshagent(credentials: ['dev-server-ssh']) {
+                sshagent(credentials: ['dev-server-ssh-key']) {
                     sh "${RSYNC} --exclude='.env.dev' infra/ ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_DIR}/infra/"
                 }
             }
@@ -46,7 +46,7 @@ pipeline {
 
         stage('Transfer Image') {
             steps {
-                sshagent(credentials: ['dev-server-ssh']) {
+                sshagent(credentials: ['dev-server-ssh-key']) {
                     sh "docker save ${IMAGE} | gzip | ssh -p ${DEPLOY_PORT} -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} 'gunzip | docker load'"
                 }
             }
@@ -54,7 +54,7 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                sshagent(credentials: ['dev-server-ssh']) {
+                sshagent(credentials: ['dev-server-ssh-key']) {
                     sh "${SSH} '${COMPOSE_CMD} up -d --no-deps ${SERVICE}'"
                 }
             }
@@ -62,7 +62,7 @@ pipeline {
 
         stage('Verify') {
             steps {
-                sshagent(credentials: ['dev-server-ssh']) {
+                sshagent(credentials: ['dev-server-ssh-key']) {
                     sh "${SSH} '${COMPOSE_CMD} ps ${SERVICE}'"
                 }
             }
@@ -71,7 +71,7 @@ pipeline {
 
     post {
         failure {
-            sshagent(credentials: ['dev-server-ssh']) {
+            sshagent(credentials: ['dev-server-ssh-key']) {
                 sh "${SSH} '${COMPOSE_CMD} logs --tail=100 ${SERVICE}'"
             }
         }

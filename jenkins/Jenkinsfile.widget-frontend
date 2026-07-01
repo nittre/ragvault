@@ -37,7 +37,7 @@ pipeline {
 
         stage('Sync Configs & Static Files') {
             steps {
-                sshagent(credentials: ['dev-server-ssh']) {
+                sshagent(credentials: ['dev-server-ssh-key']) {
                     // infra 설정 동기화
                     sh "${RSYNC} --exclude='.env.dev' infra/ ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_DIR}/infra/"
                     // widget-demo 정적파일 동기화 (widget-embed는 빌드 불필요한 순수 정적 파일)
@@ -48,7 +48,7 @@ pipeline {
 
         stage('Transfer Image') {
             steps {
-                sshagent(credentials: ['dev-server-ssh']) {
+                sshagent(credentials: ['dev-server-ssh-key']) {
                     sh "docker save ${IMAGE} | gzip | ssh -p ${DEPLOY_PORT} -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} 'gunzip | docker load'"
                 }
             }
@@ -56,7 +56,7 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                sshagent(credentials: ['dev-server-ssh']) {
+                sshagent(credentials: ['dev-server-ssh-key']) {
                     sh "${SSH} '${COMPOSE_CMD} up -d --no-deps widget-admin widget-demo'"
                 }
             }
@@ -64,7 +64,7 @@ pipeline {
 
         stage('Verify') {
             steps {
-                sshagent(credentials: ['dev-server-ssh']) {
+                sshagent(credentials: ['dev-server-ssh-key']) {
                     sh "${SSH} '${COMPOSE_CMD} ps widget-admin widget-demo'"
                 }
             }
@@ -73,7 +73,7 @@ pipeline {
 
     post {
         failure {
-            sshagent(credentials: ['dev-server-ssh']) {
+            sshagent(credentials: ['dev-server-ssh-key']) {
                 sh "${SSH} '${COMPOSE_CMD} logs --tail=100 widget-admin widget-demo'"
             }
         }
