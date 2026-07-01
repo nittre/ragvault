@@ -1,7 +1,7 @@
 spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL:?SPRING_DATASOURCE_URL를 .env.dev에 설정하세요}
-    username: ${SPRING_DATASOURCE_USERNAME:-raguser}
+    username: ${SPRING_DATASOURCE_USERNAME:raguser}
     password: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD를 .env.dev에 설정하세요}
   data:
     redis:
