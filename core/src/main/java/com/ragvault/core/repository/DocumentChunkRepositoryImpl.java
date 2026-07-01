@@ -6,9 +6,7 @@ import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * pgvector 코사인 유사도 검색 + 청크 UPSERT/DELETE — EntityManager 직접 사용.
@@ -40,7 +38,6 @@ public class DocumentChunkRepositoryImpl implements DocumentChunkRepositoryCusto
      *   - <=> : pgvector 코사인 거리 연산자 (0=동일, 2=반대)
      *   - (embedding <=> ...) < (1 - threshold): 거리 임계값 필터
      *     (cosine_distance = 1 - cosine_similarity)
-     *   - access_groups && ARRAY['all']: Phase 0 그룹 필터 (ADR-0002)
      *
      * @param embeddingJson "[0.1, 0.2, ...]" 형식의 JSON 배열 문자열
      * @param threshold     코사인 유사도 최소값 (0.0~1.0, 기본 0.65)
@@ -49,18 +46,15 @@ public class DocumentChunkRepositoryImpl implements DocumentChunkRepositoryCusto
      */
     @Override
     @SuppressWarnings("unchecked")
-    public List<Object[]> findSimilarChunks(String embeddingJson, double threshold, int topK, String[] allowedGroups) {
-        // allowedGroups는 AccessPolicy 구현체의 하드코딩 상수에서만 옴 — 사용자 입력 아님
-        String groupsLiteral = buildGroupsArray(allowedGroups);
+    public List<Object[]> findSimilarChunks(String embeddingJson, double threshold, int topK) {
         String sql = """
                 SELECT content, source_table, source_id,
                        CAST(1 - (embedding <=> CAST(:embedding AS vector)) AS double precision) AS score
                 FROM document_chunks
                 WHERE (embedding <=> CAST(:embedding AS vector)) < CAST(:maxDistance AS double precision)
-                  AND access_groups && %s
                 ORDER BY embedding <=> CAST(:embedding AS vector)
                 LIMIT :topK
-                """.formatted(groupsLiteral);
+                """;
 
         Query query = entityManager.createNativeQuery(sql)
                 .setParameter("embedding", embeddingJson)
@@ -68,15 +62,6 @@ public class DocumentChunkRepositoryImpl implements DocumentChunkRepositoryCusto
                 .setParameter("topK", topK);
 
         return query.getResultList();
-    }
-
-    private String buildGroupsArray(String[] allowedGroups) {
-        if (allowedGroups == null || allowedGroups.length == 0) {
-            return "ARRAY['all']";
-        }
-        return Arrays.stream(allowedGroups)
-                .map(g -> "'" + g.replace("'", "''") + "'")
-                .collect(Collectors.joining(",", "ARRAY[", "]"));
     }
 
     /**
@@ -91,12 +76,12 @@ public class DocumentChunkRepositoryImpl implements DocumentChunkRepositoryCusto
         String sql = """
                 INSERT INTO document_chunks
                     (source_table, source_id, source_type, chunk_index, content, content_hash,
-                     token_count, embedding, embedding_model, tokenizer_model, metadata, access_groups,
+                     token_count, embedding, embedding_model, tokenizer_model, metadata,
                      created_at, updated_at)
                 VALUES
                     (:sourceTable, :sourceId, :sourceType, :chunkIndex, :content, :contentHash,
                      :tokenCount, CAST(:embedding AS vector), :embeddingModel, :tokenizerModel,
-                     CAST(:metadata AS jsonb), ARRAY['all'], NOW(), NOW())
+                     CAST(:metadata AS jsonb), NOW(), NOW())
                 ON CONFLICT (source_table, source_id, chunk_index, embedding_model)
                 DO UPDATE SET
                     content = EXCLUDED.content,

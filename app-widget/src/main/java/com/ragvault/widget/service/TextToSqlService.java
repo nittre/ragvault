@@ -3,7 +3,6 @@ package com.ragvault.widget.service;
 import com.ragvault.core.service.SchemaInspectorService;
 import com.ragvault.core.service.SqlExecutorService;
 import com.ragvault.core.service.SqlValidator;
-import com.ragvault.core.service.DataSourceConfigService;
 import com.ragvault.core.service.RagTableConfigService;
 import com.ragvault.core.service.SensitivityAnalysisService;
 import com.ragvault.core.service.RagColumnSuggestionService;
@@ -13,9 +12,7 @@ import com.ragvault.core.service.DataSourceRouterService;
 import com.ragvault.core.service.RoutingEmbeddingService;
 import com.ragvault.core.service.QueryIntent;
 
-import com.ragvault.core.domain.DataSourceConfig;
 import com.ragvault.core.domain.SqlExecutionLog;
-import com.ragvault.core.policy.AccessPolicy;
 import com.ragvault.core.domain.SqlTableConfig;
 import com.ragvault.core.repository.SqlExecutionLogRepository;
 import com.ragvault.core.repository.SqlTableConfigRepository;
@@ -60,8 +57,6 @@ public class TextToSqlService {
     private final SqlTableConfigRepository sqlTableConfigRepository;
     private final SqlExecutionLogRepository sqlExecutionLogRepository;
     private final DataSourceRouterService dataSourceRouter;
-    private final DataSourceConfigService dataSourceConfigService;
-    private final AccessPolicy accessPolicy;
 
     private static final int PREVIEW_ROWS = 50;
     private static final int TABLE_CELL_MAX_LEN = 80;
@@ -95,12 +90,6 @@ public class TextToSqlService {
             return SqlQueryResult.denied("등록된 데이터소스가 없습니다. 관리자에게 문의하세요.");
         }
         log.debug("Routed to datasourceId={}", datasourceId);
-
-        DataSourceConfig routedDs = dataSourceConfigService.findById(datasourceId);
-        if (!accessPolicy.canAccess(routedDs)) {
-            log.warn("AccessPolicy denied datasourceId={} isInternal={}", datasourceId, routedDs.isInternal());
-            return SqlQueryResult.denied("이 데이터소스에 접근할 권한이 없습니다.");
-        }
 
         Map<String, List<SchemaInspectorService.ColumnInfo>> schema =
                 schemaInspector.getSchemaForActiveTables(datasourceId);

@@ -1,7 +1,6 @@
 package com.ragservice.rag.service;
 
 import com.ragvault.core.domain.DocumentChunk.ChunkResult;
-import com.ragvault.core.policy.AccessPolicy;
 import com.ragservice.rag.dto.MessageDto;
 import com.ragvault.core.repository.DocumentChunkRepository;
 import com.ragservice.rag.security.InputValidator;
@@ -23,7 +22,7 @@ import java.util.stream.IntStream;
  * 처리 흐름:
  * 1. 입력 검증 (InputValidator)
  * 2. 임베딩 생성 (OllamaEmbeddingModel — Spring AI auto-config)
- * 3. pgvector 코사인 유사도 검색 (access_groups && ARRAY['all'], ADR-0002)
+ * 3. pgvector 코사인 유사도 검색 (ADR-0002)
  * 4. 컨텍스트 포맷팅
  * 5. LLM 호출 (ChatClient — Spring AI, ADR-0004)
  * 6. PII 마스킹 (ADR-0008)
@@ -41,7 +40,6 @@ public class RagService {
     private final DocumentChunkRepository chunkRepository;
     private final PiiMasker piiMasker;
     private final InputValidator inputValidator;
-    private final AccessPolicy accessPolicy;
 
     @Value("${rag.prompts.system}")
     private String systemPrompt;
@@ -80,8 +78,8 @@ public class RagService {
         float[] embedding = embeddingModel.embed(userMessage);
         String embeddingJson = toJsonArray(embedding);
 
-        // 3. pgvector 검색 (AccessPolicy 기반 access_groups 필터)
-        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, defaultThreshold, defaultTopK, accessPolicy.allowedAccessGroups());
+        // 3. pgvector 검색
+        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, defaultThreshold, defaultTopK);
         List<ChunkResult> chunks = rows.stream()
                 .map(r -> new ChunkResult(
                         (String) r[0],

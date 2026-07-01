@@ -54,10 +54,6 @@ public class DataSourceConfig {
     @Column(name = "is_active")
     private boolean isActive = true;
 
-    @Builder.Default
-    @Column(name = "is_internal")
-    private boolean isInternal = false;
-
     // ── SSH 터널 설정 ─────────────────────────────────────────────────────────
 
     @Builder.Default

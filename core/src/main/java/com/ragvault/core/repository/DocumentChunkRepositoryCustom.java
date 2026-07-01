@@ -18,15 +18,13 @@ public interface DocumentChunkRepositoryCustom {
     /**
      * pgvector 코사인 유사도 검색.
      *
-     * - access_groups && allowedGroups 필터 적용 (AccessPolicy 기반)
      * - embedding: "[0.1, 0.2, ...]" JSON 배열 문자열
      * - threshold: 코사인 유사도 최소값 (similarity >= threshold)
      * - topK: 반환할 최대 청크 수
-     * - allowedGroups: 허용할 access_groups (예: ["all"] 또는 ["all","internal"])
      *
      * @return Object[] 리스트: [content(String), source_table(String), source_id(String), score(Double)]
      */
-    List<Object[]> findSimilarChunks(String embeddingJson, double threshold, int topK, String[] allowedGroups);
+    List<Object[]> findSimilarChunks(String embeddingJson, double threshold, int topK);
 
     /**
      * 청크 UPSERT — content_hash가 변경된 경우에만 업데이트 (ADR-0001 멱등성).

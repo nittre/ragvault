@@ -9,7 +9,6 @@ import java.time.Instant;
  * document_chunks 테이블 엔티티 (M2 스펙).
  *
  * embedding(vector(1024))은 JPA 직접 매핑 불가 — native query에서만 처리.
- * access_groups(TEXT[])도 JPA 매핑 제외 — native query에서 처리 (ADR-0002).
  *
  * LL-0006: pgvector 전용 컬럼은 @Transient 또는 필드 제외.
  */

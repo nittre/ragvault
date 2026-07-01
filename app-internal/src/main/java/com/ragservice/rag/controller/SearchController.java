@@ -1,6 +1,5 @@
 package com.ragservice.rag.controller;
 
-import com.ragvault.core.policy.AccessPolicy;
 import com.ragvault.core.repository.DocumentChunkRepository;
 import com.ragvault.core.security.PiiMasker;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +23,6 @@ import java.util.Map;
  *
  * 인증: Bearer API Key (api:chat scope, ApiKeyAuthFilter 적용).
  * PII 마스킹: 응답에 ADR-0008 적용.
- * access_groups: 현재 Phase 0 — ARRAY['all'] 필터.
  */
 @Slf4j
 @RestController
@@ -35,7 +33,6 @@ public class SearchController {
     private final OllamaEmbeddingModel embeddingModel;
     private final DocumentChunkRepository chunkRepository;
     private final PiiMasker piiMasker;
-    private final AccessPolicy accessPolicy;
 
     @Value("${rag.search.default-top-k:5}")
     private int defaultTopK;
@@ -61,9 +58,9 @@ public class SearchController {
         float[] embedding = embeddingModel.embed(q);
         String embeddingJson = toJsonArray(embedding);
 
-        // 2. pgvector 코사인 유사도 검색 (access_groups 필터 포함)
+        // 2. pgvector 코사인 유사도 검색
         int limit = Math.min(topK, defaultTopK * 2);
-        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, defaultThreshold, limit, accessPolicy.allowedAccessGroups());
+        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, defaultThreshold, limit);
 
         // 3. PII 마스킹 + 응답 변환 (ADR-0008)
         // DocumentChunkRepositoryImpl 반환 순서: [content, source_table, source_id, score]

@@ -1,7 +1,6 @@
 package com.ragvault.widget.service;
 
 import com.ragvault.core.domain.DocumentChunk.ChunkResult;
-import com.ragvault.core.policy.AccessPolicy;
 import com.ragvault.core.repository.DocumentChunkRepository;
 import com.ragvault.widget.security.InputValidator;
 import com.ragvault.core.security.PiiMasker;
@@ -22,7 +21,7 @@ import java.util.stream.IntStream;
  * 처리 흐름:
  * 1. 입력 검증 (InputValidator — prompt injection 차단)
  * 2. 임베딩 생성 (OllamaEmbeddingModel)
- * 3. pgvector 코사인 유사도 검색 (access_groups && ARRAY['all'])
+ * 3. pgvector 코사인 유사도 검색
  * 4. 유사도 임계 미만 → fallback 응답 (환각 방지)
  * 5. 컨텍스트 포맷팅
  * 6. LLM 호출 (ChatClient — Spring AI)
@@ -42,7 +41,6 @@ public class WidgetRagService {
     private final InputValidator inputValidator;
     private final ConversationLogService conversationLogService;
     private final SearchConfigService searchConfigService;
-    private final AccessPolicy accessPolicy;
 
     @Value("${widget.prompts.system}")
     private String systemPrompt;
@@ -84,8 +82,8 @@ public class WidgetRagService {
         float[] embedding = embeddingModel.embed(userMessage);
         String embeddingJson = toJsonArray(embedding);
 
-        // 3. pgvector 검색 (AccessPolicy 기반 access_groups 필터)
-        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, threshold, topK, accessPolicy.allowedAccessGroups());
+        // 3. pgvector 검색
+        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, threshold, topK);
         List<ChunkResult> chunks = rows.stream()
                 .map(r -> new ChunkResult(
                         (String) r[0],
