@@ -1,19 +1,16 @@
 # ragvault — 개발서버 전용 compose
 #
-# 로컬(compose.base/internal/widget.yml)과 달리:
-#   - ollama 컨테이너 없음 (개발서버에 직접 설치, host:11434 접근)
-#   - 샘플 데이터소스 DB 없음 (mysql-sample, mariadb-board, shop-mariadb)
-#   - 포트 개발서버 규격으로 재설정
+# 이미지는 Jenkins가 빌드 후 전송 — 개발서버에서 직접 빌드하지 않음
+# build: 섹션 없음. Jenkins가 docker save | ssh docker load 로 이미지를 전달함
 #
-# 사전 준비:
+# 사전 준비 (최초 1회):
 #   docker network create rag-net
 #   cp infra/.env.dev.example infra/.env.dev  # 값 채워 넣기
 #
 # 전체 스택 기동:
 #   docker compose -f infra/compose.dev.yml --env-file infra/.env.dev up -d
 #
-# 개별 서비스 재배포:
-#   docker compose -f infra/compose.dev.yml --env-file infra/.env.dev build <service>
+# 개별 서비스 재시작 (이미지 전송 후):
 #   docker compose -f infra/compose.dev.yml --env-file infra/.env.dev up -d --no-deps <service>
 
 services:
@@ -77,9 +74,6 @@ services:
 
   # 챗 백엔드 — 18090:8080
   app-internal:
-    build:
-      context: ..
-      dockerfile: app-internal/Dockerfile
     image: app-internal:latest
     container_name: app-internal
     ports:
@@ -120,9 +114,6 @@ services:
 
   # 챗 프론트엔드 — 18080:80
   rag-frontend:
-    build:
-      context: ../frontend/internal
-      dockerfile: Dockerfile
     image: rag-frontend:latest
     container_name: rag-frontend
     ports:
@@ -142,9 +133,6 @@ services:
 
   # 위젯 백엔드 — 18091:8081
   app-widget:
-    build:
-      context: ..
-      dockerfile: app-widget/Dockerfile
     image: app-widget:latest
     container_name: app-widget
     ports:
@@ -182,9 +170,6 @@ services:
 
   # 위젯 어드민 프론트엔드 — 18082:80
   widget-admin:
-    build:
-      context: ../frontend/widget-admin
-      dockerfile: Dockerfile
     image: widget-admin:latest
     container_name: widget-admin
     ports:
