@@ -17,7 +17,7 @@ RUN cd app-internal && ./gradlew dependencies --no-daemon --quiet || true
 # 소스 복사 후 빌드
 COPY core/src core/src
 COPY app-internal/src app-internal/src
-RUN cd app-internal && ./gradlew clean build -x test --no-daemon
+RUN cd app-internal && ./gradlew clean bootJar -x test --no-daemon
 
 # Run Stage
 FROM eclipse-temurin:21-jre-alpine
