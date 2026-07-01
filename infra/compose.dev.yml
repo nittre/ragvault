@@ -81,9 +81,9 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      SPRING_PROFILES_ACTIVE: local
-      # 호스트 ollama 컨테이너(8076)로 연결 — application-local.yml 하드코딩값 오버라이드
+      SPRING_PROFILES_ACTIVE: dev
       SPRING_AI_OLLAMA_BASE_URL: http://host.docker.internal:8076
+      SPRING_DATASOURCE_URL: jdbc:postgresql://pgvector:5432/ragdb
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-ragpassword}
       RAG_AUTH_JWT_SECRET: ${RAG_AUTH_JWT_SECRET:?RAG_AUTH_JWT_SECRET 를 설정하세요 (openssl rand -hex 32)}
       RAG_DATASOURCE_ENC_KEY: ${RAG_DATASOURCE_ENC_KEY:?RAG_DATASOURCE_ENC_KEY 를 설정하세요 (openssl rand -base64 32)}
