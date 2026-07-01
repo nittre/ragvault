@@ -69,6 +69,7 @@ services:
         pull() { until ollama pull "$$1"; do echo "retrying $$1..."; sleep 5; done; }
         pull bge-m3
         pull qwen2.5:3b
+        pull qwen2.5vl:7b
     networks:
       - rag-net
     restart: "no"
