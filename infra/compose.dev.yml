@@ -82,8 +82,8 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       SPRING_PROFILES_ACTIVE: local
-      # 호스트 ollama(11434)로 연결 — application-local.yml 하드코딩값 오버라이드
-      SPRING_AI_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # 호스트 ollama 컨테이너(8076)로 연결 — application-local.yml 하드코딩값 오버라이드
+      SPRING_AI_OLLAMA_BASE_URL: http://host.docker.internal:8076
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-ragpassword}
       RAG_AUTH_JWT_SECRET: ${RAG_AUTH_JWT_SECRET:?RAG_AUTH_JWT_SECRET 를 설정하세요 (openssl rand -hex 32)}
       RAG_DATASOURCE_ENC_KEY: ${RAG_DATASOURCE_ENC_KEY:?RAG_DATASOURCE_ENC_KEY 를 설정하세요 (openssl rand -base64 32)}
@@ -143,7 +143,7 @@ services:
       WIDGET_DB_URL: jdbc:postgresql://pgvector:5432/widget_db
       WIDGET_DB_USERNAME: widget
       WIDGET_DB_PASSWORD: ${WIDGET_DB_PASSWORD:-widget}
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_BASE_URL: http://host.docker.internal:8076
       WIDGET_AUTH_JWT_SECRET: ${WIDGET_AUTH_JWT_SECRET:?WIDGET_AUTH_JWT_SECRET 를 설정하세요 (openssl rand -hex 32)}
       WIDGET_ENCRYPTION_KEY: ${WIDGET_ENCRYPTION_KEY:?WIDGET_ENCRYPTION_KEY 를 설정하세요 (openssl rand -base64 32)}
       WIDGET_ALLOWED_SITE_KEYS: ${WIDGET_ALLOWED_SITE_KEYS:-pk_test_widget_dev}
