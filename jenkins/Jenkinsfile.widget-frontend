@@ -39,7 +39,7 @@ pipeline {
                 sshagent(credentials: ['dev-server-ssh-key']) {
                     sh """
                         ${SSH} 'mkdir -p ${DEPLOY_DIR}/frontend'
-                        tar czf - --exclude='infra/.env.dev' infra/ | \
+                        tar czf - --exclude='infra/.env.dev' --exclude='infra/internal/searxng' infra/ | \
                             ${SSH} 'cd ${DEPLOY_DIR} && tar xzf - --overwrite --touch'
                         tar czf - frontend/widget-embed/ | \
                             ${SSH} 'cd ${DEPLOY_DIR} && tar xzf - --overwrite --touch'

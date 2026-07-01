@@ -41,7 +41,7 @@ pipeline {
                     // .env.dev 는 개발서버에서 직접 관리 — 덮어쓰지 않음
                     sh """
                         ${SSH} 'mkdir -p ${DEPLOY_DIR}'
-                        tar czf - --exclude='infra/.env.dev' infra/ | \
+                        tar czf - --exclude='infra/.env.dev' --exclude='infra/internal/searxng' infra/ | \
                             ${SSH} 'cd ${DEPLOY_DIR} && tar xzf - --overwrite --touch'
                     """
                 }
