@@ -24,7 +24,7 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 COPY --from=builder /workspace/app-widget/build/libs/*.jar app.jar
-COPY app-widget/knowledge knowledge
+RUN mkdir -p knowledge
 
 EXPOSE 8081
 
