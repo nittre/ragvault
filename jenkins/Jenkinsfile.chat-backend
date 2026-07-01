@@ -42,7 +42,7 @@ pipeline {
                     sh """
                         ${SSH} 'mkdir -p ${DEPLOY_DIR}'
                         tar czf - --exclude='infra/.env.dev' infra/ | \
-                            ${SSH} 'cd ${DEPLOY_DIR} && tar xzf -'
+                            ${SSH} 'cd ${DEPLOY_DIR} && tar xzf - --overwrite --touch'
                     """
                 }
             }

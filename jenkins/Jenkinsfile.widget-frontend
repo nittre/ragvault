@@ -40,9 +40,9 @@ pipeline {
                     sh """
                         ${SSH} 'mkdir -p ${DEPLOY_DIR}/frontend'
                         tar czf - --exclude='infra/.env.dev' infra/ | \
-                            ${SSH} 'cd ${DEPLOY_DIR} && tar xzf -'
+                            ${SSH} 'cd ${DEPLOY_DIR} && tar xzf - --overwrite --touch'
                         tar czf - frontend/widget-embed/ | \
-                            ${SSH} 'cd ${DEPLOY_DIR} && tar xzf -'
+                            ${SSH} 'cd ${DEPLOY_DIR} && tar xzf - --overwrite --touch'
                     """
                 }
             }
