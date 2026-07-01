@@ -92,6 +92,8 @@ services:
       BOOTSTRAP_API_KEY: ${RAG_BACKEND_API_KEY:-dev-api-key-change-in-prod}
       RAG_HYBRID_TIMEOUT_SEC: "600"
       RAG_SEARXNG_URL: http://searxng:8080
+      RAG_CHAT_MODEL: qwen3:8b
+      RAG_VLM_MODEL: ""
       RAG_KNOWLEDGE_VISION_MODEL: ""
     volumes:
       - internal_knowledge_data:/app/knowledge-internal
