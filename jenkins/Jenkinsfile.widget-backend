@@ -14,7 +14,6 @@ pipeline {
         DEPLOY_DIR   = '/home/largeai/ragvault'
         COMPOSE_CMD  = "docker compose -f /home/largeai/ragvault/infra/compose.dev.yml --env-file /home/largeai/ragvault/infra/.env.dev"
         SSH          = "ssh -p 17222 -o StrictHostKeyChecking=no largeai@59.29.231.14"
-        RSYNC        = "rsync -avz -e 'ssh -p 17222 -o StrictHostKeyChecking=no'"
         IMAGE        = 'app-widget:latest'
         SERVICE      = 'app-widget'
     }
@@ -39,7 +38,11 @@ pipeline {
         stage('Sync Configs') {
             steps {
                 sshagent(credentials: ['dev-server-ssh-key']) {
-                    sh "${RSYNC} --exclude='.env.dev' infra/ ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_DIR}/infra/"
+                    sh """
+                        ${SSH} 'mkdir -p ${DEPLOY_DIR}'
+                        tar czf - --exclude='infra/.env.dev' infra/ | \
+                            ${SSH} 'cd ${DEPLOY_DIR} && tar xzf -'
+                    """
                 }
             }
         }
@@ -47,7 +50,7 @@ pipeline {
         stage('Transfer Image') {
             steps {
                 sshagent(credentials: ['dev-server-ssh-key']) {
-                    sh "docker save ${IMAGE} | gzip | ssh -p ${DEPLOY_PORT} -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} 'gunzip | docker load'"
+                    sh "docker save ${IMAGE} | gzip | ${SSH} 'gunzip | docker load'"
                 }
             }
         }
@@ -72,7 +75,7 @@ pipeline {
     post {
         failure {
             sshagent(credentials: ['dev-server-ssh-key']) {
-                sh "${SSH} '${COMPOSE_CMD} logs --tail=100 ${SERVICE}'"
+                sh "${SSH} '${COMPOSE_CMD} logs --tail=100 ${SERVICE}' || true"
             }
         }
     }
