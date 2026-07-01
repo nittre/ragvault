@@ -59,7 +59,7 @@ pipeline {
         stage('Deploy') {
             steps {
                 sshagent(credentials: ['dev-server-ssh-key']) {
-                    sh "${SSH} 'docker network create rag-net 2>/dev/null || true && ${COMPOSE_CMD} up -d --no-deps widget-admin widget-demo'"
+                    sh "${SSH} 'docker network create rag-net 2>/dev/null || true && ${COMPOSE_CMD} up -d --no-deps --force-recreate widget-admin widget-demo'"
                 }
             }
         }
