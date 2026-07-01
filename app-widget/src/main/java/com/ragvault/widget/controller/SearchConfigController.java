@@ -13,10 +13,10 @@ import java.util.Map;
 /**
  * 검색 설정 Admin API.
  *
- * GET  /admin/search         → 전체 설정 목록
- * PUT  /admin/search/{key}   → 특정 설정값 수정
+ * GET  /api/admin/search         → 전체 설정 목록
+ * PUT  /api/admin/search/{key}   → 특정 설정값 수정
  *
- * /admin/** 는 SecurityConfig 에서 JWT 인증 필수로 보호됨.
+ * /api/admin/** 는 SecurityConfig 에서 JWT 인증 필수로 보호됨.
  */
 @Slf4j
 @RestController

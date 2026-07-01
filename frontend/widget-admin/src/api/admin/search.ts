@@ -10,4 +10,4 @@ export const getSearchConfig = () =>
   apiClient.get<SearchConfigItem[]>('/api/admin/search').then(r => r.data)
 
 export const updateSearchConfig = (key: string, value: string) =>
-  apiClient.put<SearchConfigItem>(`/admin/search/${key}`, { value }).then(r => r.data)
+  apiClient.put<SearchConfigItem>(`/api/admin/search/${key}`, { value }).then(r => r.data)

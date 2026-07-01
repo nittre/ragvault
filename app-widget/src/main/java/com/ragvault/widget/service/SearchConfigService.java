@@ -23,7 +23,7 @@ public class SearchConfigService {
 
     // 기본값 상수
     private static final int DEFAULT_TOP_K = 5;
-    private static final double DEFAULT_THRESHOLD = 0.60;
+    private static final double DEFAULT_THRESHOLD = 0.55;
     private static final String DEFAULT_NO_RESULTS =
             "죄송합니다, 해당 내용은 FAQ에서 찾을 수 없습니다. 다른 표현으로 질문하시거나 고객센터에 문의해 주세요.";
     private static final String DEFAULT_INJECTION_BLOCKED =
