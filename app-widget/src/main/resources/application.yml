@@ -37,6 +37,12 @@ server:
   error:
     include-message: never
 
+# OCR 엔진(core 공용 인프라) 설정 — widget.* 대신 app-internal과 동일한 rag.* 키를 공유한다.
+# TesseractOcrService/PdfOcrFallbackService(core 모듈)가 이 키를 읽는다.
+rag:
+  tesseract:
+    datapath: ${TESSERACT_DATAPATH:/usr/share/tessdata}
+
 management:
   endpoints:
     web:

@@ -23,6 +23,10 @@ RUN cd app-internal && ./gradlew clean bootJar -x test --no-daemon
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
+# PDF OCR 폴백(PdfOcrFallbackService) + TesseractOcrService 용
+RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-eng tesseract-ocr-data-kor
+ENV TESSERACT_DATAPATH=/usr/share/tessdata
+
 RUN addgroup -S raggroup && adduser -S raguser -G raggroup && \
     mkdir -p /app/knowledge-internal && \
     chown raguser:raggroup /app/knowledge-internal

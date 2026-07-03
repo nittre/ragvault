@@ -84,8 +84,7 @@ dependencies {
         exclude group: 'org.apache.tika', module: 'tika-parser-pdf-module'
     }
 
-    // M4: OCR (Tess4j — native Tesseract wrapper)
-    implementation 'net.sourceforge.tess4j:tess4j:5.12.0'
+    // M4: OCR (Tess4j) — core 모듈의 api 의존성으로 전이 제공됨 (TesseractOcrService 참고)
 
     // M4: AWS S3 (파일 임시 저장 24h)
     implementation platform('software.amazon.awssdk:bom:2.25.60')

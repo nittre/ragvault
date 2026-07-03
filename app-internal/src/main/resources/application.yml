@@ -111,7 +111,8 @@ rag:
       endpoint-override: ${S3_ENDPOINT_OVERRIDE:}
       force-path-style: ${S3_FORCE_PATH_STYLE:false}
   tesseract:
-    datapath: ${TESSERACT_DATAPATH:/usr/share/tesseract-ocr/4.00/tessdata}
+    # Alpine(tesseract-ocr apk 패키지)의 tessdata 설치 경로. Debian 계열(/usr/share/tesseract-ocr/4.00/tessdata)과 다름 — Dockerfile 참고.
+    datapath: ${TESSERACT_DATAPATH:/usr/share/tessdata}
   sql:
     query-timeout-sec: 10
     max-rows: 1000

@@ -70,4 +70,20 @@ dependencies {
     }
     // PDF → Markdown(표 구조 보존) + 이미지 (opendataloader-pdf, Apache 2.0)
     api 'org.opendataloader:opendataloader-pdf-core:1.11.0'
+
+    // OCR (Tess4j — native Tesseract wrapper). PDF 텍스트 추출 실패 시 페이지 렌더링 후 OCR 폴백,
+    // 및 TesseractOcrService(이미지 단독 OCR) 공용 — app-widget/app-internal 양쪽이 core를 통해 공유.
+    api 'net.sourceforge.tess4j:tess4j:5.12.0'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.assertj:assertj-core'
+    testImplementation 'org.mockito:mockito-core'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    // Tess4j(JNA)가 로컬 Homebrew/시스템 설치 위치의 네이티브 tesseract 라이브러리를
+    // 찾을 수 있도록 힌트를 준다 (없는 환경에서는 무해하게 무시됨).
+    systemProperty 'jna.library.path', '/opt/homebrew/lib:/usr/local/lib:/usr/lib'
 }

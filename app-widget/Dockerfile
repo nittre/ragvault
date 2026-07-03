@@ -23,6 +23,10 @@ RUN cd app-widget && ./gradlew bootJar --no-daemon -x test -q
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
+# PDF OCR 폴백(PdfOcrFallbackService, core 모듈 공용) 용
+RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-eng tesseract-ocr-data-kor
+ENV TESSERACT_DATAPATH=/usr/share/tessdata
+
 COPY --from=builder /workspace/app-widget/build/libs/*.jar app.jar
 RUN mkdir -p knowledge
 

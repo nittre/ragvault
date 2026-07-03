@@ -1,4 +1,4 @@
-package com.ragservice.rag.service;
+package com.ragvault.core.service;
 
 import lombok.extern.slf4j.Slf4j;
 import net.sourceforge.tess4j.Tesseract;
@@ -28,14 +28,25 @@ public class TesseractOcrServiceImpl implements TesseractOcrService {
     @Override
     public String ocr(byte[] imageBytes) {
         if (imageBytes == null || imageBytes.length == 0) return "";
+        try {
+            BufferedImage img = ImageIO.read(new ByteArrayInputStream(imageBytes));
+            if (img == null) return LOW_CONFIDENCE_MSG;
+            return ocr(img);
+        } catch (Exception e) {
+            log.error("OCR 예외", e);
+            return LOW_CONFIDENCE_MSG;
+        }
+    }
+
+    @Override
+    public String ocr(BufferedImage image) {
+        if (image == null) return "";
         Tesseract tess = new Tesseract();
         tess.setDatapath(tessDataPath);
         tess.setLanguage("kor+eng");
         tess.setPageSegMode(3);
         try {
-            BufferedImage img = ImageIO.read(new ByteArrayInputStream(imageBytes));
-            if (img == null) return LOW_CONFIDENCE_MSG;
-            String result = tess.doOCR(img);
+            String result = tess.doOCR(image);
             return (result == null || result.isBlank()) ? LOW_CONFIDENCE_MSG : result;
         } catch (TesseractException e) {
             log.warn("Tesseract OCR 실패: {}", e.getMessage());
