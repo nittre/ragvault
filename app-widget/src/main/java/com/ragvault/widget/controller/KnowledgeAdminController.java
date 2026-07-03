@@ -255,12 +255,25 @@ public class KnowledgeAdminController {
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(Map.of("name", originalName, "status", "uploaded"));
         } catch (IOException e) {
+            deleteQuietly(dest);
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", "파일 저장 실패: " + e.getMessage()));
-        } catch (Exception e) {
+        } catch (Throwable e) {
+            // 파싱 단계에서 던져지는 NoClassDefFoundError 등 Error 는 Exception 이 아니므로
+            // 별도로 잡아야 업로드 실패 시 디스크에 남은 파일을 정리할 수 있다.
+            deleteQuietly(dest);
             log.error("업로드 파일 인입 실패 '{}': {}", originalName, e.getMessage());
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", "파일 인입 실패: " + e.getMessage()));
+        }
+    }
+
+    /** 업로드 실패 시 디스크에 저장된 파일을 정리한다 (목록 조회는 파일 시스템 기준이므로 남으면 안 됨). */
+    private void deleteQuietly(Path path) {
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException e) {
+            log.warn("업로드 실패 후 파일 정리 실패 '{}': {}", path, e.getMessage());
         }
     }
 

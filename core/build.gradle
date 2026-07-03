@@ -62,8 +62,12 @@ dependencies {
 
     // 멀티포맷 문서 파싱 (DocumentParser 계층)
     // Office/CSV/TXT → 텍스트 + 임베디드 이미지 추출 (Tika + POI)
+    // PDF는 opendataloader-pdf-core(PDFBox 3.x)가 전담하므로, PDFBox 2.x API를 쓰는
+    // Tika의 PDF 모듈은 제외한다 (버전 충돌로 인한 NoClassDefFoundError 방지).
     api 'org.apache.tika:tika-core:2.9.2'
-    api 'org.apache.tika:tika-parsers-standard-package:2.9.2'
+    api('org.apache.tika:tika-parsers-standard-package:2.9.2') {
+        exclude group: 'org.apache.tika', module: 'tika-parser-pdf-module'
+    }
     // PDF → Markdown(표 구조 보존) + 이미지 (opendataloader-pdf, Apache 2.0)
     api 'org.opendataloader:opendataloader-pdf-core:1.11.0'
 }

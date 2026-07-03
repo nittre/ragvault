@@ -74,8 +74,7 @@ public class KnowledgeIngestionService {
         try {
             parsed = parserRouter.parse(bytes, filename);
         } catch (Exception e) {
-            log.error("문서 파싱 실패 '{}': {}", docId, e.getMessage());
-            return;
+            throw new IllegalStateException("문서 파싱 실패 '" + docId + "': " + e.getMessage(), e);
         }
 
         String markdown = inlineCaptions(parsed);

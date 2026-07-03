@@ -17,16 +17,6 @@ configurations {
     compileOnly {
         extendsFrom annotationProcessor
     }
-    all {
-        // Tika 2.9.2 는 PDFBox 2.x API 를 사용한다.
-        // 다른 의존성이 PDFBox 3.x 를 끌어올리면 NoSuchMethodError 가 발생하므로
-        // 2.0.31 로 강제 고정한다.
-        resolutionStrategy {
-            force 'org.apache.pdfbox:pdfbox:2.0.31'
-            force 'org.apache.pdfbox:fontbox:2.0.31'
-            force 'org.apache.pdfbox:pdfbox-tools:2.0.31'
-        }
-    }
 }
 
 repositories {
@@ -88,8 +78,11 @@ dependencies {
     implementation 'org.jsoup:jsoup:1.18.3'
 
     // M4: 파일 처리 (Apache Tika)
+    // PDF는 opendataloader-pdf-core(PDFBox 3.x, core 모듈)가 전담하므로 Tika의 PDF 모듈은 제외한다.
     implementation 'org.apache.tika:tika-core:2.9.2'
-    implementation 'org.apache.tika:tika-parsers-standard-package:2.9.2'
+    implementation('org.apache.tika:tika-parsers-standard-package:2.9.2') {
+        exclude group: 'org.apache.tika', module: 'tika-parser-pdf-module'
+    }
 
     // M4: OCR (Tess4j — native Tesseract wrapper)
     implementation 'net.sourceforge.tess4j:tess4j:5.12.0'
