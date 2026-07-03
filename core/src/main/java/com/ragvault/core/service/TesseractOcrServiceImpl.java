@@ -45,6 +45,9 @@ public class TesseractOcrServiceImpl implements TesseractOcrService {
         tess.setDatapath(tessDataPath);
         tess.setLanguage("kor+eng");
         tess.setPageSegMode(3);
+        // OEM 기본값(3=자동 선택)이 배포판에 따라 legacy 엔진으로 폴백되면
+        // 한글이 음절마다 공백으로 쪼개져 인식되는 문제가 있어 LSTM 전용으로 강제한다.
+        tess.setOcrEngineMode(1);
         try {
             String result = tess.doOCR(image);
             return (result == null || result.isBlank()) ? LOW_CONFIDENCE_MSG : result;
