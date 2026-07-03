@@ -84,9 +84,19 @@ public class KnowledgeDocIngestionService {
         }
         List<String> chunks = split(markdown, chunkSize, overlap);
         log.info("지식문서 '{}' 인입: {} 청크 (sourceType={})", docId, chunks.size(), sourceType);
+        int failedCount = 0;
         for (int i = 0; i < chunks.size(); i++) {
             String chunk = chunks.get(i);
-            float[] embedding = embeddingModel.embed(chunk);
+            float[] embedding;
+            try {
+                embedding = embeddingModel.embed(chunk);
+            } catch (Exception e) {
+                // 특정 청크의 임베딩 모델 호출이 실패해도(예: 극히 짧거나 이례적인 입력으로 인한
+                // 임베딩 서버 오류) 문서 전체 인입을 중단하지 않고 해당 청크만 건너뛴다.
+                log.warn("청크 {}/{} 임베딩 실패, 건너뜀 '{}': {}", i + 1, chunks.size(), docId, e.getMessage());
+                failedCount++;
+                continue;
+            }
             DocumentChunk dc = DocumentChunk.builder()
                     .sourceTable(SOURCE_TABLE)
                     .sourceId(docId)
@@ -101,7 +111,10 @@ public class KnowledgeDocIngestionService {
                     .build();
             chunkRepository.upsertChunk(dc, embedding);
         }
-        log.info("지식문서 '{}' 인입 완료 ({} 청크)", docId, chunks.size());
+        if (!chunks.isEmpty() && failedCount == chunks.size()) {
+            throw new IllegalStateException("문서 '" + docId + "'의 모든 청크(" + chunks.size() + "개) 임베딩 실패");
+        }
+        log.info("지식문서 '{}' 인입 완료 ({}/{} 청크, 실패 {})", docId, chunks.size() - failedCount, chunks.size(), failedCount);
     }
 
     private List<String> split(String text, int chunkChars, int overlapChars) {
