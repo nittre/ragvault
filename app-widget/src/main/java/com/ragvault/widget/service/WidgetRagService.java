@@ -78,12 +78,21 @@ public class WidgetRagService {
             return result;
         }
 
-        // 2. 임베딩
-        float[] embedding = embeddingModel.embed(userMessage);
+        // 2. 검색 쿼리 재작성 — 대화 이력이 있으면 후속 질문을 독립형 질문으로 재작성해
+        //    "좀 더 자세히" 같은 지시어만 있는 후속 질문도 검색이 되도록 한다.
+        String retrievalQuery = history.isEmpty()
+                ? userMessage
+                : rewriteStandaloneQuery(userMessage, history);
+
+        // 3. 임베딩
+        float[] embedding = embeddingModel.embed(retrievalQuery);
         String embeddingJson = toJsonArray(embedding);
 
-        // 3. pgvector 검색
-        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, threshold, topK);
+        // 4. pgvector 검색 — 후속 질문은 "더 자세히" 요청일 수 있으므로 topK를 늘려
+        //    답변 근거로 쓸 수 있는 청크를 더 확보한다 (동일 topK로는 첫 턴과 같은 청크만
+        //    다시 뽑혀 "더 자세히" 요청에도 내용이 늘어나지 않는 문제가 있었다).
+        int searchTopK = history.isEmpty() ? topK : Math.min(topK * 2, 20);
+        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, threshold, searchTopK);
         List<ChunkResult> chunks = rows.stream()
                 .map(r -> new ChunkResult(
                         (String) r[0],
@@ -92,19 +101,20 @@ public class WidgetRagService {
                         ((Number) r[3]).doubleValue()))
                 .toList();
 
-        // 4. 청크 없으면 fallback — 환각 방지
+        // 5. 청크 없으면 fallback — 환각 방지
         if (chunks.isEmpty()) {
-            log.debug("No chunks found, returning fallback response");
+            log.debug("No chunks found for query '{}' (original: '{}'), returning fallback response",
+                    retrievalQuery, userMessage);
             RagResult result = RagResult.noContext(noResultsResp);
             conversationLogService.saveAsync(sessionId, siteKey, userMessage,
                     noResultsResp, false, false, 0);
             return result;
         }
 
-        // 5. 컨텍스트 포맷팅
+        // 6. 컨텍스트 포맷팅
         String context = formatChunks(chunks);
 
-        // 6. LLM 호출
+        // 7. LLM 호출 — 사용자에게 실제로 한 말 그대로(userMessage) 전달
         String fullPrompt = buildPrompt(context, history, userMessage);
         log.debug("Calling LLM with {} chunks, history={}", chunks.size(), history.size());
 
@@ -114,14 +124,44 @@ public class WidgetRagService {
                 .call()
                 .content();
 
-        // 7. PII 마스킹 (ADR-0008: 모든 LLM 응답 경로에 적용)
+        // 8. PII 마스킹 (ADR-0008: 모든 LLM 응답 경로에 적용)
         String maskedResponse = piiMasker.mask(llmResponse);
 
-        // 8. 대화 로그 비동기 저장
+        // 9. 대화 로그 비동기 저장
         conversationLogService.saveAsync(sessionId, siteKey, userMessage,
                 maskedResponse, false, true, chunks.size());
 
         return RagResult.success(maskedResponse, chunks);
+    }
+
+    /**
+     * 대화 이력을 참고해 후속 질문을 검색에 적합한 독립형(standalone) 질문으로 재작성한다.
+     * 재작성 LLM 호출이 실패하거나 빈 응답을 반환하면 원본 질문으로 폴백한다(fail-open) —
+     * 검색 품질 개선이 검색 자체를 막아서는 안 된다.
+     */
+    private String rewriteStandaloneQuery(String userMessage, List<HistoryMessage> history) {
+        StringBuilder sb = new StringBuilder("[대화 이력]\n");
+        history.forEach(m -> sb.append(m.role()).append(": ").append(m.content()).append("\n"));
+        sb.append("\n[후속 질문]\n").append(userMessage).append("\n\n")
+          .append("위 후속 질문을 대화 이력 맥락을 반영해 그 자체로 이해 가능한 완전한 독립형 질문 " +
+                  "하나로 재작성하세요. 재작성된 질문 문장만 출력하고, 질문에 답하지는 마세요.");
+
+        try {
+            String rewritten = chatClient.prompt()
+                    .system("당신은 대화 이력을 참고해 후속 질문을 검색에 적합한 독립형 질문으로 " +
+                            "재작성하는 도우미입니다. 질문에 답하지 말고, 재작성된 질문 문장만 한국어로 출력하세요.")
+                    .user(sb.toString())
+                    .call()
+                    .content();
+            if (rewritten == null || rewritten.isBlank()) {
+                return userMessage;
+            }
+            log.debug("Rewrote follow-up query: '{}' -> '{}'", userMessage, rewritten.trim());
+            return rewritten.trim();
+        } catch (Exception e) {
+            log.warn("Query rewrite failed, falling back to original message", e);
+            return userMessage;
+        }
     }
 
     private String formatChunks(List<ChunkResult> chunks) {
@@ -140,6 +180,12 @@ public class WidgetRagService {
             sb.append("[대화 이력]\n");
             history.forEach(m -> sb.append(m.role()).append(": ").append(m.content()).append("\n"));
             sb.append("\n");
+            // 후속 질문은 "간결하게 답변하라"는 기본 규칙과 "더 자세히 설명해달라"는 사용자
+            // 의도가 충돌하기 쉽다. 이전 답변을 반복하지 말고 참고자료를 더 폭넓게 활용해
+            // 답변 깊이를 확장하도록 명시적으로 안내한다.
+            sb.append("[안내]\n이 질문은 위 대화의 후속 질문입니다. 이전 답변을 그대로 반복하지 말고, " +
+                    "[참고자료]의 내용 중 이전 답변에서 다루지 않은 부분까지 포함해 더 구체적이고 " +
+                    "깊이 있게 답변하세요.\n\n");
         }
         sb.append("[현재 질문]\n").append(userMessage);
         return sb.toString();

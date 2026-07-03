@@ -18,3 +18,4 @@ ragvault 프로젝트의 중요한 아키텍처·정책 결정을 기록한다.
 | [0004](0004-chat-service-knowledge-docs.md) | 챗 서비스 지식문서 관리 — SOURCE_TABLE·API·디렉토리 분리 전략 | Accepted | 2026-06-30 |
 | [0005](0005-qwen25vl-unified-model.md) | qwen2.5vl:7b 단일 멀티모달 모델 통합 | Accepted | 2026-06-30 |
 | [0006](0006-pdf-ocr-fallback.md) | PDF 텍스트 추출 실패 시 Tesseract OCR 폴백 | Accepted | 2026-07-03 |
+| [0007](0007-multiturn-rag-retrieval.md) | 멀티턴 RAG — 검색 쿼리 재작성 및 WEB_SEARCH 폴백 | Accepted | 2026-07-03 |

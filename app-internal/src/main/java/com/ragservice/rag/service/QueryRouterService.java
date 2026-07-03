@@ -49,6 +49,9 @@ public class QueryRouterService {
     @Value("${spring.ai.ollama.chat.options.model:qwen2.5:7b-instruct-q4_K_M}")
     private String llmModel;
 
+    @Value("${rag.web-search.enabled:true}")
+    private boolean webSearchEnabled;
+
     public record RouterResult(
             String content,
             List<DocumentChunk.ChunkResult> sources,
@@ -306,11 +309,7 @@ public class QueryRouterService {
                             r.responseId(), r.denied(), null, r.sourceUrls());
                 }
 
-                case RAG -> {
-                    RagService.RagResult rag = ragService.chat(userMessage, history);
-                    String responseId = rawStorage.store(rag.content(), "RAG", userEmail, llmModel);
-                    yield RouterResult.fromRag(rag, responseId);
-                }
+                case RAG -> ragWithWebFallback(userMessage, history, userEmail);
             };
         } catch (Exception e) {
             metricsService.incrementError(intent.name());
@@ -352,12 +351,28 @@ public class QueryRouterService {
                 yield new RouterResult(r.content(), List.of(), "URL_FETCH",
                         r.responseId(), r.denied(), null, List.of());
             }
-            default -> {
-                RagService.RagResult rag = ragService.chat(question, history);
-                String responseId = rawStorage.store(rag.content(), "RAG", userEmail, llmModel);
-                yield RouterResult.fromRag(rag, responseId);
-            }
+            default -> ragWithWebFallback(question, history, userEmail);
         };
+    }
+
+    /**
+     * RAG 검색 결과가 없으면 WEB_SEARCH로 폴백한다.
+     *
+     * routeForceRag()의 "/rag" 강제 명령 폴백과 동일한 동작을, 자동 분류로 RAG가 선택된
+     * 일반 경로에도 적용한다 — RAG로 시작한 대화의 후속 질문(예: 답변 중 등장한 용어를
+     * 되묻는 질문)이 내부 문서에 없을 때도 실패 응답 대신 웹 검색으로 이어지게 한다.
+     * rag.web-search.enabled=false 이면 폴백하지 않는다.
+     */
+    private RouterResult ragWithWebFallback(String query, List<MessageDto> history, String userEmail) {
+        RagService.RagResult rag = ragService.chat(query, history);
+        if (!rag.sources().isEmpty() || !webSearchEnabled) {
+            String responseId = rawStorage.store(rag.content(), "RAG", userEmail, llmModel);
+            return RouterResult.fromRag(rag, responseId);
+        }
+        log.debug("RAG 결과 없음 → WEB_SEARCH 폴백: '{}'", query);
+        WebSearchService.WebSearchResult web = webSearchService.search(query, userEmail);
+        return new RouterResult(web.content(), List.of(), "WEB_SEARCH",
+                web.responseId(), web.denied(), null, web.sourceUrls());
     }
 
     private String extractUrl(String text) {

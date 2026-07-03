@@ -69,21 +69,24 @@ public class ChatController {
 
         String userMessage = extractLastUserMessage(request.messages());
         List<String> images = mergeImages(request.messages(), request.images());
-        List<MessageDto> history = extractHistory(request.messages());
 
-        log.debug("Chat completions: model={}, messages={}, images={}, fileIds={}",
-                request.model(),
-                request.messages() != null ? request.messages().size() : 0,
-                images.size(),
-                request.fileIds() != null ? request.fileIds().size() : 0);
-
-        // ADR-0005 7단계 파라미터 우선순위 체인 — 두 호출 모두 동일한 userEmail 전달
+        // ADR-0005 7단계 파라미터 우선순위 체인 — history 추출보다 먼저 계산해야
+        // max_history_turns 가 실제로 적용된다.
         EffectiveParams effectiveParams = parameterResolver.resolve(
                 userEmail,
                 conversationId,
                 request.ragParams());
         log.debug("Effective params resolved: user={}, conv={}, sources={}",
                 userEmail, conversationId, effectiveParams.sources());
+
+        int maxHistoryMessages = resolveMaxHistoryMessages(effectiveParams);
+        List<MessageDto> history = extractHistory(request.messages(), maxHistoryMessages);
+
+        log.debug("Chat completions: model={}, messages={}, images={}, fileIds={}",
+                request.model(),
+                request.messages() != null ? request.messages().size() : 0,
+                images.size(),
+                request.fileIds() != null ? request.fileIds().size() : 0);
 
         QueryRouterService.RouterResult result = queryRouterService.route(
                 userMessage, history, userEmail,
@@ -120,13 +123,22 @@ public class ChatController {
         return result;
     }
 
-    private List<MessageDto> extractHistory(List<ChatMessage> messages) {
+    private List<MessageDto> extractHistory(List<ChatMessage> messages, int maxMessages) {
         if (messages == null || messages.size() <= 1) return List.of();
         List<ChatMessage> history = messages.subList(0, messages.size() - 1);
-        int start = Math.max(0, history.size() - 10);
+        int start = Math.max(0, history.size() - maxMessages);
         return history.subList(start, history.size()).stream()
                 .map(m -> new MessageDto(m.role(), m.textContent()))
                 .toList();
+    }
+
+    /**
+     * ADR-0005 파라미터 체인이 계산한 max_history_turns 를 히스토리 메시지 개수 제한으로 사용한다.
+     * 값이 없거나 숫자가 아니면 기존 하드코딩 기본값(10)으로 폴백한다.
+     */
+    private int resolveMaxHistoryMessages(EffectiveParams effectiveParams) {
+        Object value = effectiveParams.values().get("max_history_turns");
+        return (value instanceof Number n) ? n.intValue() : 10;
     }
 
     private ChatCompletionResponse buildResponse(QueryRouterService.RouterResult result, String model) {
