@@ -32,12 +32,17 @@ public class RagUserService {
     /**
      * 사용자 생성.
      * 중복 이메일 → 409 CONFLICT.
+     * 비밀번호 미입력/8자 미만 → 400 BAD_REQUEST.
+     * 관리자가 부여한 초기 비밀번호는 최초 로그인 시 강제로 변경하도록 표시한다.
      */
     @Transactional
-    public RagUser createUser(String email, String name, RagRole role, String createdBy) {
+    public RagUser createUser(String email, String name, RagRole role, String password, String createdBy) {
         if (ragUserRepository.existsByEmail(email)) {
             log.warn("사용자 생성 실패 — 이미 존재하는 이메일 (hash={})", maskEmail(email));
             throw new ResponseStatusException(CONFLICT, "이미 존재하는 이메일입니다.");
+        }
+        if (password == null || password.isBlank() || password.length() < 8) {
+            throw new ResponseStatusException(BAD_REQUEST, "비밀번호는 8자 이상 입력해주세요.");
         }
 
         RagUser user = new RagUser();
@@ -45,6 +50,8 @@ public class RagUserService {
         user.setName(name);
         user.setRole(role);
         user.setActive(true);
+        user.setPasswordHash(passwordEncoder.encode(password));
+        user.setPasswordChangeRequired(true);
         user.setCreatedBy(createdBy);
         user.setCreatedAt(Instant.now());
         user.setUpdatedAt(Instant.now());
@@ -55,15 +62,15 @@ public class RagUserService {
     }
 
     /**
-     * 사용자 수정.
+     * 사용자 수정 — 부분 업데이트. null 인 필드는 기존 값 유지.
      * 없으면 → 404 NOT_FOUND.
      */
     @Transactional
-    public RagUser updateUser(String email, String name, RagRole role, boolean active, String updatedBy) {
+    public RagUser updateUser(String email, String name, RagRole role, Boolean active, String updatedBy) {
         RagUser user = getRequiredByEmail(email);
-        user.setName(name);
-        user.setRole(role);
-        user.setActive(active);
+        if (name != null) user.setName(name);
+        if (role != null) user.setRole(role);
+        if (active != null) user.setActive(active);
         user.setUpdatedAt(Instant.now());
 
         RagUser saved = ragUserRepository.save(user);
@@ -126,10 +133,15 @@ public class RagUserService {
 
     /**
      * ADR-0011: 비밀번호 초기 설정 / 강제 초기화.
-     * password_hash 가 null 인 사용자에게 초기 비밀번호를 부여할 때 사용.
+     * password_hash 가 null 인 사용자에게 초기 비밀번호를 부여하거나,
+     * SUPER_ADMIN 이 다른 사용자의 비밀번호를 강제로 재설정할 때 사용.
+     * 재설정된 사용자는 다음 로그인 시 비밀번호를 다시 변경해야 한다.
      */
     @Transactional
     public void initPassword(String email, String rawPassword) {
+        if (rawPassword == null || rawPassword.isBlank() || rawPassword.length() < 8) {
+            throw new ResponseStatusException(BAD_REQUEST, "비밀번호는 8자 이상 입력해주세요.");
+        }
         RagUser user = getRequiredByEmail(email);
         user.setPasswordHash(passwordEncoder.encode(rawPassword));
         user.setPasswordChangeRequired(true);

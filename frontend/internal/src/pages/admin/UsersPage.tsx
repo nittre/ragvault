@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { UserPlus } from 'lucide-react'
-import { getUsers, createUser, updateUser, deleteUser } from '../../api/admin/users'
+import { getUsers, createUser, updateUser, deleteUser, resetPassword } from '../../api/admin/users'
 import { useAuthStore } from '../../stores/authStore'
 import type { RagUser } from '../../types'
 
@@ -34,7 +34,8 @@ export default function UsersPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
       setShowForm(false)
-      setForm({ email: '', name: '', role: 'USER' })
+      setForm({ email: '', name: '', role: 'USER', password: '', confirmPassword: '' })
+      setCreateError(null)
     },
   })
 
@@ -49,18 +50,49 @@ export default function UsersPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
   })
 
+  const resetMut = useMutation({
+    mutationFn: ({ email, newPassword }: { email: string; newPassword: string }) =>
+      resetPassword(email, newPassword),
+    onSuccess: () => {
+      setResetTarget(null)
+      setResetForm({ newPassword: '', confirmPassword: '' })
+      setResetError(null)
+    },
+  })
+
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ email: '', name: '', role: 'USER' })
+  const [form, setForm] = useState({ email: '', name: '', role: 'USER', password: '', confirmPassword: '' })
+  const [createError, setCreateError] = useState<string | null>(null)
+
+  const [resetTarget, setResetTarget] = useState<RagUser | null>(null)
+  const [resetForm, setResetForm] = useState({ newPassword: '', confirmPassword: '' })
+  const [resetError, setResetError] = useState<string | null>(null)
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault()
-    createMut.mutate(form)
+    if (form.password !== form.confirmPassword) {
+      setCreateError('비밀번호가 일치하지 않습니다.')
+      return
+    }
+    setCreateError(null)
+    createMut.mutate({ email: form.email, name: form.name, role: form.role, password: form.password })
   }
 
   const handleDelete = (user: RagUser) => {
     if (window.confirm(`${user.email} 을(를) 삭제하시겠습니까?`)) {
       deleteMut.mutate(user.email)
     }
+  }
+
+  const handleResetPassword = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!resetTarget) return
+    if (resetForm.newPassword !== resetForm.confirmPassword) {
+      setResetError('비밀번호가 일치하지 않습니다.')
+      return
+    }
+    setResetError(null)
+    resetMut.mutate({ email: resetTarget.email, newPassword: resetForm.newPassword })
   }
 
   return (
@@ -102,6 +134,31 @@ export default function UsersPage() {
             />
           </div>
           <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">초기 비밀번호</label>
+            <input
+              required
+              type="password"
+              autoComplete="new-password"
+              minLength={8}
+              value={form.password}
+              onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="8자 이상"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">비밀번호 확인</label>
+            <input
+              required
+              type="password"
+              autoComplete="new-password"
+              minLength={8}
+              value={form.confirmPassword}
+              onChange={e => setForm(p => ({ ...p, confirmPassword: e.target.value }))}
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">역할</label>
             <select
               value={form.role}
@@ -125,6 +182,11 @@ export default function UsersPage() {
           >
             취소
           </button>
+          {createError && (
+            <p className="w-full text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {createError}
+            </p>
+          )}
         </form>
       )}
 
@@ -174,12 +236,24 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     {isSuperAdmin && (
-                      <button
-                        onClick={() => handleDelete(u)}
-                        className="text-red-400 hover:text-red-600 text-xs"
-                      >
-                        삭제
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => {
+                            setResetTarget(u)
+                            setResetForm({ newPassword: '', confirmPassword: '' })
+                            setResetError(null)
+                          }}
+                          className="text-blue-500 hover:text-blue-700 text-xs"
+                        >
+                          비밀번호 재설정
+                        </button>
+                        <button
+                          onClick={() => handleDelete(u)}
+                          className="text-red-400 hover:text-red-600 text-xs"
+                        >
+                          삭제
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -193,6 +267,67 @@ export default function UsersPage() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {resetTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">비밀번호 재설정</h2>
+            <p className="text-sm text-gray-500 mb-6">{resetTarget.email}</p>
+
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">새 비밀번호</label>
+                <input
+                  required
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  autoFocus
+                  value={resetForm.newPassword}
+                  onChange={e => setResetForm(p => ({ ...p, newPassword: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="8자 이상"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">새 비밀번호 확인</label>
+                <input
+                  required
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  value={resetForm.confirmPassword}
+                  onChange={e => setResetForm(p => ({ ...p, confirmPassword: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {resetError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  {resetError}
+                </p>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={resetMut.isPending}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium"
+                >
+                  {resetMut.isPending ? '재설정 중…' : '재설정'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResetTarget(null)}
+                  className="text-gray-500 hover:text-gray-700 px-4 py-2 text-sm"
+                >
+                  취소
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

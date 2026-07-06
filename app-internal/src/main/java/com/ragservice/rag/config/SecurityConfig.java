@@ -121,6 +121,8 @@ public class SecurityConfig {
                         "/api/v1/admin/users/**").hasAuthority("api:super-admin")
                 .requestMatchers(org.springframework.http.HttpMethod.DELETE,
                         "/api/v1/admin/users/**").hasAuthority("api:super-admin")
+                .requestMatchers(org.springframework.http.HttpMethod.POST,
+                        "/api/v1/admin/users/*/reset-password").hasAuthority("api:super-admin")
                 .requestMatchers("/api/v1/admin/**").hasAuthority("api:admin")
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/search")
                     .hasAuthority("api:chat")

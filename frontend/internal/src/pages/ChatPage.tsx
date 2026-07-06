@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Settings2, LogOut, ChevronDown, Pencil } from 'lucide-react'
+import { Settings2, LogOut, ChevronDown, Pencil, KeyRound } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
 import { useAuthStore } from '../stores/authStore'
 import { useChatStore } from '../stores/chatStore'
@@ -251,6 +251,13 @@ export default function ChatPage() {
 
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-xs text-gray-400 hidden sm:block">{email}</span>
+            <button
+              onClick={() => navigate('/settings')}
+              className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+              title="비밀번호 변경"
+            >
+              <KeyRound size={18} />
+            </button>
             <button
               onClick={togglePanel}
               className={`p-1.5 rounded-lg transition-colors ${

@@ -5,6 +5,7 @@ import AdminRoute from './components/common/AdminRoute'
 
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const ChatPage = lazy(() => import('./pages/ChatPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const AdminLayout = lazy(() => import('./components/admin/AdminLayout'))
 const UsersPage = lazy(() => import('./pages/admin/UsersPage'))
 const DataSourcesPage = lazy(() => import('./pages/admin/DataSourcesPage'))
@@ -40,6 +41,14 @@ export default function App() {
             element={
               <PrivateRoute>
                 <ChatPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <PrivateRoute>
+                <SettingsPage />
               </PrivateRoute>
             }
           />

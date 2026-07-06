@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Table,
   Code2,
+  KeyRound,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { logout } from '../../api/auth'
@@ -189,6 +190,17 @@ export default function AdminLayout() {
               <div className="text-gray-400">{role}</div>
             </div>
           )}
+          <NavLink
+            to="/admin/settings"
+            className={({ isActive }) =>
+              `flex items-center gap-2 text-xs transition-colors w-full ${
+                isActive ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
+              }`
+            }
+          >
+            <KeyRound size={13} />
+            비밀번호 변경
+          </NavLink>
           <button
             onClick={handleLogout}
             className="flex items-center gap-2 text-xs text-gray-500 hover:text-red-600 transition-colors w-full"

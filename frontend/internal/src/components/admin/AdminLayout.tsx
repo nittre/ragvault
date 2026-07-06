@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronRight,
   BookMarked,
+  KeyRound,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { getDataSources } from '../../api/admin/dataSources'
@@ -156,6 +157,13 @@ export default function AdminLayout() {
               <div>{role}</div>
             </div>
           )}
+          <Link
+            to="/settings"
+            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"
+          >
+            <KeyRound size={13} />
+            비밀번호 변경
+          </Link>
           <Link to="/" className="block text-xs text-blue-600 hover:text-blue-800">
             ← 채팅으로
           </Link>

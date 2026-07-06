@@ -18,6 +18,7 @@ import java.util.List;
  * POST /api/v1/admin/users        → api:super-admin (SecurityConfig)
  * PUT  /api/v1/admin/users/{email} → api:super-admin (SecurityConfig)
  * DELETE /api/v1/admin/users/{email} → api:super-admin (SecurityConfig)
+ * POST /api/v1/admin/users/{email}/reset-password → api:super-admin (SecurityConfig)
  *
  * ADR-0002: Phase 0 단순 구조 — rag_users 테이블로 직접 관리.
  */
@@ -54,7 +55,7 @@ public class AdminUserMgmtController {
             @RequestBody CreateUserRequest req,
             Authentication authentication) {
         String createdBy = authentication != null ? authentication.getName() : "unknown";
-        RagUser user = ragUserService.createUser(req.email(), req.name(), req.role(), createdBy);
+        RagUser user = ragUserService.createUser(req.email(), req.name(), req.role(), req.password(), createdBy);
         return ResponseEntity.status(201).body(toResponse(user));
     }
 
@@ -76,11 +77,22 @@ public class AdminUserMgmtController {
         return ResponseEntity.noContent().build();
     }
 
+    /** 다른 사용자의 비밀번호 강제 재설정 (SUPER_ADMIN 전용). 재설정 후 다음 로그인 시 변경 강제. */
+    @PostMapping("/{email}/reset-password")
+    public ResponseEntity<Void> resetPassword(
+            @PathVariable String email,
+            @RequestBody ResetPasswordRequest req) {
+        ragUserService.initPassword(email, req.newPassword());
+        return ResponseEntity.ok().build();
+    }
+
     // ── 요청 DTO ──────────────────────────────────────────────────────────────
 
-    record CreateUserRequest(String email, String name, RagRole role) {}
+    record CreateUserRequest(String email, String name, RagRole role, String password) {}
 
-    record UpdateUserRequest(String name, RagRole role, boolean active) {}
+    record UpdateUserRequest(String name, RagRole role, Boolean active) {}
+
+    record ResetPasswordRequest(String newPassword) {}
 
     // ── 내부 변환 ─────────────────────────────────────────────────────────────
 

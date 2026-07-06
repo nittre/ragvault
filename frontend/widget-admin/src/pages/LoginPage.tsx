@@ -75,6 +75,7 @@ export default function LoginPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
             <input
               type="email"
+              autoComplete="username"
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
@@ -87,6 +88,7 @@ export default function LoginPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">비밀번호</label>
             <input
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
@@ -123,6 +125,7 @@ export default function LoginPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">새 비밀번호</label>
                 <input
                   type="password"
+                  autoComplete="new-password"
                   value={newPassword}
                   onChange={e => setNewPassword(e.target.value)}
                   required
@@ -136,6 +139,7 @@ export default function LoginPage() {
                 </label>
                 <input
                   type="password"
+                  autoComplete="new-password"
                   value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)}
                   required

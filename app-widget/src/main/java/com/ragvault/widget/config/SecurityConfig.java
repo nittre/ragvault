@@ -107,6 +107,8 @@ public class SecurityConfig {
                         "/api/admin/users/**").hasAuthority("api:super-admin")
                 .requestMatchers(org.springframework.http.HttpMethod.DELETE,
                         "/api/admin/users/**").hasAuthority("api:super-admin")
+                .requestMatchers(org.springframework.http.HttpMethod.POST,
+                        "/api/admin/users/*/reset-password").hasAuthority("api:super-admin")
                 // admin 경로 전체 — JWT 인증 필수
                 .requestMatchers("/api/admin/**").authenticated()
                 // 비밀번호 변경 — JWT 인증 필수

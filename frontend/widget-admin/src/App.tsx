@@ -5,6 +5,7 @@ import AdminRoute from './components/common/AdminRoute'
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const AdminLayout = lazy(() => import('./components/admin/AdminLayout'))
 const UsersPage = lazy(() => import('./pages/admin/UsersPage'))
+const SettingsPage = lazy(() => import('./pages/admin/SettingsPage'))
 const KnowledgePage = lazy(() => import('./pages/admin/KnowledgePage'))
 const ConversationsPage = lazy(() => import('./pages/admin/ConversationsPage'))
 const StatsPage = lazy(() => import('./pages/admin/StatsPage'))
@@ -41,6 +42,7 @@ export default function App() {
           >
             <Route index element={<Navigate to="/admin/users" replace />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="settings" element={<SettingsPage />} />
             <Route path="knowledge" element={<KnowledgePage />} />
             <Route path="conversations" element={<ConversationsPage />} />
             <Route path="stats" element={<StatsPage />} />

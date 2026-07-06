@@ -20,6 +20,7 @@ import java.util.List;
  * POST   /admin/users         → api:super-admin (생성)
  * PUT    /admin/users/{email} → api:super-admin (수정)
  * DELETE /admin/users/{email} → api:super-admin (삭제)
+ * POST   /admin/users/{email}/reset-password → api:super-admin (비밀번호 재설정)
  *
  * 권한은 SecurityConfig 의 authorizeHttpRequests 에서 강제.
  */
@@ -41,9 +42,11 @@ public class AdminUserMgmtController {
             String createdAt
     ) {}
 
-    record CreateUserRequest(String email, String name, RagRole role) {}
+    record CreateUserRequest(String email, String name, RagRole role, String password) {}
 
-    record UpdateUserRequest(String name, RagRole role, boolean active) {}
+    record UpdateUserRequest(String name, RagRole role, Boolean active) {}
+
+    record ResetPasswordRequest(String newPassword) {}
 
     @GetMapping
     public ResponseEntity<List<UserResponse>> list() {
@@ -59,7 +62,7 @@ public class AdminUserMgmtController {
             Authentication authentication,
             HttpServletRequest httpRequest) {
         String createdBy = authentication != null ? authentication.getName() : "unknown";
-        RagUser user = ragUserService.createUser(req.email(), req.name(), req.role(), createdBy);
+        RagUser user = ragUserService.createUser(req.email(), req.name(), req.role(), req.password(), createdBy);
         auditLogService.log(createdBy, "USER_CREATE", "rag_user", req.email(), null,
                 httpRequest.getRemoteAddr());
         return ResponseEntity.status(201).body(toResponse(user));
@@ -87,6 +90,19 @@ public class AdminUserMgmtController {
         auditLogService.log(actor, "USER_DELETE", "rag_user", email, null,
                 httpRequest.getRemoteAddr());
         return ResponseEntity.noContent().build();
+    }
+
+    /** 다른 사용자의 비밀번호 강제 재설정 (SUPER_ADMIN 전용). 재설정 후 다음 로그인 시 변경 강제. */
+    @PostMapping("/{email}/reset-password")
+    public ResponseEntity<Void> resetPassword(@PathVariable String email,
+                                               @RequestBody ResetPasswordRequest req,
+                                               Authentication authentication,
+                                               HttpServletRequest httpRequest) {
+        String actor = authentication != null ? authentication.getName() : "unknown";
+        ragUserService.initPassword(email, req.newPassword());
+        auditLogService.log(actor, "USER_PASSWORD_RESET", "rag_user", email, null,
+                httpRequest.getRemoteAddr());
+        return ResponseEntity.ok().build();
     }
 
     private UserResponse toResponse(RagUser user) {
