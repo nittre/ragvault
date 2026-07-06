@@ -3,6 +3,7 @@ package com.ragvault.core.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ragvault.core.domain.SqlTableConfig;
+import com.ragvault.core.prompt.PromptLoader;
 import com.ragvault.core.repository.SqlTableConfigRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,26 +35,10 @@ public class SensitivityAnalysisService {
             Pattern.compile("\\[.*?\\]", Pattern.DOTALL);
 
     private static final String SYSTEM_PROMPT =
-            "당신은 데이터베이스 보안 전문가입니다. " +
-            "주어진 테이블 스키마를 분석하여 데이터 민감도를 JSON으로만 반환합니다. " +
-            "설명이나 마크다운 없이 JSON 배열만 출력하세요.";
+            PromptLoader.load("prompts/sensitivity-analysis/system.txt");
 
     private static final String USER_PROMPT_TEMPLATE =
-            """
-            아래 MySQL 테이블들의 데이터 민감도를 분류해주세요.
-
-            민감도 레벨:
-            - public: 외부 공개 가능 데이터 (상품 카탈로그, 공지사항, 카테고리 등)
-            - internal: 사내 업무 데이터 (주문, 재고, 로그, 설정 등)
-            - confidential: 개인정보 포함 (이름, 이메일, 전화번호, 주소, 생년월일 등 PII)
-            - restricted: 고민감 금융·의료 데이터 (주민번호, 카드번호, 계좌번호, 비밀번호 등)
-
-            테이블 목록:
-            {TABLE_LIST}
-
-            아래 JSON 배열 형식으로만 응답하세요. 다른 텍스트 없이:
-            [{"tableName":"...","sensitivity":"public|internal|confidential|restricted","reason":"한 줄 이유"}]
-            """;
+            PromptLoader.load("prompts/sensitivity-analysis/user-template.txt");
 
     public record SensitivityResult(String sensitivity, String reason) {}
 

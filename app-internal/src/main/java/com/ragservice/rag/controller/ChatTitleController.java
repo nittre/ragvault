@@ -1,5 +1,6 @@
 package com.ragservice.rag.controller;
 
+import com.ragvault.core.prompt.PromptLoader;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -26,8 +27,7 @@ public class ChatTitleController {
     private final ChatClient chatClient;
 
     private static final String SYSTEM_PROMPT =
-            "사용자 메시지를 보고 채팅 대화방 제목을 20자 이내 한국어로 지어줘. " +
-            "제목 텍스트만 출력하고 따옴표, 설명, 마침표 없이.";
+            PromptLoader.load("prompts/chat-title/system.txt");
 
     @PostMapping("/title")
     public ResponseEntity<Map<String, String>> generateTitle(

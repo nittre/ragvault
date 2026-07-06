@@ -1,0 +1,7 @@
+아래 MySQL 테이블·컬럼의 의미를 한국어로 설명해주세요. (COMMENT 가 없는 항목만 포함됨)
+
+테이블 목록:
+{TABLE_LIST}
+
+아래 JSON 배열 형식으로만 응답하세요. 다른 텍스트 없이:
+[{"table":"테이블명","description":"테이블 한 줄 설명","columns":[{"name":"컬럼명","description":"컬럼 한 줄 설명"}]}]

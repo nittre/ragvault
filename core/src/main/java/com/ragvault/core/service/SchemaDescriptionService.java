@@ -3,6 +3,7 @@ package com.ragvault.core.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ragvault.core.domain.SqlColumnDescription;
+import com.ragvault.core.prompt.PromptLoader;
 import com.ragvault.core.repository.SqlColumnDescriptionRepository;
 import com.ragvault.core.repository.SqlTableConfigRepository;
 import lombok.RequiredArgsConstructor;
@@ -40,20 +41,10 @@ public class SchemaDescriptionService {
     private static final Pattern JSON_ARRAY_PATTERN = Pattern.compile("\\[.*]", Pattern.DOTALL);
 
     private static final String SYSTEM_PROMPT =
-            "당신은 데이터베이스 스키마 분석 전문가입니다. " +
-            "주어진 테이블·컬럼의 업무적 의미를 한국어 한 줄로 설명하고 JSON으로만 반환합니다. " +
-            "추측이 불확실하면 컬럼명을 그대로 풀어쓰세요. 설명이나 마크다운 없이 JSON 배열만 출력하세요.";
+            PromptLoader.load("prompts/schema-description/system.txt");
 
     private static final String USER_PROMPT_TEMPLATE =
-            """
-            아래 MySQL 테이블·컬럼의 의미를 한국어로 설명해주세요. (COMMENT 가 없는 항목만 포함됨)
-
-            테이블 목록:
-            {TABLE_LIST}
-
-            아래 JSON 배열 형식으로만 응답하세요. 다른 텍스트 없이:
-            [{"table":"테이블명","description":"테이블 한 줄 설명","columns":[{"name":"컬럼명","description":"컬럼 한 줄 설명"}]}]
-            """;
+            PromptLoader.load("prompts/schema-description/user-template.txt");
 
     /**
      * 데이터소스의 테이블·컬럼 설명을 자동 생성·저장 (백그라운드).

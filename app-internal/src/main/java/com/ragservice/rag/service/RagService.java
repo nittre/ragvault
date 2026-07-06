@@ -2,6 +2,7 @@ package com.ragservice.rag.service;
 
 import com.ragvault.core.domain.DocumentChunk.ChunkResult;
 import com.ragservice.rag.dto.MessageDto;
+import com.ragvault.core.prompt.PromptLoader;
 import com.ragvault.core.repository.DocumentChunkRepository;
 import com.ragservice.rag.security.InputValidator;
 import com.ragvault.core.security.PiiMasker;
@@ -41,8 +42,11 @@ public class RagService {
     private final PiiMasker piiMasker;
     private final InputValidator inputValidator;
 
-    @Value("${rag.prompts.system}")
-    private String systemPrompt;
+    private static final String SYSTEM_PROMPT =
+            PromptLoader.load("prompts/rag-service/system.txt");
+
+    private static final String QUERY_REWRITE_SYSTEM =
+            PromptLoader.load("prompts/query-rewrite/system.txt");
 
     @Value("${rag.search.default-top-k:5}")
     private int defaultTopK;
@@ -113,7 +117,7 @@ public class RagService {
         log.debug("Calling LLM with {} chunks, history size={}", chunks.size(), history.size());
 
         String llmResponse = chatClient.prompt()
-                .system(systemPrompt)
+                .system(SYSTEM_PROMPT)
                 .user(fullPrompt)
                 .call()
                 .content();
@@ -138,8 +142,7 @@ public class RagService {
 
         try {
             String rewritten = chatClient.prompt()
-                    .system("당신은 대화 이력을 참고해 후속 질문을 검색에 적합한 독립형 질문으로 " +
-                            "재작성하는 도우미입니다. 질문에 답하지 말고, 재작성된 질문 문장만 한국어로 출력하세요.")
+                    .system(QUERY_REWRITE_SYSTEM)
                     .user(sb.toString())
                     .call()
                     .content();

@@ -2,6 +2,7 @@ package com.ragvault.core.service;
 
 import com.ragvault.core.domain.DataSourceConfig;
 import com.ragvault.core.domain.SqlTableConfig;
+import com.ragvault.core.prompt.PromptLoader;
 import com.ragvault.core.repository.SqlTableConfigRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +37,9 @@ public class DataSourceRouterService {
     private static final int EMBEDDING_SHORTLIST_THRESHOLD = 4;
     private static final int EMBEDDING_SHORTLIST_TOPK = 3;
 
+    private static final String SYSTEM_PROMPT =
+            PromptLoader.load("prompts/data-source-router/system.txt");
+
     /**
      * 사용자 질문에 가장 적합한 datasource_id 반환.
      *
@@ -66,7 +70,7 @@ public class DataSourceRouterService {
         String prompt = buildRoutingPrompt(userQuery, candidates);
         try {
             String response = chatClient.prompt()
-                    .system("당신은 데이터소스 선택 전문가입니다. 반드시 JSON 형태로만 답하세요: {\"datasource_id\": <숫자>}")
+                    .system(SYSTEM_PROMPT)
                     .user(prompt)
                     .call()
                     .content();

@@ -2,6 +2,7 @@ package com.ragvault.core.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ragvault.core.prompt.PromptLoader;
 import com.ragvault.core.repository.RagTableConfigRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,30 +31,10 @@ public class RagColumnSuggestionService {
     private static final Set<String> VALID_STRATEGIES = Set.of("recursive", "sentence", "fixed");
 
     private static final String SYSTEM_PROMPT =
-            "당신은 RAG(Retrieval-Augmented Generation) 시스템 전문가입니다. " +
-            "주어진 MySQL 테이블 스키마를 분석하여 벡터 임베딩에 최적화된 컬럼 설정과 청킹 전략을 JSON으로만 반환합니다. " +
-            "설명이나 마크다운 없이 JSON 배열만 출력하세요.";
+            PromptLoader.load("prompts/rag-column-suggestion/system.txt");
 
     private static final String USER_PROMPT_TEMPLATE =
-            """
-            아래 MySQL 테이블들의 RAG 임베딩 설정을 추천해주세요.
-
-            선택 기준:
-            - contentColumns: 자연어 텍스트가 담긴 컬럼 (설명, 본문, 댓글 등). 코드값/ID/날짜/숫자는 제외.
-              ※ 각 테이블에 "[자동감지 텍스트 컬럼]" 목록이 표시됩니다. 이 컬럼들은 VARCHAR/TEXT 등 문자열 타입으로 확인된 후보입니다.
-                반드시 이 목록을 참고하여 contentColumns와 titleColumn을 결정하세요. 목록에 없는 컬럼을 content로 지정하지 마세요.
-            - titleColumn: 문서 제목 역할을 하는 컬럼 (없으면 null). 자동감지 목록 중에서 선택하세요.
-            - metadataColumns: 필터링·출처 표시에 유용한 컬럼 (카테고리, 날짜, 작성자 등). PK·content·title 제외.
-            - chunkingStrategy: "sentence"(문장 단위, 게시글·리뷰 등 자연어 글), "recursive"(범용), "fixed"(짧고 구조적인 텍스트)
-            - chunkSize: 텍스트 길이에 맞게 추천 (200~2000). 짧은 상품명이면 작게, 긴 본문이면 크게.
-            - chunkOverlap: chunkSize의 10~20% 권장.
-
-            테이블 목록:
-            {TABLE_LIST}
-
-            아래 JSON 배열 형식으로만 응답하세요. 다른 텍스트 없이:
-            [{"tableName":"...","contentColumns":["col1","col2"],"titleColumn":"col or null","metadataColumns":["col3"],"chunkingStrategy":"sentence|recursive|fixed","chunkSize":500,"chunkOverlap":50,"reason":"한 줄 이유"}]
-            """;
+            PromptLoader.load("prompts/rag-column-suggestion/user-template.txt");
 
     public record ColumnSuggestion(
             List<String> contentColumns,

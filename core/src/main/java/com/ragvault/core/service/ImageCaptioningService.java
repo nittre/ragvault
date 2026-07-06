@@ -1,5 +1,6 @@
 package com.ragvault.core.service;
 
+import com.ragvault.core.prompt.PromptLoader;
 import com.ragvault.core.service.parser.ParsedDocument.ExtractedImage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,11 +24,7 @@ public class ImageCaptioningService {
     private final ChatClient chatClient;
 
     private static final String CAPTION_PROMPT =
-            "이 이미지를 RAG 검색에 활용할 수 있도록 상세히 설명하세요. " +
-            "- UI 화면이라면: 버튼 이름·색상·위치, 입력 폼, 메뉴 항목, 화면 제목 등 주요 UI 요소를 모두 기술하세요. " +
-            "- 표·차트·도표라면: 수치와 항목명을 텍스트로 요약하세요. " +
-            "- 텍스트가 포함된 이미지라면: 핵심 문구를 그대로 옮기세요. " +
-            "300자 이내로 답변하세요.";
+            PromptLoader.load("prompts/image-captioning/caption.txt");
 
     /**
      * 이미지 → 캡션 텍스트 (실패 시 빈 문자열).

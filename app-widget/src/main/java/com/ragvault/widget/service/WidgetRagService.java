@@ -1,6 +1,7 @@
 package com.ragvault.widget.service;
 
 import com.ragvault.core.domain.DocumentChunk.ChunkResult;
+import com.ragvault.core.prompt.PromptLoader;
 import com.ragvault.core.repository.DocumentChunkRepository;
 import com.ragvault.widget.security.InputValidator;
 import com.ragvault.core.security.PiiMasker;
@@ -42,8 +43,11 @@ public class WidgetRagService {
     private final ConversationLogService conversationLogService;
     private final SearchConfigService searchConfigService;
 
-    @Value("${widget.prompts.system}")
-    private String systemPrompt;
+    private static final String SYSTEM_PROMPT =
+            PromptLoader.load("prompts/widget-rag-service/system.txt");
+
+    private static final String QUERY_REWRITE_SYSTEM =
+            PromptLoader.load("prompts/query-rewrite/system.txt");
 
     /**
      * RAG 질의응답 — 기존 2인자 오버로드 (테스트 호환 유지).
@@ -119,7 +123,7 @@ public class WidgetRagService {
         log.debug("Calling LLM with {} chunks, history={}", chunks.size(), history.size());
 
         String llmResponse = chatClient.prompt()
-                .system(systemPrompt)
+                .system(SYSTEM_PROMPT)
                 .user(fullPrompt)
                 .call()
                 .content();
@@ -148,8 +152,7 @@ public class WidgetRagService {
 
         try {
             String rewritten = chatClient.prompt()
-                    .system("당신은 대화 이력을 참고해 후속 질문을 검색에 적합한 독립형 질문으로 " +
-                            "재작성하는 도우미입니다. 질문에 답하지 말고, 재작성된 질문 문장만 한국어로 출력하세요.")
+                    .system(QUERY_REWRITE_SYSTEM)
                     .user(sb.toString())
                     .call()
                     .content();
