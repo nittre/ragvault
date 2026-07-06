@@ -117,20 +117,46 @@ docker compose -f infra/compose.base.yml -f infra/compose.internal.yml up -d --b
 docker compose -f infra/compose.base.yml -f infra/compose.widget.yml up -d --build
 ```
 
-| 서비스 | URL |
-|--------|-----|
-| 챗 프론트엔드 | http://localhost:18080 |
-| 챗 백엔드 API | http://localhost:18090 |
-| 위젯 어드민 | http://localhost:5173 |
-| 위젯 임베드 데모 | http://localhost:8080/demo.html |
-| 위젯 백엔드 API | http://localhost:8081 |
+| 서비스 | 설명 | 포트(호스트→컨테이너) | 접속 URL |
+|--------|------|:---:|-----|
+| `rag-frontend` | 챗 서비스 프론트엔드(SPA, Nginx 서빙) | 18080→80 | http://localhost:18080 |
+| `app-internal` | 챗 서비스 백엔드 API(Spring Boot) | 18090→8080 | http://localhost:18090 |
+| `widget-admin` | 위젯 서비스 어드민 콘솔(SPA, Nginx 서빙) | 5173→80 | http://localhost:5173 |
+| `widget-demo` | 위젯 임베드 데모 페이지(Nginx) | 8080→80 | http://localhost:8080/demo.html |
+| `app-widget` | 위젯 서비스 백엔드 API(Spring Boot) | 8081→8081 | http://localhost:8081 |
 
-백엔드만 IDE 에서 직접 실행할 수도 있습니다:
+두 오버레이가 공유하는 인프라 서비스(`compose.base.yml` 및 각 오버레이):
+
+| 서비스 | 설명 | 포트(로컬) |
+|--------|------|:---:|
+| `ollama` | LLM/임베딩/비전 추론(챗·위젯 공용) | 11434 |
+| `pgvector` | 벡터 DB — `ragdb`(챗) + `widget_db`(위젯) | 5432 |
+| `redis` | 챗 서비스 ShedLock 분산 스케줄 락 | 6379 |
+| `searxng` | 챗 서비스 웹검색 메타서치 엔진 | 18081→8080 |
+| `mysql-sample` | 챗 서비스 샘플 외부 DB(binlog 동기화) | 3306 |
+| `mariadb-board` | 챗 서비스 샘플 외부 게시판 DB(binlog 동기화) | 3307 |
+| `shop-mariadb` | 위젯 서비스 샘플 고객 datasource(`shop_db`) | 3308 |
+
+> 서비스·볼륨 상세 정의는 [infra/README.md](infra/README.md) 참고.
+
+### IDE / CLI 직접 실행 (Docker 없이 개별 서비스만 띄우기)
+
+백엔드는 `ollama`·`pgvector` 등 인프라만 Docker 로 띄운 뒤 IDE 에서 직접 실행할 수 있습니다:
 
 ```bash
-cd app-internal && ./gradlew bootRun    # 챗
-cd app-widget   && ./gradlew bootRun    # 위젯
+cd app-internal && ./gradlew bootRun    # 챗 백엔드   → http://localhost:8080
+cd app-widget   && ./gradlew bootRun    # 위젯 백엔드 → http://localhost:8081
 ```
+
+프론트엔드도 Vite dev 서버로 직접 실행할 수 있습니다(핫리로드):
+
+```bash
+cd frontend/internal      && npm install && npm run dev  # 챗 프론트   → http://localhost:5173 (프록시: localhost:18090)
+cd frontend/widget-admin  && npm install && npm run dev  # 위젯 어드민 → http://localhost:5173 (프록시: localhost:8081)
+```
+
+> `frontend/internal` 은 Docker Compose 로 띄운 챗 백엔드(`18090`)를 프록시 대상으로 삼습니다. `./gradlew bootRun`(`8080`)과 함께 쓰려면 `frontend/internal/vite.config.ts` 의 프록시 대상 포트를 맞춰야 합니다. 두 프론트엔드 모두 Vite 기본 포트(`5173`)를 쓰므로 **동시에는 하나만** 실행하세요.
+> `frontend/widget-embed` 는 빌드 없는 정적 파일이라 별도 dev 서버가 없습니다 — `demo.html` 을 브라우저로 직접 열거나 Docker Compose 의 `widget-demo`(`:8080`)로 확인하세요.
 
 ### 개발 서버 환경 (Jenkins 배포)
 
@@ -140,6 +166,19 @@ cd app-widget   && ./gradlew bootRun    # 위젯
 # 개발 서버에서 전체 스택 기동 (Jenkins 가 이미지를 미리 적재한 상태)
 docker compose -f infra/compose.dev.yml --env-file infra/.env.dev up -d
 ```
+
+개발 서버는 로컬 Docker Compose 와 포트가 다릅니다(`ollama`·`searxng` 는 개발 서버 자체 인프라를 사용하며 `compose.dev.yml` 에 포함되지 않음):
+
+| 서비스 | 포트(호스트→컨테이너) | 접속 URL |
+|--------|:---:|-----|
+| `rag-frontend` | 18080→80 | http://개발서버호스트:18080 |
+| `app-internal` | 18090→8080 | http://개발서버호스트:18090 |
+| `widget-admin` | 18082→80 | http://개발서버호스트:18082 |
+| `widget-demo` | 18083→80 | http://개발서버호스트:18083/demo.html |
+| `app-widget` | 18091→8081 | http://개발서버호스트:18091 |
+| `pgvector` | 35432→5432 | — |
+| `redis` | 6379 | — |
+| `searxng` | 8888→8080 | — |
 
 Jenkins 파이프라인(수동 트리거)은 아래 4종입니다. 공통 흐름은
 **Checkout → Build Image → Sync Configs(tar/ssh) → Transfer Image(docker save→load) → Deploy(`up -d --no-deps --force-recreate`) → Verify** 입니다.
