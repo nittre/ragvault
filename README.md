@@ -286,12 +286,22 @@ cd frontend/widget-admin  && npm install && npm run dev  # 위젯 어드민 → 
 
 개발 서버에서는 **직접 빌드하지 않습니다.** Jenkins 가 이미지를 빌드해 `docker save | ssh docker load` 로 전송하고, `build:` 섹션이 없는 `compose.dev.yml` 로 컨테이너만 교체합니다.
 
+최초 1회 준비:
+
+```bash
+# 외부 도커 네트워크 (한 번만)
+docker network create rag-net
+
+# infra/.env.dev.example 을 복사해 infra/.env.dev 생성 후 값 채우기
+cp infra/.env.dev.example infra/.env.dev
+```
+
 ```bash
 # 개발 서버에서 전체 스택 기동 (Jenkins 가 이미지를 미리 적재한 상태)
 docker compose -f infra/compose.dev.yml --env-file infra/.env.dev up -d
 ```
 
-개발 서버는 로컬 Docker Compose 와 포트가 다릅니다(`ollama`·`searxng` 는 개발 서버 자체 인프라를 사용하며 `compose.dev.yml` 에 포함되지 않음):
+개발 서버는 로컬 Docker Compose 와 포트가 다릅니다(`ollama` 는 개발 서버 자체 인프라를 사용하며 `compose.dev.yml` 에 포함되지 않음):
 
 | 서비스 | 포트(호스트→컨테이너) | 접속 URL |
 |--------|:---:|-----|
