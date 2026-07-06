@@ -91,7 +91,7 @@ public class JwtAuthController {
     }
 
     private void setTokenCookie(HttpServletResponse response, String value, long maxAgeSeconds) {
-        ResponseCookie cookie = ResponseCookie.from("token", value)
+        ResponseCookie cookie = ResponseCookie.from("widget-token", value)
                 .httpOnly(true)
                 .sameSite("Lax")
                 .path("/")

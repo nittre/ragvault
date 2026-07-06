@@ -98,7 +98,7 @@ class JwtAuthIntegrationTest {
         String token = jwtService.generateToken(ADMIN_EMAIL, RagRole.SUPER_ADMIN);
 
         mockMvc.perform(get("/api/admin/me")
-                        .cookie(new jakarta.servlet.http.Cookie("token", token)))
+                        .cookie(new jakarta.servlet.http.Cookie("widget-token", token)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(ADMIN_EMAIL))
                 .andExpect(jsonPath("$.role").value("SUPER_ADMIN"));
