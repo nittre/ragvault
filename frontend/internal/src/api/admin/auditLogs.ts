@@ -2,11 +2,12 @@ import apiClient from '../client'
 
 export interface AuditLog {
   id: string
-  actor: string
+  userEmail: string
   action: string
-  targetType: string
-  targetId: string
-  detail: string
+  intent: string | null
+  requestSummary: string | null
+  responseId: string | null
+  ipAddress: string | null
   createdAt: string
 }
 

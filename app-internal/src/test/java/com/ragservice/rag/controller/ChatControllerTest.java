@@ -4,8 +4,10 @@ import com.ragservice.rag.dto.ChatCompletionRequest;
 import com.ragservice.rag.dto.ChatMessage;
 import com.ragservice.rag.dto.EffectiveParams;
 import com.ragservice.rag.dto.MessageDto;
+import com.ragservice.rag.service.AuditLogService;
 import com.ragservice.rag.service.ParameterResolver;
 import com.ragservice.rag.service.QueryRouterService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +38,8 @@ class ChatControllerTest {
 
     @Mock QueryRouterService queryRouterService;
     @Mock ParameterResolver parameterResolver;
+    @Mock AuditLogService auditLogService;
+    @Mock HttpServletRequest httpServletRequest;
 
     @InjectMocks
     ChatController chatController;
@@ -65,7 +69,7 @@ class ChatControllerTest {
 
     @SuppressWarnings("unchecked")
     private List<MessageDto> captureHistory(ChatCompletionRequest request) {
-        chatController.chatCompletions(request, null, null);
+        chatController.chatCompletions(request, null, null, httpServletRequest);
         ArgumentCaptor<List<MessageDto>> captor = ArgumentCaptor.forClass(List.class);
         verify(queryRouterService).route(anyString(), captor.capture(), any(), any(), any(), any());
         return captor.getValue();

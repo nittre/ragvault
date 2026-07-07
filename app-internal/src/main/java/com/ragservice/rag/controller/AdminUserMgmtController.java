@@ -3,6 +3,8 @@ package com.ragservice.rag.controller;
 import com.ragvault.core.domain.RagRole;
 import com.ragvault.core.domain.RagUser;
 import com.ragvault.core.service.RagUserService;
+import com.ragservice.rag.service.AuditLogService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +31,7 @@ import java.util.List;
 public class AdminUserMgmtController {
 
     private final RagUserService ragUserService;
+    private final AuditLogService auditLogService;
 
     /** 응답 DTO */
     record UserResponse(
@@ -53,9 +56,12 @@ public class AdminUserMgmtController {
     @PostMapping
     public ResponseEntity<UserResponse> create(
             @RequestBody CreateUserRequest req,
-            Authentication authentication) {
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
         String createdBy = authentication != null ? authentication.getName() : "unknown";
         RagUser user = ragUserService.createUser(req.email(), req.name(), req.role(), req.password(), createdBy);
+        auditLogService.log(createdBy, "USER_CREATE", "rag_user", req.email(),
+                httpRequest.getRemoteAddr(), null);
         return ResponseEntity.status(201).body(toResponse(user));
     }
 
@@ -64,16 +70,24 @@ public class AdminUserMgmtController {
     public ResponseEntity<UserResponse> update(
             @PathVariable String email,
             @RequestBody UpdateUserRequest req,
-            Authentication authentication) {
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
         String updatedBy = authentication != null ? authentication.getName() : "unknown";
         RagUser user = ragUserService.updateUser(email, req.name(), req.role(), req.active(), updatedBy);
+        auditLogService.log(updatedBy, "USER_UPDATE", "rag_user", email,
+                httpRequest.getRemoteAddr(), null);
         return ResponseEntity.ok(toResponse(user));
     }
 
     /** 사용자 삭제 */
     @DeleteMapping("/{email}")
-    public ResponseEntity<Void> delete(@PathVariable String email) {
+    public ResponseEntity<Void> delete(@PathVariable String email,
+                                        Authentication authentication,
+                                        HttpServletRequest httpRequest) {
+        String actor = authentication != null ? authentication.getName() : "unknown";
         ragUserService.deleteUser(email);
+        auditLogService.log(actor, "USER_DELETE", "rag_user", email,
+                httpRequest.getRemoteAddr(), null);
         return ResponseEntity.noContent().build();
     }
 
@@ -81,8 +95,13 @@ public class AdminUserMgmtController {
     @PostMapping("/{email}/reset-password")
     public ResponseEntity<Void> resetPassword(
             @PathVariable String email,
-            @RequestBody ResetPasswordRequest req) {
+            @RequestBody ResetPasswordRequest req,
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
+        String actor = authentication != null ? authentication.getName() : "unknown";
         ragUserService.initPassword(email, req.newPassword());
+        auditLogService.log(actor, "USER_PASSWORD_RESET", "rag_user", email,
+                httpRequest.getRemoteAddr(), null);
         return ResponseEntity.ok().build();
     }
 

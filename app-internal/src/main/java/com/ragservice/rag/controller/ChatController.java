@@ -1,8 +1,10 @@
 package com.ragservice.rag.controller;
 
 import com.ragservice.rag.dto.*;
+import com.ragservice.rag.service.AuditLogService;
 import com.ragservice.rag.service.ParameterResolver;
 import com.ragservice.rag.service.QueryRouterService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +38,7 @@ public class ChatController {
 
     private final QueryRouterService queryRouterService;
     private final ParameterResolver parameterResolver;
+    private final AuditLogService auditLogService;
 
     @Value("${rag.chat.model:qwen2.5vl:7b}")
     private String defaultChatModel;
@@ -62,7 +65,8 @@ public class ChatController {
     public ResponseEntity<ChatCompletionResponse> chatCompletions(
             @RequestBody ChatCompletionRequest request,
             Authentication authentication,
-            @RequestHeader(value = "X-Conversation-Id", required = false) String conversationId) {
+            @RequestHeader(value = "X-Conversation-Id", required = false) String conversationId,
+            HttpServletRequest httpRequest) {
 
         // ADR-0011: SecurityContext 에서 이메일 추출
         String userEmail = authentication != null ? authentication.getName() : null;
@@ -94,7 +98,19 @@ public class ChatController {
                 request.fileIds(),
                 request.routingHint());
 
+        auditLogService.log(userEmail, resolveAction(result.intent()), result.intent(),
+                userMessage, httpRequest.getRemoteAddr(), result.responseId());
+
         return ResponseEntity.ok(buildResponse(result, request.model()));
+    }
+
+    /** audit_log.action 은 'CHAT'/'SQL_QUERY'/'FILE_UPLOAD' 로 집계된다 (AdminUsageStatsController). */
+    private String resolveAction(String intent) {
+        return switch (intent) {
+            case "SQL" -> "SQL_QUERY";
+            case "FILE" -> "FILE_UPLOAD";
+            default -> "CHAT";
+        };
     }
 
     private String extractLastUserMessage(List<ChatMessage> messages) {

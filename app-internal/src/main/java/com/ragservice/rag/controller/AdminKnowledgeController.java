@@ -1,6 +1,7 @@
 package com.ragservice.rag.controller;
 
 import com.ragvault.core.service.parser.DocumentParserRouter;
+import com.ragservice.rag.service.AuditLogService;
 import com.ragservice.rag.service.KnowledgeDocIngestionService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,7 @@ public class AdminKnowledgeController {
 
     private final KnowledgeDocIngestionService ingestionService;
     private final DocumentParserRouter parserRouter;
+    private final AuditLogService auditLogService;
 
     @Value("${rag.knowledge.directory:knowledge-internal}")
     private String knowledgeDirectory;
@@ -136,7 +138,7 @@ public class AdminKnowledgeController {
             String content = req.content() != null ? req.content() : "";
             Files.writeString(filePath, content);
             ingestionService.ingestMarkdown(name, content);
-            log(auth, "KNOWLEDGE_CREATE", name);
+            log(auth, "KNOWLEDGE_CREATE", name, httpReq);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(Map.of("name", name, "status", "created"));
         } catch (IOException e) {
@@ -167,7 +169,7 @@ public class AdminKnowledgeController {
             String content = req.content() != null ? req.content() : "";
             Files.writeString(filePath, content);
             ingestionService.ingestMarkdown(filePath.getFileName().toString(), content);
-            log(auth, "KNOWLEDGE_UPDATE", filePath.getFileName().toString());
+            log(auth, "KNOWLEDGE_UPDATE", filePath.getFileName().toString(), httpReq);
             return ResponseEntity.ok(
                     Map.of("name", filePath.getFileName().toString(), "status", "updated"));
         } catch (IOException e) {
@@ -181,7 +183,8 @@ public class AdminKnowledgeController {
     // -------------------------------------------------------------------------
 
     @DeleteMapping("/{docId}")
-    public ResponseEntity<?> deleteFile(@PathVariable String docId, Authentication auth) {
+    public ResponseEntity<?> deleteFile(@PathVariable String docId, Authentication auth,
+                                         HttpServletRequest httpReq) {
         if (isPathTraversal(docId)) return badTraversal();
         Path filePath = resolveFilePath(docId);
         if (!Files.exists(filePath)) return ResponseEntity.notFound().build();
@@ -190,7 +193,7 @@ public class AdminKnowledgeController {
         try {
             Files.delete(filePath);
             ingestionService.deleteDoc(name);
-            log(auth, "KNOWLEDGE_DELETE", name);
+            log(auth, "KNOWLEDGE_DELETE", name, httpReq);
             return ResponseEntity.ok(Map.of("name", name, "status", "deleted"));
         } catch (IOException e) {
             return ResponseEntity.internalServerError()
@@ -204,7 +207,8 @@ public class AdminKnowledgeController {
 
     @PostMapping("/upload")
     public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file,
-                                         Authentication auth) {
+                                         Authentication auth,
+                                         HttpServletRequest httpReq) {
         if (file == null || file.isEmpty())
             return ResponseEntity.badRequest().body(Map.of("error", "파일이 비어 있습니다"));
         if (file.getSize() > MAX_UPLOAD_BYTES)
@@ -235,7 +239,7 @@ public class AdminKnowledgeController {
             byte[] bytes = file.getBytes();
             Files.write(dest, bytes);
             ingestionService.ingestFile(originalName, bytes, originalName);
-            log(auth, "KNOWLEDGE_UPLOAD", originalName);
+            log(auth, "KNOWLEDGE_UPLOAD", originalName, httpReq);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(Map.of("name", originalName, "status", "uploaded"));
         } catch (IOException e) {
@@ -355,8 +359,9 @@ public class AdminKnowledgeController {
                 .body(Map.of("error", "유효하지 않은 파일명: path traversal 불허"));
     }
 
-    private void log(Authentication auth, String action, String target) {
+    private void log(Authentication auth, String action, String target, HttpServletRequest req) {
         String actor = auth != null ? auth.getName() : "unknown";
         log.info("AUDIT action={} actor={} target={}", action, actor, target);
+        auditLogService.log(actor, action, null, target, req.getRemoteAddr(), null);
     }
 }
