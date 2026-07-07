@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
  *
  * - GET /        → 전역 규칙 + 해당 DS 규칙 목록
  * - POST /       → DS 스코프 규칙 생성
+ * - PATCH /{id}  → 수정
  * - DELETE /{id} → 삭제
  * - POST /bulk   → 일괄 생성
  * - GET /suggest → 스키마 컬럼 분석 → PII 규칙 제안
@@ -118,6 +119,35 @@ public class AdminDsMaskingRuleController {
         rule.setCreatedAt(LocalDateTime.now());
         rule.setUpdatedAt(LocalDateTime.now());
         MaskingRule saved = repository.save(rule);
+        piiMasker.evict();
+        return saved;
+    }
+
+    public record UpdateRequest(
+            String name,
+            String pattern,
+            String replacement,
+            String level,
+            Boolean enabled,
+            Integer sortOrder
+    ) {}
+
+    @PatchMapping("/{id}")
+    public MaskingRule update(@PathVariable Integer dsId, @PathVariable Long id, @RequestBody UpdateRequest req) {
+        MaskingRule existing = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "마스킹 규칙을 찾을 수 없습니다"));
+        if (existing.getDatasourceId() != null && !dsId.equals(existing.getDatasourceId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "다른 데이터소스의 규칙입니다");
+        }
+        if (req.name() != null) existing.setName(req.name());
+        if (req.pattern() != null) existing.setPattern(req.pattern());
+        if (req.replacement() != null) existing.setReplacement(req.replacement());
+        if (req.level() != null) existing.setLevel(req.level());
+        if (req.enabled() != null) existing.setEnabled(req.enabled());
+        if (req.sortOrder() != null) existing.setSortOrder(req.sortOrder());
+        existing.setUpdatedAt(LocalDateTime.now());
+        validate(existing);
+        MaskingRule saved = repository.save(existing);
         piiMasker.evict();
         return saved;
     }
