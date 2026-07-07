@@ -19,4 +19,6 @@ public interface SqlExecutionLogRepository extends JpaRepository<SqlExecutionLog
     List<SqlExecutionLog> findByValidationResultAndCreatedAtAfter(String validationResult, LocalDateTime after);
 
     List<SqlExecutionLog> findByFailureCategoryAndCreatedAtAfter(String failureCategory, LocalDateTime after);
+
+    long countByValidationResultAndCreatedAtBetween(String validationResult, LocalDateTime from, LocalDateTime to);
 }

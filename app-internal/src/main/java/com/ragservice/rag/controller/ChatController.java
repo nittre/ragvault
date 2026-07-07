@@ -104,12 +104,19 @@ public class ChatController {
         return ResponseEntity.ok(buildResponse(result, request.model()));
     }
 
-    /** audit_log.action 은 'CHAT'/'SQL_QUERY'/'FILE_UPLOAD' 로 집계된다 (AdminUsageStatsController). */
+    /**
+     * audit_log.action 은 최상위 라우팅 intent를 그대로 반영한다 (AdminUsageStatsController.routing).
+     * HYBRID/WEB_SEARCH를 CHAT으로 뭉개면 사용량 통계에서 이 경로들이 사라지므로 각자 라벨을 부여한다.
+     * IMAGE/IMAGE_RAG/URL_FETCH/REJECT는 빈도가 낮아 OTHER로 묶는다.
+     */
     private String resolveAction(String intent) {
         return switch (intent) {
             case "SQL" -> "SQL_QUERY";
             case "FILE" -> "FILE_UPLOAD";
-            default -> "CHAT";
+            case "HYBRID" -> "HYBRID";
+            case "WEB_SEARCH" -> "WEB_SEARCH";
+            case "RAG" -> "RAG";
+            default -> "OTHER";
         };
     }
 

@@ -109,4 +109,53 @@ class ChatControllerTest {
 
         assertThat(history).hasSize(10);
     }
+
+    // ── resolveAction: audit_log.action 매핑 검증 ──────────────────────────────
+    // HYBRID/WEB_SEARCH를 CHAT으로 뭉개면 사용량 통계에서 사라지는 회귀를 막기 위한 테스트.
+
+    @SuppressWarnings("unchecked")
+    private String captureLoggedAction(String intent) {
+        when(parameterResolver.resolve(any(), any(), any()))
+                .thenReturn(EffectiveParams.of(Map.of(), Map.of()));
+        when(queryRouterService.route(anyString(), any(), any(), any(), any(), any()))
+                .thenReturn(new QueryRouterService.RouterResult(
+                        "답변", List.of(), intent, null, false, null, List.of()));
+
+        chatController.chatCompletions(
+                requestWithMessages(messagesWithPriorCount(1)), null, null, httpServletRequest);
+
+        ArgumentCaptor<String> actionCaptor = ArgumentCaptor.forClass(String.class);
+        verify(auditLogService).log(any(), actionCaptor.capture(), any(), any(), any(), any());
+        return actionCaptor.getValue();
+    }
+
+    @Test
+    void resolveAction_sqlIntent_mapsToSqlQuery() {
+        assertThat(captureLoggedAction("SQL")).isEqualTo("SQL_QUERY");
+    }
+
+    @Test
+    void resolveAction_fileIntent_mapsToFileUpload() {
+        assertThat(captureLoggedAction("FILE")).isEqualTo("FILE_UPLOAD");
+    }
+
+    @Test
+    void resolveAction_ragIntent_mapsToRag() {
+        assertThat(captureLoggedAction("RAG")).isEqualTo("RAG");
+    }
+
+    @Test
+    void resolveAction_hybridIntent_mapsToHybrid_notChat() {
+        assertThat(captureLoggedAction("HYBRID")).isEqualTo("HYBRID");
+    }
+
+    @Test
+    void resolveAction_webSearchIntent_mapsToWebSearch_notChat() {
+        assertThat(captureLoggedAction("WEB_SEARCH")).isEqualTo("WEB_SEARCH");
+    }
+
+    @Test
+    void resolveAction_imageIntent_mapsToOther() {
+        assertThat(captureLoggedAction("IMAGE")).isEqualTo("OTHER");
+    }
 }

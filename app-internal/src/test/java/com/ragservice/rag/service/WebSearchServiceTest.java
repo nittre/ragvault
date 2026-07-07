@@ -1,12 +1,15 @@
 package com.ragservice.rag.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ragvault.core.domain.WebSearchExecutionLog;
+import com.ragvault.core.repository.WebSearchExecutionLogRepository;
 import com.ragvault.core.security.PiiMasker;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -35,6 +38,7 @@ class WebSearchServiceTest {
     @Mock ChatClient.CallResponseSpec callResponseSpec;
     @Mock PiiMasker piiMasker;
     @Mock ResponseRawStorageService rawStorage;
+    @Mock WebSearchExecutionLogRepository webSearchExecutionLogRepository;
 
     @InjectMocks
     WebSearchService webSearchService;
@@ -75,6 +79,11 @@ class WebSearchServiceTest {
         assertThat(result.denied()).isTrue();
         assertThat(result.content()).contains("err_search");
         verifyNoInteractions(chatClient);
+
+        ArgumentCaptor<WebSearchExecutionLog> captor = ArgumentCaptor.forClass(WebSearchExecutionLog.class);
+        verify(webSearchExecutionLogRepository).save(captor.capture());
+        assertThat(captor.getValue().getExecutionStatus()).isEqualTo("error");
+        assertThat(captor.getValue().getFailureCategory()).isEqualTo("SEARXNG_ERROR");
     }
 
     // ── SearXNG 응답 정상 + LLM 성공 ─────────────────────────────────────────
@@ -102,6 +111,13 @@ class WebSearchServiceTest {
         var inOrder = inOrder(rawStorage, piiMasker);
         inOrder.verify(rawStorage).store(eq("원본 응답"), eq("WEB_SEARCH"), anyString(), anyString());
         inOrder.verify(piiMasker).mask("원본 응답");
+
+        ArgumentCaptor<WebSearchExecutionLog> captor = ArgumentCaptor.forClass(WebSearchExecutionLog.class);
+        verify(webSearchExecutionLogRepository).save(captor.capture());
+        assertThat(captor.getValue().getExecutionStatus()).isEqualTo("success");
+        assertThat(captor.getValue().getFailureCategory()).isNull();
+        assertThat(captor.getValue().getHitCount()).isEqualTo(2);
+        assertThat(captor.getValue().getResponseId()).isEqualTo("resp-id-123");
     }
 
     // ── SearXNG 응답 정상 + LLM 실패 ─────────────────────────────────────────
@@ -121,6 +137,12 @@ class WebSearchServiceTest {
         assertThat(result.content()).contains("err_llm");
         verifyNoInteractions(piiMasker);
         verifyNoInteractions(rawStorage);
+
+        ArgumentCaptor<WebSearchExecutionLog> captor = ArgumentCaptor.forClass(WebSearchExecutionLog.class);
+        verify(webSearchExecutionLogRepository).save(captor.capture());
+        assertThat(captor.getValue().getExecutionStatus()).isEqualTo("error");
+        assertThat(captor.getValue().getFailureCategory()).isEqualTo("LLM_ERROR");
+        assertThat(captor.getValue().getHitCount()).isEqualTo(2);
     }
 
     // ── SearXNG 빈 결과 ───────────────────────────────────────────────────────
@@ -133,6 +155,12 @@ class WebSearchServiceTest {
 
         assertThat(result.denied()).isTrue();
         verifyNoInteractions(chatClient);
+
+        ArgumentCaptor<WebSearchExecutionLog> captor = ArgumentCaptor.forClass(WebSearchExecutionLog.class);
+        verify(webSearchExecutionLogRepository).save(captor.capture());
+        assertThat(captor.getValue().getExecutionStatus()).isEqualTo("error");
+        assertThat(captor.getValue().getFailureCategory()).isEqualTo("NO_RESULTS");
+        assertThat(captor.getValue().getHitCount()).isEqualTo(0);
     }
 
     // ── 헬퍼 ─────────────────────────────────────────────────────────────────

@@ -2,7 +2,9 @@ package com.ragservice.rag.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ragvault.core.domain.WebSearchExecutionLog;
 import com.ragvault.core.prompt.PromptLoader;
+import com.ragvault.core.repository.WebSearchExecutionLogRepository;
 import com.ragvault.core.security.PiiMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +19,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,6 +45,7 @@ public class WebSearchService {
     private final PiiMasker piiMasker;
     private final ResponseRawStorageService rawStorage;
     private final ObjectMapper objectMapper;
+    private final WebSearchExecutionLogRepository webSearchExecutionLogRepository;
 
     @Value("${rag.web-search.searxng-url:http://localhost:8081}")
     private String searxngUrl;
@@ -67,16 +71,22 @@ public class WebSearchService {
     private record SearchHit(String title, String url, String snippet) {}
 
     public WebSearchResult search(String question, String userEmail) {
+        long start = System.currentTimeMillis();
+
         List<SearchHit> hits;
         try {
             hits = callSearxng(question);
         } catch (Exception e) {
             log.error("SearXNG 호출 실패: {}", searxngUrl, e);
+            logExecution(userEmail, question, null, "error", elapsedSince(start),
+                    e.getMessage(), null, "SEARXNG_ERROR");
             return WebSearchResult.denied("웹 검색에 실패했습니다. (err_search)");
         }
 
         if (hits.isEmpty()) {
             log.warn("SearXNG 검색 결과 없음: '{}'", question);
+            logExecution(userEmail, question, 0, "error", elapsedSince(start),
+                    null, null, "NO_RESULTS");
             return WebSearchResult.denied("웹 검색 결과를 찾을 수 없습니다.");
         }
 
@@ -89,6 +99,8 @@ public class WebSearchService {
                     .call().content();
         } catch (Exception e) {
             log.error("LLM 호출 실패 (WEB_SEARCH)", e);
+            logExecution(userEmail, question, hits.size(), "error", elapsedSince(start),
+                    e.getMessage(), null, "LLM_ERROR");
             return WebSearchResult.denied("답변 생성에 실패했습니다. (err_llm)");
         }
 
@@ -100,7 +112,34 @@ public class WebSearchService {
 
         List<String> sourceUrls = hits.stream().map(SearchHit::url).toList();
         log.debug("WEB_SEARCH 완료: {} 결과 사용, responseId={}", hits.size(), responseId);
+        logExecution(userEmail, question, hits.size(), "success", elapsedSince(start),
+                null, responseId, null);
         return new WebSearchResult(masked, sourceUrls, responseId, false);
+    }
+
+    private long elapsedSince(long start) {
+        return System.currentTimeMillis() - start;
+    }
+
+    private void logExecution(String userEmail, String question, Integer hitCount,
+                               String executionStatus, long elapsedMs,
+                               String errorMessage, String responseId, String failureCategory) {
+        try {
+            WebSearchExecutionLog entry = WebSearchExecutionLog.builder()
+                    .userEmail(userEmail)
+                    .question(question)
+                    .hitCount(hitCount)
+                    .executionStatus(executionStatus)
+                    .failureCategory(failureCategory)
+                    .errorMessage(errorMessage)
+                    .elapsedMs((int) elapsedMs)
+                    .responseId(responseId)
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            webSearchExecutionLogRepository.save(entry);
+        } catch (Exception e) {
+            log.warn("WebSearchExecutionLog save failed (non-fatal): {}", e.getMessage());
+        }
     }
 
     private List<SearchHit> callSearxng(String query) throws Exception {

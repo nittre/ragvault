@@ -28,25 +28,39 @@ export default function UsageStatsPage() {
   const isToday = date === toDateString(new Date())
 
   const total = data?.totalQueries ?? 0
-  const rag = data?.breakdown?.RAG ?? 0
-  const sql = data?.breakdown?.SQL_QUERY ?? 0
-  const file = data?.breakdown?.FILE_UPLOAD ?? 0
-  const other = total - rag - sql - file
+  const rag = data?.routing?.RAG ?? 0
+  const sql = data?.routing?.SQL_QUERY ?? 0
+  const file = data?.routing?.FILE_UPLOAD ?? 0
+  const hybrid = data?.routing?.HYBRID ?? 0
+  const webSearch = data?.routing?.WEB_SEARCH ?? 0
+  const other = data?.routing?.OTHER ?? 0
+
+  const sqlExecutions = data?.executions?.sqlQuery ?? 0
+  const webSearchExecutions = data?.executions?.webSearch ?? 0
 
   const cards = [
     { label: '전체 요청', value: total, color: 'text-gray-900', bg: 'bg-white' },
     { label: 'RAG 채팅', value: rag, color: 'text-blue-600', bg: 'bg-blue-50' },
     { label: 'SQL 조회', value: sql, color: 'text-green-600', bg: 'bg-green-50' },
     { label: '파일 업로드', value: file, color: 'text-purple-600', bg: 'bg-purple-50' },
+    { label: 'HYBRID', value: hybrid, color: 'text-amber-600', bg: 'bg-amber-50' },
+    { label: '웹 검색', value: webSearch, color: 'text-cyan-600', bg: 'bg-cyan-50' },
   ]
 
   const barItems = [
     { label: 'RAG', value: rag, color: 'bg-blue-500' },
     { label: 'SQL', value: sql, color: 'bg-green-500' },
     { label: '파일 업로드', value: file, color: 'bg-purple-500' },
-    { label: '기타', value: other > 0 ? other : 0, color: 'bg-gray-400' },
+    { label: 'HYBRID', value: hybrid, color: 'bg-amber-500' },
+    { label: '웹 검색', value: webSearch, color: 'bg-cyan-500' },
+    { label: '기타', value: other, color: 'bg-gray-400' },
   ]
   const maxBar = Math.max(...barItems.map(b => b.value), 1)
+
+  const executionCards = [
+    { label: 'SQL 실행 횟수', value: sqlExecutions, color: 'text-green-600', bg: 'bg-green-50' },
+    { label: '웹 검색 실행 횟수', value: webSearchExecutions, color: 'text-cyan-600', bg: 'bg-cyan-50' },
+  ]
 
   return (
     <div className="p-6">
@@ -84,7 +98,7 @@ export default function UsageStatsPage() {
       {error && <p className="text-sm text-red-500">오류: {String(error)}</p>}
 
       {/* 요약 카드 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
         {cards.map(({ label, value, color, bg }) => (
           <div key={label} className={`${bg} border border-gray-200 rounded-xl p-4`}>
             <p className="text-xs text-gray-500 mb-1">{label}</p>
@@ -154,6 +168,24 @@ export default function UsageStatsPage() {
               </tr>
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* 실행 통계 */}
+      {data && (
+        <div className="mt-6">
+          <h2 className="text-sm font-medium text-gray-700 mb-1">실행 통계</h2>
+          <p className="text-xs text-gray-400 mb-3">
+            HYBRID 요청 내부에서 실행된 것까지 포함된 실제 실행 횟수입니다. 위 라우팅 분류와 합계가 다를 수 있습니다.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            {executionCards.map(({ label, value, color, bg }) => (
+              <div key={label} className={`${bg} border border-gray-200 rounded-xl p-4`}>
+                <p className="text-xs text-gray-500 mb-1">{label}</p>
+                <p className={`text-2xl font-bold ${color}`}>{value.toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

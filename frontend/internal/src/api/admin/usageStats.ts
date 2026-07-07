@@ -3,10 +3,17 @@ import apiClient from '../client'
 export interface DailyUsageStat {
   date: string
   totalQueries: number
-  breakdown: {
+  routing: {
     RAG: number
     SQL_QUERY: number
     FILE_UPLOAD: number
+    HYBRID: number
+    WEB_SEARCH: number
+    OTHER: number
+  }
+  executions: {
+    sqlQuery: number
+    webSearch: number
   }
 }
 
