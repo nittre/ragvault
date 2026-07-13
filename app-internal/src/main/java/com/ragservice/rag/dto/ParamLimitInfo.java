@@ -12,5 +12,6 @@ public record ParamLimitInfo(
         BigDecimal minValue,
         BigDecimal maxValue,
         boolean locked,
-        String lockedReason
+        String lockedReason,
+        BigDecimal fixedValue
 ) {}

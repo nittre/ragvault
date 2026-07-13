@@ -117,7 +117,8 @@ public class UserParamController {
                     limit.getMinValue(),
                     limit.getMaxValue(),
                     limit.isLocked(),
-                    limit.getLockedReason()
+                    limit.getLockedReason(),
+                    limit.getFixedValue()
             ));
         }
         return result;

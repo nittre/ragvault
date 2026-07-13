@@ -97,6 +97,11 @@ public class AdminParamLimitsController {
                     if (body.containsKey("maxValue")) {
                         p.setMaxValue(new BigDecimal(body.get("maxValue").toString()));
                     }
+                    if (p.getMinValue() != null && p.getMaxValue() != null
+                            && p.getMinValue().compareTo(p.getMaxValue()) > 0) {
+                        throw new ResponseStatusException(
+                                HttpStatus.BAD_REQUEST, "minValue는 maxValue보다 클 수 없습니다.");
+                    }
                     if (body.containsKey("fixedValue")) {
                         Object fv = body.get("fixedValue");
                         p.setFixedValue(fv == null ? null : new BigDecimal(fv.toString()));

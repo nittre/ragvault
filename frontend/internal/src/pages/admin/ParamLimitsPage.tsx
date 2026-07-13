@@ -1,7 +1,18 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Lock, Unlock, Check, X } from 'lucide-react'
+import { Lock, Unlock, Check, X, Pencil } from 'lucide-react'
 import { getParamLimits, updateParamLimit, lockParam, unlockParam } from '../../api/admin/paramLimits'
+
+/** axios 에러에서 서버가 내려준 메시지를 최대한 사람이 읽을 수 있는 형태로 추출. */
+function extractErrorMessage(err: unknown): string {
+  const anyErr = err as { response?: { data?: unknown }; message?: string }
+  const data = anyErr?.response?.data
+  if (typeof data === 'string') return data
+  if (data && typeof data === 'object' && 'message' in data && typeof (data as { message?: unknown }).message === 'string') {
+    return (data as { message: string }).message
+  }
+  return anyErr?.message ?? '알 수 없는 오류가 발생했습니다.'
+}
 
 export default function ParamLimitsPage() {
   const qc = useQueryClient()
@@ -11,29 +22,48 @@ export default function ParamLimitsPage() {
     queryFn: getParamLimits,
   })
 
+  const [mutationError, setMutationError] = useState<string | null>(null)
+
   const updateMut = useMutation({
-    mutationFn: ({ paramName, body }: { paramName: string; body: { minValue?: number; maxValue?: number } }) =>
-      updateParamLimit(paramName, body),
+    mutationFn: (
+      { paramName, body }: { paramName: string; body: { minValue?: number; maxValue?: number; fixedValue?: number | null } }
+    ) => updateParamLimit(paramName, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-param-limits'] })
+      setMutationError(null)
       setEditing(null)
+      setEditingFixed(null)
     },
+    onError: err => setMutationError(extractErrorMessage(err)),
   })
 
   const lockMut = useMutation({
-    mutationFn: ({ paramKey, reason }: { paramKey: string; reason: string }) =>
-      lockParam(paramKey, { lockedReason: reason }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-param-limits'] }),
+    mutationFn: ({ paramKey, reason }: { paramKey: string; reason?: string }) =>
+      lockParam(paramKey, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-param-limits'] })
+      setMutationError(null)
+      setEditingReason(null)
+    },
+    onError: err => setMutationError(extractErrorMessage(err)),
   })
 
   const unlockMut = useMutation({
     mutationFn: unlockParam,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-param-limits'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-param-limits'] })
+      setMutationError(null)
+    },
+    onError: err => setMutationError(extractErrorMessage(err)),
   })
 
   const [editing, setEditing] = useState<string | null>(null)
   const [editMin, setEditMin] = useState('')
   const [editMax, setEditMax] = useState('')
+  const [editingReason, setEditingReason] = useState<string | null>(null)
+  const [editReasonValue, setEditReasonValue] = useState('')
+  const [editingFixed, setEditingFixed] = useState<string | null>(null)
+  const [editFixedValue, setEditFixedValue] = useState('')
 
   const startEdit = (paramName: string, min: number, max: number) => {
     setEditing(paramName)
@@ -46,10 +76,30 @@ export default function ParamLimitsPage() {
   }
 
   const handleLock = (paramKey: string) => {
-    const reason = window.prompt('잠금 사유를 입력하세요.')
-    if (reason !== null) {
-      lockMut.mutate({ paramKey, reason })
+    if (window.confirm('해당 파라미터를 잠그시겠습니까?')) {
+      lockMut.mutate({ paramKey })
     }
+  }
+
+  const startEditReason = (paramName: string, currentReason: string) => {
+    setEditingReason(paramName)
+    setEditReasonValue(currentReason || '')
+  }
+
+  const handleSaveReason = (paramName: string) => {
+    lockMut.mutate({ paramKey: paramName, reason: editReasonValue })
+  }
+
+  const startEditFixed = (paramName: string, currentFixed: number | null) => {
+    setEditingFixed(paramName)
+    setEditFixedValue(currentFixed != null ? String(currentFixed) : '')
+  }
+
+  const handleSaveFixed = (paramName: string) => {
+    updateMut.mutate({
+      paramName,
+      body: { fixedValue: editFixedValue === '' ? null : Number(editFixedValue) },
+    })
   }
 
   return (
@@ -63,12 +113,20 @@ export default function ParamLimitsPage() {
 
       {isLoading && <p className="text-sm text-gray-400">불러오는 중…</p>}
       {error && <p className="text-sm text-red-500">오류: {String(error)}</p>}
+      {mutationError && (
+        <p className="text-sm text-red-500 mb-2">
+          저장 실패: {mutationError}
+          <button onClick={() => setMutationError(null)} className="ml-2 text-gray-400 hover:text-gray-600">
+            닫기
+          </button>
+        </p>
+      )}
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {['파라미터', '최솟값', '최댓값', '잠금 여부', '잠금 사유', ''].map(h => (
+              {['파라미터', '설명', '최솟값', '최댓값', '고정값', '잠금 여부', '잠금 사유', ''].map(h => (
                 <th
                   key={h}
                   className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide"
@@ -82,6 +140,7 @@ export default function ParamLimitsPage() {
             {limits.map(lim => (
               <tr key={lim.id} className={`hover:bg-gray-50 ${lim.locked ? 'bg-orange-50/30' : ''}`}>
                 <td className="px-4 py-3 font-mono text-gray-900 text-xs">{lim.paramName}</td>
+                <td className="px-4 py-3 text-gray-500 text-xs">{lim.description || '-'}</td>
                 <td className="px-4 py-3">
                   {editing === lim.paramName ? (
                     <input
@@ -107,6 +166,43 @@ export default function ParamLimitsPage() {
                   )}
                 </td>
                 <td className="px-4 py-3">
+                  {editingFixed === lim.paramName ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        value={editFixedValue}
+                        onChange={e => setEditFixedValue(e.target.value)}
+                        placeholder="비우면 해제"
+                        className="border border-blue-400 rounded px-2 py-1 text-sm w-20 focus:outline-none"
+                      />
+                      <button
+                        onClick={() => handleSaveFixed(lim.paramName)}
+                        disabled={updateMut.isPending}
+                        className="text-green-600 hover:text-green-800 p-1"
+                      >
+                        <Check size={12} />
+                      </button>
+                      <button
+                        onClick={() => setEditingFixed(null)}
+                        className="text-gray-400 hover:text-gray-600 p-1"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <span className="text-gray-700">{lim.fixedValue ?? '-'}</span>
+                      <button
+                        onClick={() => startEditFixed(lim.paramName, lim.fixedValue)}
+                        className="text-gray-300 hover:text-blue-500 p-0.5"
+                        title="고정값 수정 — 채팅 화면 잠금 필드에 표시되는 값"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-3">
                   {lim.locked ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
                       <Lock size={11} /> 잠김
@@ -117,7 +213,49 @@ export default function ParamLimitsPage() {
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-gray-400 text-xs">{lim.lockedReason || '-'}</td>
+                <td className="px-4 py-3 text-gray-400 text-xs">
+                  {editingReason === lim.paramName ? (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[11px] text-orange-500">
+                        ⚠️ 이 사유는 사용자에게 노출됩니다
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={editReasonValue}
+                          onChange={e => setEditReasonValue(e.target.value)}
+                          className="border border-blue-400 rounded px-2 py-1 text-xs w-40 focus:outline-none"
+                        />
+                        <button
+                          onClick={() => handleSaveReason(lim.paramName)}
+                          disabled={lockMut.isPending}
+                          className="text-green-600 hover:text-green-800 p-1"
+                        >
+                          <Check size={12} />
+                        </button>
+                        <button
+                          onClick={() => setEditingReason(null)}
+                          className="text-gray-400 hover:text-gray-600 p-1"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <span>{lim.lockedReason || '-'}</span>
+                      {lim.locked && (
+                        <button
+                          onClick={() => startEditReason(lim.paramName, lim.lockedReason)}
+                          className="text-gray-300 hover:text-blue-500 p-0.5"
+                          title="잠금 사유 수정"
+                        >
+                          <Pencil size={11} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     {editing === lim.paramName ? (
@@ -169,7 +307,7 @@ export default function ParamLimitsPage() {
             ))}
             {limits.length === 0 && !isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
                   파라미터 한도 데이터가 없습니다.
                 </td>
               </tr>
