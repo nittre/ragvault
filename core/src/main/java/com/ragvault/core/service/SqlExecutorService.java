@@ -48,16 +48,37 @@ public class SqlExecutorService {
         }
     }
 
+    /** 허용 가능한 최대치 — 상위 계층 검증을 거치지 않은 호출자가 있어도 이 범위 밖으로 못 나가게 하는 안전망. */
+    private static final int MAX_ALLOWED_TIMEOUT_SEC = 300;
+    private static final int MAX_ALLOWED_ROWS = 5000;
+
     /**
      * SQL 을 실행하고 결과를 반환.
      * LIMIT 미포함 시 자동 추가. Read-only 연결.
+     * 하드코딩된 기본 타임아웃(10초)/최대 행수(1000행)를 사용 — 위젯 서비스 등 기존 호출자와 하위호환.
      *
      * @param sql          검증된 SELECT SQL
      * @param datasourceId datasource_config 조회용 ID (필수)
      * @return SqlResult — hasError() = true 면 실패
      */
     public SqlResult execute(String sql, Integer datasourceId) {
-        String safeSql = ensureLimit(sql);
+        return execute(sql, datasourceId, QUERY_TIMEOUT_SEC, MAX_ROWS);
+    }
+
+    /**
+     * SQL 을 실행하고 결과를 반환 — 타임아웃/최대 행수를 호출자가 지정 (ADR-0005 파라미터 튜닝).
+     * LIMIT 미포함 시 자동 추가. Read-only 연결.
+     *
+     * @param sql          검증된 SELECT SQL
+     * @param datasourceId datasource_config 조회용 ID (필수)
+     * @param queryTimeoutSec 쿼리 타임아웃(초) — 상위 계층 검증과 무관하게 [1, 300] 범위로 재클램핑
+     * @param maxRows      최대 결과 행수 — 상위 계층 검증과 무관하게 [1, 5000] 범위로 재클램핑
+     * @return SqlResult — hasError() = true 면 실패
+     */
+    public SqlResult execute(String sql, Integer datasourceId, int queryTimeoutSec, int maxRows) {
+        int safeTimeoutSec = Math.max(1, Math.min(queryTimeoutSec, MAX_ALLOWED_TIMEOUT_SEC));
+        int safeMaxRows = Math.max(1, Math.min(maxRows, MAX_ALLOWED_ROWS));
+        String safeSql = ensureLimit(sql, safeMaxRows);
 
         var ds = dataSourceConfigService.findById(datasourceId);
         String url = dataSourceConfigService.buildJdbcUrl(ds);
@@ -68,8 +89,8 @@ public class SqlExecutorService {
         try (Connection conn = DriverManager.getConnection(url, user, pass)) {
             conn.setReadOnly(true);
             try (PreparedStatement ps = conn.prepareStatement(safeSql)) {
-                ps.setQueryTimeout(QUERY_TIMEOUT_SEC);
-                ps.setMaxRows(MAX_ROWS);
+                ps.setQueryTimeout(safeTimeoutSec);
+                ps.setMaxRows(safeMaxRows);
                 try (ResultSet rs = ps.executeQuery()) {
                     List<Map<String, Object>> rows = mapResultSet(rs);
                     long elapsed = System.currentTimeMillis() - start;
@@ -78,8 +99,8 @@ public class SqlExecutorService {
                 }
             }
         } catch (SQLTimeoutException e) {
-            log.warn("SQL timeout after {}s, datasourceId={}", QUERY_TIMEOUT_SEC, datasourceId);
-            return SqlResult.error("쿼리 타임아웃 (" + QUERY_TIMEOUT_SEC + "초 초과)");
+            log.warn("SQL timeout after {}s, datasourceId={}", safeTimeoutSec, datasourceId);
+            return SqlResult.error("쿼리 타임아웃 (" + safeTimeoutSec + "초 초과)");
         } catch (SQLException e) {
             log.error("SQL execution error: datasourceId={}, error={}", datasourceId, e.getMessage());
             return SqlResult.error("쿼리 실행 오류: " + e.getMessage());
@@ -130,11 +151,12 @@ public class SqlExecutorService {
     }
 
     /**
-     * LIMIT 절이 없는 SQL 에 "LIMIT {MAX_ROWS}" 를 추가.
+     * LIMIT 절이 없는 SQL 에 "LIMIT {maxRows}" 를 추가.
+     * maxRows 는 항상 execute() 에서 int로 클램핑된 값만 전달되므로 문자열 결합에 안전하다.
      */
-    private String ensureLimit(String sql) {
+    private String ensureLimit(String sql, int maxRows) {
         if (sql.toUpperCase().matches("(?s).*\\bLIMIT\\b.*")) return sql;
-        return sql.trim().replaceAll(";\\s*$", "") + " LIMIT " + MAX_ROWS;
+        return sql.trim().replaceAll(";\\s*$", "") + " LIMIT " + maxRows;
     }
 
     private List<Map<String, Object>> mapResultSet(ResultSet rs) throws SQLException {

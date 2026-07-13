@@ -6,6 +6,7 @@ import com.ragservice.rag.dto.EffectiveParams;
 import com.ragservice.rag.dto.MessageDto;
 import com.ragservice.rag.service.AuditLogService;
 import com.ragservice.rag.service.ParameterResolver;
+import com.ragservice.rag.service.ParameterValidator;
 import com.ragservice.rag.service.QueryRouterService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +39,7 @@ class ChatControllerTest {
 
     @Mock QueryRouterService queryRouterService;
     @Mock ParameterResolver parameterResolver;
+    @Mock ParameterValidator parameterValidator;
     @Mock AuditLogService auditLogService;
     @Mock HttpServletRequest httpServletRequest;
 
@@ -49,7 +51,8 @@ class ChatControllerTest {
 
     @BeforeEach
     void setUp() {
-        when(queryRouterService.route(anyString(), any(), any(), any(), any(), any()))
+        when(parameterValidator.validate(any())).thenReturn(ParameterValidator.ValidationResult.pass());
+        when(queryRouterService.route(anyString(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(STUB_RESULT);
     }
 
@@ -71,7 +74,7 @@ class ChatControllerTest {
     private List<MessageDto> captureHistory(ChatCompletionRequest request) {
         chatController.chatCompletions(request, null, null, httpServletRequest);
         ArgumentCaptor<List<MessageDto>> captor = ArgumentCaptor.forClass(List.class);
-        verify(queryRouterService).route(anyString(), captor.capture(), any(), any(), any(), any());
+        verify(queryRouterService).route(anyString(), captor.capture(), any(), any(), any(), any(), any());
         return captor.getValue();
     }
 
@@ -88,26 +91,24 @@ class ChatControllerTest {
     }
 
     @Test
-    void missingMaxHistoryTurns_fallsBackToDefaultTen() {
+    void missingMaxHistoryTurns_throwsIllegalStateException() {
+        // ADR-0005: 서버 코드에는 폴백이 없다 — 관리자 설정 누락은 조용히 넘어가지 않고 즉시 실패한다.
         when(parameterResolver.resolve(any(), any(), any()))
                 .thenReturn(EffectiveParams.of(Map.of(), Map.of()));
 
-        List<ChatMessage> messages = messagesWithPriorCount(12); // 10개 초과 → 폴백 기본값(10)으로 잘려야 함
-        List<MessageDto> history = captureHistory(requestWithMessages(messages));
-
-        assertThat(history).hasSize(10);
-        assertThat(history.get(0).content()).isEqualTo("m2");
+        List<ChatMessage> messages = messagesWithPriorCount(12);
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> chatController.chatCompletions(requestWithMessages(messages), null, null, httpServletRequest));
     }
 
     @Test
-    void nonNumericMaxHistoryTurns_fallsBackToDefaultTen() {
+    void nonNumericMaxHistoryTurns_throwsIllegalStateException() {
         when(parameterResolver.resolve(any(), any(), any()))
                 .thenReturn(EffectiveParams.of(Map.of("max_history_turns", "invalid"), Map.of()));
 
         List<ChatMessage> messages = messagesWithPriorCount(12);
-        List<MessageDto> history = captureHistory(requestWithMessages(messages));
-
-        assertThat(history).hasSize(10);
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> chatController.chatCompletions(requestWithMessages(messages), null, null, httpServletRequest));
     }
 
     // ── resolveAction: audit_log.action 매핑 검증 ──────────────────────────────
@@ -116,8 +117,8 @@ class ChatControllerTest {
     @SuppressWarnings("unchecked")
     private String captureLoggedAction(String intent) {
         when(parameterResolver.resolve(any(), any(), any()))
-                .thenReturn(EffectiveParams.of(Map.of(), Map.of()));
-        when(queryRouterService.route(anyString(), any(), any(), any(), any(), any()))
+                .thenReturn(EffectiveParams.of(Map.of("max_history_turns", 10), Map.of()));
+        when(queryRouterService.route(anyString(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new QueryRouterService.RouterResult(
                         "답변", List.of(), intent, null, false, null, List.of()));
 
@@ -125,7 +126,8 @@ class ChatControllerTest {
                 requestWithMessages(messagesWithPriorCount(1)), null, null, httpServletRequest);
 
         ArgumentCaptor<String> actionCaptor = ArgumentCaptor.forClass(String.class);
-        verify(auditLogService).log(any(), actionCaptor.capture(), any(), any(), any(), any());
+        verify(auditLogService).log(any(), actionCaptor.capture(), any(), any(), any(), any(),
+                anyBoolean(), anyBoolean(), anyInt());
         return actionCaptor.getValue();
     }
 

@@ -3,7 +3,9 @@ package com.ragservice.rag.service;
 import com.ragservice.rag.domain.AdminParamLimit;
 import com.ragservice.rag.repository.AdminParamLimitRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 import java.util.Set;
@@ -14,8 +16,9 @@ import java.util.stream.Collectors;
  * 사용자 입력 파라미터 범위 · 타입 검증.
  *
  * requirements/09-user-parameter-tuning.md 섹션 5-1 기준.
- * ADR-0005: admin_param_limits 가 유일한 진실 소스. DB에 해당 키 행이 있으면
- *           그 min/max·잠금여부를 사용하고, 없으면 하드코딩 값을 폴백으로 사용.
+ * ADR-0005: admin_param_limits 가 유일한 진실 소스 — 서버 코드에는 범위 폴백을 두지 않는다.
+ *           숫자형 파라미터인데 admin_param_limits 에 min/max 행이 없으면, 이는 관리자 설정
+ *           누락이므로 조용히 폴백하지 않고 즉시 500으로 실패시킨다.
  */
 @Component
 @RequiredArgsConstructor
@@ -33,27 +36,8 @@ public class ParameterValidator {
             "BALANCED", "SQL_FIRST", "RAG_FIRST"
     );
 
-    /** 정수형 파라미터 하드코딩 범위 폴백 — admin_param_limits 에 행이 없을 때만 사용. */
-    private static final Map<String, int[]> INT_RANGE_FALLBACKS = Map.of(
-            "top_k", new int[]{1, 20},
-            "max_tokens", new int[]{100, 4096},
-            "query_timeout_sec", new int[]{5, 60},
-            "max_result_rows", new int[]{10, 10000},
-            "max_history_turns", new int[]{1, 50}
-    );
-
-    /** 실수형 파라미터 하드코딩 범위 폴백 — admin_param_limits 에 행이 없을 때만 사용. */
-    private static final Map<String, double[]> DOUBLE_RANGE_FALLBACKS = Map.of(
-            "similarity_threshold", new double[]{0.0, 1.0},
-            "temperature", new double[]{0.0, 2.0},
-            "top_p", new double[]{0.0, 1.0}
-    );
-
-    /** DB 조회 없이 범위 검증이 필요한 정수 키(하드코딩 폴백 대상 목록과 동일). */
-    private static final Set<String> INT_KEYS = INT_RANGE_FALLBACKS.keySet();
-
-    /** DB 조회 없이 범위 검증이 필요한 실수 키(하드코딩 폴백 대상 목록과 동일). */
-    private static final Set<String> DOUBLE_KEYS = DOUBLE_RANGE_FALLBACKS.keySet();
+    private static final Set<String> INT_KEYS = ParamTypeRegistry.INT_KEYS;
+    private static final Set<String> DOUBLE_KEYS = ParamTypeRegistry.DOUBLE_KEYS;
 
     /**
      * 검증 결과 DTO.
@@ -105,21 +89,17 @@ public class ParameterValidator {
 
     /**
      * 단일 파라미터 검증.
-     * admin_param_limits 에 해당 키 행(Guard A)이 있으면 그 min/max를 사용하고,
-     * 없으면 하드코딩 범위를 폴백으로 사용한다. 알 수 없는 키는 통과 (Guard A/B 가 처리).
+     * 숫자형 키(INT_KEYS/DOUBLE_KEYS)는 admin_param_limits 의 min/max가 반드시 있어야 한다(폴백 없음).
+     * 그 외 admin_param_limits 에만 존재하는 숫자 키는 그 min/max로 검증. 알 수 없는 키는 통과(Guard A/B 가 처리).
      */
     private ValidationResult validateSingle(String key, Object value, AdminParamLimit limit) {
         if (INT_KEYS.contains(key)) {
-            int[] fallback = INT_RANGE_FALLBACKS.get(key);
-            int min = limit != null ? limit.getMinValue().intValue() : fallback[0];
-            int max = limit != null ? limit.getMaxValue().intValue() : fallback[1];
-            return validateInteger(key, value, min, max);
+            requireRange(key, limit);
+            return validateInteger(key, value, limit.getMinValue().intValue(), limit.getMaxValue().intValue());
         }
         if (DOUBLE_KEYS.contains(key)) {
-            double[] fallback = DOUBLE_RANGE_FALLBACKS.get(key);
-            double min = limit != null ? limit.getMinValue().doubleValue() : fallback[0];
-            double max = limit != null ? limit.getMaxValue().doubleValue() : fallback[1];
-            return validateDouble(key, value, min, max);
+            requireRange(key, limit);
+            return validateDouble(key, value, limit.getMinValue().doubleValue(), limit.getMaxValue().doubleValue());
         }
         if (limit != null && limit.getMinValue() != null && limit.getMaxValue() != null) {
             // admin_param_limits 에만 존재하는 알려지지 않은 숫자 키 — 실수 범위로 검증.
@@ -130,6 +110,18 @@ public class ParameterValidator {
             case "hybrid_synthesis_style" -> validateEnum(key, value, HYBRID_STYLE_VALUES);
             default -> ValidationResult.pass(); // 알 수 없는 키는 통과
         };
+    }
+
+    /**
+     * 숫자형 파라미터는 admin_param_limits 에 min/max 가 반드시 설정돼 있어야 한다.
+     * 서버 코드에는 범위 폴백을 두지 않으므로, 없으면 관리자 설정 누락으로 간주해 즉시 실패시킨다.
+     */
+    private void requireRange(String key, AdminParamLimit limit) {
+        if (limit == null || limit.getMinValue() == null || limit.getMaxValue() == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "관리자가 파라미터 '" + key + "'의 허용 범위(min/max)를 설정하지 않았습니다. "
+                            + "관리자 화면에서 파라미터 한도를 먼저 설정해주세요.");
+        }
     }
 
     private ValidationResult validateInteger(String key, Object value, int min, int max) {

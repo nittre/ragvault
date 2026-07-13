@@ -20,12 +20,14 @@ import com.ragvault.core.domain.SqlTableConfig;
 import com.ragvault.core.repository.SqlExecutionLogRepository;
 import com.ragvault.core.repository.SqlTableConfigRepository;
 import com.ragvault.core.security.PiiMasker;
+import com.ragservice.rag.dto.EffectiveParams;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.ollama.api.OllamaOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -105,11 +107,12 @@ public class TextToSqlService {
      * 자연어 질문을 SQL 로 변환 → 실행 → 자연어 응답 반환.
      * 독립된 여러 엔티티 조회 시 멀티 쿼리를 생성·실행하고 섹션별로 표시한다.
      *
-     * @param question  사용자 질문
-     * @param userEmail 사용자 이메일 (감사 로그용)
+     * @param question        사용자 질문
+     * @param userEmail       사용자 이메일 (감사 로그용)
+     * @param effectiveParams ADR-0005 7단계 우선순위 체인이 계산한 최종 파라미터
      * @return SqlQueryResult — denied=true 면 실행 불가 사유 포함
      */
-    public SqlQueryResult query(String question, String userEmail) {
+    public SqlQueryResult query(String question, String userEmail, EffectiveParams effectiveParams) {
         long start = System.currentTimeMillis();
 
         // 0. 데이터소스 라우팅
@@ -132,9 +135,15 @@ public class TextToSqlService {
                 schemaInspector.getForeignKeysForActiveTables(datasourceId);
 
         // 3. sample_queries + business_rules 수집
-        String sampleQueries = collectSampleQueries();
+        int fewShotLimit = extractInt(effectiveParams, "sql_few_shot_examples");
+        String sampleQueries = collectSampleQueries(fewShotLimit);
         String businessRules = businessRuleService.collectRelevant(question, datasourceId);
         Map<String, String> tableDescriptions = collectTableDescriptions(datasourceId);
+
+        // 3-1. SQL 생성/실행 파라미터 (ADR-0005)
+        double sqlTemperature = extractDouble(effectiveParams, "sql_temperature");
+        int queryTimeoutSec = extractInt(effectiveParams, "query_timeout_sec");
+        int maxResultRows = extractInt(effectiveParams, "max_result_rows");
 
         // 4. SQL 생성 + 검증 — P1 자가 수정 루프 (최대 2회 재시도, 멀티 쿼리 지원)
         final int MAX_RETRIES = 2;
@@ -144,7 +153,7 @@ public class TextToSqlService {
 
         for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             generatedSqls = sqlGenerator.generate(question, schema, tableDescriptions, foreignKeys,
-                    sampleQueries, businessRules, previousError);
+                    sampleQueries, businessRules, previousError, sqlTemperature);
 
             if (generatedSqls == null || generatedSqls.isEmpty()) {
                 logExecution(userEmail, question, null, "denied", "SQL 생성 실패", "error",
@@ -202,7 +211,8 @@ public class TextToSqlService {
         // 5. SQL 실행 (각 SQL 독립 실행)
         List<SqlExecutorService.SqlResult> sqlResults = new ArrayList<>();
         for (String sql : generatedSqls) {
-            SqlExecutorService.SqlResult result = sqlExecutor.execute(sql, datasourceId);
+            SqlExecutorService.SqlResult result =
+                    sqlExecutor.execute(sql, datasourceId, queryTimeoutSec, maxResultRows);
             if (result.hasError()) {
                 long elapsedOnErr = System.currentTimeMillis() - start;
                 log.error("SQL exec failed | sql={} | error={}", sql, result.error());
@@ -235,11 +245,19 @@ public class TextToSqlService {
             sections.add(new ResultSection(previewRows, rows.size(), csvSuffix));
         }
 
-        // 7. 자연어화 LLM 호출
+        // 7. 자연어화 LLM 호출 — temperature/top_p/max_tokens 는 sql_temperature 와 별개(일반 응답 생성 파라미터)
+        double temperature = extractDouble(effectiveParams, "temperature");
+        double topP = extractDouble(effectiveParams, "top_p");
+        int maxTokens = extractInt(effectiveParams, "max_tokens");
         String synthesisPrompt = buildSynthesisPrompt(question, generatedSqls, sections);
         String rawResponse = chatClient.prompt()
                 .system(SYNTHESIS_SYSTEM)
                 .user(synthesisPrompt)
+                .options(OllamaOptions.builder()
+                        .temperature(temperature)
+                        .topP(topP)
+                        .numPredict(maxTokens)
+                        .build())
                 .call()
                 .content();
 
@@ -262,8 +280,8 @@ public class TextToSqlService {
                 fullResponse.append("\n\n").append(section.csvSuffix());
             }
             if (isFullTableScan(generatedSqls.get(i))) {
-                fullResponse.append("\n\n> **안내:** 조건 없는 전체 조회는 최대 1,000건으로 제한됩니다. ")
-                            .append("전체 데이터가 필요하시면 관리자에게 문의해주세요.");
+                fullResponse.append("\n\n> **안내:** 조건 없는 전체 조회는 최대 ").append(maxResultRows)
+                            .append("건으로 제한됩니다. 전체 데이터가 필요하시면 관리자에게 문의해주세요.");
             }
         }
 
@@ -283,11 +301,35 @@ public class TextToSqlService {
         return new SqlQueryResult(masked, allSqls, "SQL", responseId, false, hasRows);
     }
 
-    private String collectSampleQueries() {
+    /**
+     * @param limit Guard B sql_few_shot_examples 값 — 활성 테이블의 sample_queries 중 상위 N개만 포함.
+     */
+    private String collectSampleQueries(int limit) {
         return sqlTableConfigRepository.findByIsActiveTrue().stream()
                 .filter(c -> c.getSampleQueries() != null && !c.getSampleQueries().isBlank())
                 .map(SqlTableConfig::getSampleQueries)
+                .limit(Math.max(0, limit))
                 .collect(Collectors.joining(", "));
+    }
+
+    /**
+     * ADR-0005: 서버 코드에는 폴백 값을 두지 않는다 — Stage 1이 이미 모든 파라미터의
+     * default_value 설정을 강제하므로, 값이 없거나 타입이 안 맞으면 즉시 예외를 던진다.
+     */
+    private int extractInt(EffectiveParams effectiveParams, String key) {
+        Object value = effectiveParams.values().get(key);
+        if (!(value instanceof Number n)) {
+            throw new IllegalStateException("파라미터 '" + key + "'가 EffectiveParams에 없거나 숫자가 아닙니다.");
+        }
+        return n.intValue();
+    }
+
+    private double extractDouble(EffectiveParams effectiveParams, String key) {
+        Object value = effectiveParams.values().get(key);
+        if (!(value instanceof Number n)) {
+            throw new IllegalStateException("파라미터 '" + key + "'가 EffectiveParams에 없거나 숫자가 아닙니다.");
+        }
+        return n.doubleValue();
     }
 
     private Map<String, String> collectTableDescriptions(Integer datasourceId) {
@@ -442,7 +484,7 @@ public class TextToSqlService {
 
     /**
      * SQL이 WHERE·GROUP BY·JOIN 없이 LIMIT만 있는 풀스캔 쿼리인지 판별.
-     * 해당하는 경우 응답에 "최대 1,000건 제한" 안내 문구를 표시하기 위해 사용.
+     * 해당하는 경우 응답에 "최대 N건 제한" 안내 문구를 표시하기 위해 사용.
      */
     private boolean isFullTableScan(String sql) {
         try {

@@ -1,5 +1,6 @@
 package com.ragservice.rag.service;
 
+import com.ragservice.rag.dto.EffectiveParams;
 import com.ragservice.rag.dto.MessageDto;
 import com.ragservice.rag.security.InputValidator;
 import com.ragvault.core.repository.DocumentChunkRepository;
@@ -17,6 +18,7 @@ import org.springframework.ai.ollama.OllamaEmbeddingModel;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -44,6 +46,12 @@ class RagServiceTest {
     @InjectMocks
     RagService ragService;
 
+    // ADR-0005: 서버 코드에 폴백이 없어 chat()이 읽는 키는 반드시 채워줘야 한다.
+    // 이 테스트들은 검색 결과를 비워 max_context_tokens/temperature/top_p/max_tokens 를
+    // 읽는 지점(5번 이후) 이전에 항상 리턴하므로 top_k/similarity_threshold만 있으면 충분하다.
+    private static final EffectiveParams EMPTY_PARAMS =
+            EffectiveParams.of(Map.of("top_k", 5, "similarity_threshold", 0.65), Map.of());
+
     @BeforeEach
     void setUp() {
         when(inputValidator.validate(anyString()))
@@ -62,7 +70,7 @@ class RagServiceTest {
 
     @Test
     void noHistory_embedsOriginalMessage_withoutCallingLlm() {
-        ragService.chat("RAG 시스템 설계할 때 고려해야할거 알려줘", List.of());
+        ragService.chat("RAG 시스템 설계할 때 고려해야할거 알려줘", List.of(), EMPTY_PARAMS);
 
         verify(embeddingModel).embed("RAG 시스템 설계할 때 고려해야할거 알려줘");
         verifyNoInteractions(chatClient);
@@ -76,7 +84,7 @@ class RagServiceTest {
                 new MessageDto("user", "RAG 시스템 설계할 때 고려해야할거 알려줘"),
                 new MessageDto("assistant", "청킹 전략, 임베딩 모델 선택, 검색 정확도 등을 고려해야 합니다."));
 
-        ragService.chat("좀 더 자세하게 설명해줘", history);
+        ragService.chat("좀 더 자세하게 설명해줘", history, EMPTY_PARAMS);
 
         verify(chatClient, times(1)).prompt();
         verify(embeddingModel).embed("RAG 시스템 설계 시 고려사항에 대해 더 자세히 설명해줘");
@@ -91,7 +99,7 @@ class RagServiceTest {
                 new MessageDto("user", "RAG 시스템 설계할 때 고려해야할거 알려줘"),
                 new MessageDto("assistant", "청킹 전략, 임베딩 모델 선택 등을 고려해야 합니다."));
 
-        RagService.RagResult result = ragService.chat("좀 더 자세하게 설명해줘", history);
+        RagService.RagResult result = ragService.chat("좀 더 자세하게 설명해줘", history, EMPTY_PARAMS);
 
         verify(embeddingModel).embed("좀 더 자세하게 설명해줘");
         assertThat(result.content()).isEqualTo("NO_RESULTS");

@@ -7,7 +7,7 @@ import com.ragservice.rag.dto.ParamProfileResponse;
 import com.ragservice.rag.repository.AdminParamLimitRepository;
 import com.ragservice.rag.repository.ConversationParamOverrideRepository;
 import com.ragservice.rag.repository.UserParamProfileRepository;
-import com.ragservice.rag.service.HardcodedDefaults;
+import com.ragservice.rag.service.AdminDefaultsService;
 import com.ragservice.rag.service.ParameterCacheService;
 import com.ragservice.rag.service.ParameterValidator;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +38,7 @@ public class UserParamController {
     private final ConversationParamOverrideRepository conversationParamOverrideRepository;
     private final ParameterValidator parameterValidator;
     private final ParameterCacheService parameterCacheService;
+    private final AdminDefaultsService adminDefaultsService;
 
     @GetMapping
     public ParamProfileResponse getProfile(Authentication authentication) {
@@ -48,7 +49,7 @@ public class UserParamController {
                 .map(UserParamProfile::getParams)
                 .orElse(Map.of());
 
-        Map<String, Object> defaults = HardcodedDefaults.get();
+        Map<String, Object> defaults = adminDefaultsService.resolveDefaults();
         Map<String, ParamLimitInfo> limits = buildLimits();
 
         return new ParamProfileResponse(params, defaults, limits);
@@ -118,7 +119,8 @@ public class UserParamController {
                     limit.getMaxValue(),
                     limit.isLocked(),
                     limit.getLockedReason(),
-                    limit.getFixedValue()
+                    limit.getFixedValue(),
+                    limit.getDefaultValue()
             ));
         }
         return result;

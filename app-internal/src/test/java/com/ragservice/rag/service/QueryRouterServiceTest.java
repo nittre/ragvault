@@ -1,5 +1,6 @@
 package com.ragservice.rag.service;
 
+import com.ragservice.rag.dto.EffectiveParams;
 import com.ragservice.rag.dto.MessageDto;
 import com.ragvault.core.domain.DocumentChunk.ChunkResult;
 import com.ragvault.core.service.QueryIntent;
@@ -14,6 +15,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -45,6 +47,8 @@ class QueryRouterServiceTest {
     @InjectMocks
     QueryRouterService queryRouterService;
 
+    private static final EffectiveParams EMPTY_PARAMS = EffectiveParams.of(Map.of(), Map.of());
+
     @BeforeEach
     void setUp() {
         when(intentClassifier.classify(anyString(), any(), any())).thenReturn(QueryIntent.RAG);
@@ -55,10 +59,10 @@ class QueryRouterServiceTest {
     void ragWithSources_doesNotFallBackToWebSearch() {
         List<ChunkResult> sources = List.of(new ChunkResult("청크 내용", "knowledge_doc", "doc-1", 0.9));
         RagService.RagResult ragResult = RagService.RagResult.success("RAG 답변", sources);
-        when(ragService.chat(anyString(), any())).thenReturn(ragResult);
+        when(ragService.chat(anyString(), any(), any())).thenReturn(ragResult);
 
         QueryRouterService.RouterResult result =
-                queryRouterService.route("LLM2가 뭔데?", List.of(), "user@test.com", null, null);
+                queryRouterService.route("LLM2가 뭔데?", List.of(), "user@test.com", null, null, EMPTY_PARAMS);
 
         assertThat(result.intent()).isEqualTo("RAG");
         assertThat(result.content()).isEqualTo("RAG 답변");
@@ -70,14 +74,14 @@ class QueryRouterServiceTest {
         ReflectionTestUtils.setField(queryRouterService, "webSearchEnabled", true);
         RagService.RagResult ragResult =
                 RagService.RagResult.noContext("관련된 정보를 자료에서 찾을 수 없습니다.");
-        when(ragService.chat(anyString(), any())).thenReturn(ragResult);
+        when(ragService.chat(anyString(), any(), any())).thenReturn(ragResult);
         when(webSearchService.search(anyString(), any()))
                 .thenReturn(new WebSearchService.WebSearchResult("웹 검색 답변", List.of("http://example.com"),
                         "resp_raw:web", false));
 
         QueryRouterService.RouterResult result =
                 queryRouterService.route("LLM2가 뭔데?", List.of(new MessageDto("user", "이전 질문")),
-                        "user@test.com", null, null);
+                        "user@test.com", null, null, EMPTY_PARAMS);
 
         assertThat(result.intent()).isEqualTo("WEB_SEARCH");
         assertThat(result.content()).isEqualTo("웹 검색 답변");
@@ -89,10 +93,10 @@ class QueryRouterServiceTest {
         ReflectionTestUtils.setField(queryRouterService, "webSearchEnabled", false);
         RagService.RagResult ragResult =
                 RagService.RagResult.noContext("관련된 정보를 자료에서 찾을 수 없습니다.");
-        when(ragService.chat(anyString(), any())).thenReturn(ragResult);
+        when(ragService.chat(anyString(), any(), any())).thenReturn(ragResult);
 
         QueryRouterService.RouterResult result =
-                queryRouterService.route("LLM2가 뭔데?", List.of(), "user@test.com", null, null);
+                queryRouterService.route("LLM2가 뭔데?", List.of(), "user@test.com", null, null, EMPTY_PARAMS);
 
         assertThat(result.intent()).isEqualTo("RAG");
         assertThat(result.content()).isEqualTo("관련된 정보를 자료에서 찾을 수 없습니다.");

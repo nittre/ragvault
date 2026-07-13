@@ -114,8 +114,6 @@ rag:
     # Alpine(tesseract-ocr apk 패키지)의 tessdata 설치 경로. Debian 계열(/usr/share/tesseract-ocr/4.00/tessdata)과 다름 — Dockerfile 참고.
     datapath: ${TESSERACT_DATAPATH:/usr/share/tessdata}
   sql:
-    query-timeout-sec: 10
-    max-rows: 1000
     csv-threshold: 50   # 이 값 이하는 채팅에 직접 표시, 초과 시 CSV 다운로드 링크 제공
   search:
     default-top-k: 7

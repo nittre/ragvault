@@ -3,19 +3,23 @@ package com.ragservice.rag.controller;
 import com.ragservice.rag.dto.*;
 import com.ragservice.rag.service.AuditLogService;
 import com.ragservice.rag.service.ParameterResolver;
+import com.ragservice.rag.service.ParameterValidator;
 import com.ragservice.rag.service.QueryRouterService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import com.ragvault.core.dto.CitationSource;
 import java.util.ArrayList;
 import com.ragvault.core.dto.CitationSource;
+import java.util.LinkedHashMap;
 import java.util.List;
 import com.ragvault.core.dto.CitationSource;
 import java.util.Map;
@@ -38,6 +42,7 @@ public class ChatController {
 
     private final QueryRouterService queryRouterService;
     private final ParameterResolver parameterResolver;
+    private final ParameterValidator parameterValidator;
     private final AuditLogService auditLogService;
 
     @Value("${rag.chat.model:qwen2.5vl:7b}")
@@ -74,12 +79,22 @@ public class ChatController {
         String userMessage = extractLastUserMessage(request.messages());
         List<String> images = mergeImages(request.messages(), request.images());
 
+        // top-level temperature/max_tokens(OpenAI 호환 하위호환 필드)는 rag_params에 같은 키가
+        // 없을 때만 폴백으로 채워 넣는다. 이 병합된 맵을 검증·해석 양쪽에 동일하게 전달해야
+        // top-level 필드가 검증을 우회하거나 Stage 6에 반영되지 않는 문제가 생기지 않는다.
+        Map<String, Object> mergedRagParams = buildMergedRagParams(request);
+
+        ParameterValidator.ValidationResult validation = parameterValidator.validate(mergedRagParams);
+        if (!validation.ok()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, validation.reason());
+        }
+
         // ADR-0005 7단계 파라미터 우선순위 체인 — history 추출보다 먼저 계산해야
         // max_history_turns 가 실제로 적용된다.
         EffectiveParams effectiveParams = parameterResolver.resolve(
                 userEmail,
                 conversationId,
-                request.ragParams());
+                mergedRagParams);
         log.debug("Effective params resolved: user={}, conv={}, sources={}",
                 userEmail, conversationId, effectiveParams.sources());
 
@@ -96,7 +111,8 @@ public class ChatController {
                 userMessage, history, userEmail,
                 images,
                 request.fileIds(),
-                request.routingHint());
+                request.routingHint(),
+                effectiveParams);
 
         auditLogService.log(userEmail, resolveAction(result.intent()), result.intent(),
                 userMessage, httpRequest.getRemoteAddr(), result.responseId(),
@@ -119,6 +135,25 @@ public class ChatController {
             case "RAG" -> "RAG";
             default -> "OTHER";
         };
+    }
+
+    /**
+     * top-level temperature/max_tokens(OpenAI 호환 하위호환 필드)를 rag_params에 병합.
+     * ChatCompletionRequest 문서 주석의 "ragParams가 있으면 top-level 무시" 우선순위를 실제로 구현한다 —
+     * 지금까지 이 두 top-level 필드를 읽는 코드가 어디에도 없어 완전히 죽어있었다.
+     */
+    private Map<String, Object> buildMergedRagParams(ChatCompletionRequest request) {
+        Map<String, Object> merged = new LinkedHashMap<>();
+        if (request.ragParams() != null) {
+            merged.putAll(request.ragParams());
+        }
+        if (!merged.containsKey("temperature") && request.temperature() != null) {
+            merged.put("temperature", request.temperature());
+        }
+        if (!merged.containsKey("max_tokens") && request.max_tokens() != null) {
+            merged.put("max_tokens", request.max_tokens());
+        }
+        return merged;
     }
 
     private String extractLastUserMessage(List<ChatMessage> messages) {
@@ -158,11 +193,15 @@ public class ChatController {
 
     /**
      * ADR-0005 파라미터 체인이 계산한 max_history_turns 를 히스토리 메시지 개수 제한으로 사용한다.
-     * 값이 없거나 숫자가 아니면 기존 하드코딩 기본값(10)으로 폴백한다.
+     * 서버 코드에는 폴백 값을 두지 않는다 — Stage 1(AdminDefaultsService)이 이미 이 값의 존재를
+     * 강제하므로, 없거나 숫자가 아니면 관리자 설정 누락으로 간주해 즉시 예외를 던진다.
      */
     private int resolveMaxHistoryMessages(EffectiveParams effectiveParams) {
         Object value = effectiveParams.values().get("max_history_turns");
-        return (value instanceof Number n) ? Math.max(0, n.intValue()) : 10;
+        if (!(value instanceof Number n)) {
+            throw new IllegalStateException("파라미터 'max_history_turns'가 EffectiveParams에 없거나 숫자가 아닙니다.");
+        }
+        return Math.max(0, n.intValue());
     }
 
     private ChatCompletionResponse buildResponse(QueryRouterService.RouterResult result, String model) {

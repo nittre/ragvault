@@ -1,6 +1,7 @@
 package com.ragservice.rag.service;
 
 import com.ragvault.core.domain.DocumentChunk.ChunkResult;
+import com.ragservice.rag.dto.EffectiveParams;
 import com.ragservice.rag.dto.MessageDto;
 import com.ragvault.core.prompt.PromptLoader;
 import com.ragvault.core.repository.DocumentChunkRepository;
@@ -10,9 +11,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.ollama.OllamaEmbeddingModel;
+import org.springframework.ai.ollama.api.OllamaOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -48,11 +51,8 @@ public class RagService {
     private static final String QUERY_REWRITE_SYSTEM =
             PromptLoader.load("prompts/query-rewrite/system.txt");
 
-    @Value("${rag.search.default-top-k:5}")
-    private int defaultTopK;
-
-    @Value("${rag.search.default-threshold:0.65}")
-    private double defaultThreshold;
+    /** 한국어 기준 대략적인 char-per-token 근사치 — 정확한 토크나이저가 없어 보수적으로 사용. */
+    private static final int CHARS_PER_TOKEN_APPROX = 2;
 
     @Value("${rag.prompts.no-results-response}")
     private String noResultsResponse;
@@ -66,11 +66,12 @@ public class RagService {
     /**
      * 동기 RAG 질의응답.
      *
-     * @param userMessage 사용자 질문
-     * @param history     대화 이력 (최대 10턴)
+     * @param userMessage     사용자 질문
+     * @param history         대화 이력 (최대 10턴)
+     * @param effectiveParams ADR-0005 7단계 우선순위 체인이 계산한 최종 파라미터
      * @return RagResult (마스킹된 응답 + 출처 청크)
      */
-    public RagResult chat(String userMessage, List<MessageDto> history) {
+    public RagResult chat(String userMessage, List<MessageDto> history, EffectiveParams effectiveParams) {
         // 1. 입력 검증
         InputValidator.ValidationResult validation = inputValidator.validate(userMessage);
         if (!validation.valid()) {
@@ -91,8 +92,10 @@ public class RagService {
         // 4. pgvector 검색 — 후속 질문은 "더 자세히" 요청일 수 있으므로 topK를 늘려
         //    답변 근거로 쓸 수 있는 청크를 더 확보한다 (동일 topK로는 첫 턴과 같은 청크만
         //    다시 뽑혀 "더 자세히" 요청에도 내용이 늘어나지 않는 문제가 있었다).
-        int searchTopK = history.isEmpty() ? defaultTopK : Math.min(defaultTopK * 2, 20);
-        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, defaultThreshold, searchTopK);
+        int effectiveTopK = extractInt(effectiveParams, "top_k");
+        double effectiveThreshold = extractDouble(effectiveParams, "similarity_threshold");
+        int searchTopK = history.isEmpty() ? effectiveTopK : Math.min(effectiveTopK * 2, 20);
+        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, effectiveThreshold, searchTopK);
         List<ChunkResult> chunks = rows.stream()
                 .map(r -> new ChunkResult(
                         (String) r[0],
@@ -108,24 +111,79 @@ public class RagService {
             return RagResult.noContext(noResultsResponse);
         }
 
+        // 5-1. max_context_tokens(Guard B) 컷 — 토크나이저가 없어 char 근사치로 자르되,
+        //      실제로 프롬프트에 들어간 청크만 인용 출처(sources)로 남긴다 (컷된 청크가
+        //      인용에 노출되면 LLM이 보지 않은 내용을 인용한 것처럼 보이는 모순이 생긴다).
+        int maxContextTokens = extractInt(effectiveParams, "max_context_tokens");
+        List<ChunkResult> boundedChunks = truncateToTokenBudget(chunks, maxContextTokens);
+
         // 6. 컨텍스트 포맷팅
-        String context = formatChunks(chunks);
-        String contextWarning = chunks.size() <= 2 ? insufficientContextWarning : "";
+        String context = formatChunks(boundedChunks);
+        String contextWarning = boundedChunks.size() <= 2 ? insufficientContextWarning : "";
 
         // 7. LLM 호출 (Spring AI ChatClient) — 사용자에게 실제로 한 말 그대로(userMessage) 전달
         String fullPrompt = buildPrompt(context, contextWarning, history, userMessage);
-        log.debug("Calling LLM with {} chunks, history size={}", chunks.size(), history.size());
+        log.debug("Calling LLM with {} chunks, history size={}", boundedChunks.size(), history.size());
+
+        double temperature = extractDouble(effectiveParams, "temperature");
+        double topP = extractDouble(effectiveParams, "top_p");
+        int maxTokens = extractInt(effectiveParams, "max_tokens");
 
         String llmResponse = chatClient.prompt()
                 .system(SYSTEM_PROMPT)
                 .user(fullPrompt)
+                .options(OllamaOptions.builder()
+                        .temperature(temperature)
+                        .topP(topP)
+                        .numPredict(maxTokens)
+                        .build())
                 .call()
                 .content();
 
         // 8. PII 마스킹 (ADR-0008: 모든 LLM 응답 경로에 적용)
         String maskedResponse = piiMasker.mask(llmResponse);
 
-        return RagResult.success(maskedResponse, chunks);
+        return RagResult.success(maskedResponse, boundedChunks);
+    }
+
+    /**
+     * max_context_tokens 근사치 이내로 청크를 앞에서부터 통째로 잘라 담는다(청크 중간 절단 없음).
+     * 첫 청크 하나만으로 예산을 넘겨도 "검색 결과 0건" 응답을 피하기 위해 최소 1개는 남긴다.
+     */
+    private List<ChunkResult> truncateToTokenBudget(List<ChunkResult> chunks, int maxContextTokens) {
+        int charBudget = maxContextTokens * CHARS_PER_TOKEN_APPROX;
+        List<ChunkResult> bounded = new ArrayList<>();
+        int used = 0;
+        for (ChunkResult c : chunks) {
+            int len = c.content().length();
+            if (!bounded.isEmpty() && used + len > charBudget) {
+                break;
+            }
+            bounded.add(c);
+            used += len;
+        }
+        return bounded;
+    }
+
+    /**
+     * ADR-0005: 서버 코드에는 폴백 값을 두지 않는다. Stage 1(AdminDefaultsService)이 이미
+     * admin_param_limits에 모든 파라미터의 default_value가 설정돼 있음을 강제하므로, 여기서
+     * 값이 없거나 타입이 안 맞으면 관리자 설정 누락/오류로 간주해 즉시 예외를 던진다.
+     */
+    private int extractInt(EffectiveParams effectiveParams, String key) {
+        Object value = effectiveParams.values().get(key);
+        if (!(value instanceof Number n)) {
+            throw new IllegalStateException("파라미터 '" + key + "'가 EffectiveParams에 없거나 숫자가 아닙니다.");
+        }
+        return n.intValue();
+    }
+
+    private double extractDouble(EffectiveParams effectiveParams, String key) {
+        Object value = effectiveParams.values().get(key);
+        if (!(value instanceof Number n)) {
+            throw new IllegalStateException("파라미터 '" + key + "'가 EffectiveParams에 없거나 숫자가 아닙니다.");
+        }
+        return n.doubleValue();
     }
 
     /**

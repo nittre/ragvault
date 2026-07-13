@@ -38,6 +38,10 @@ public class AdminParamLimit {
     @Column(name = "locked_reason")
     private String lockedReason;
 
+    /** Stage 1 기본값(문자열로 저장 — 숫자/enum 문자열 모두 수용). 서버 코드 하드코딩 폴백 없음(ADR-0005). */
+    @Column(name = "default_value")
+    private String defaultValue;
+
     private String updatedBy;
 
     private LocalDateTime updatedAt;

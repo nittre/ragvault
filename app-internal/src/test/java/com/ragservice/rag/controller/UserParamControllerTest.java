@@ -9,6 +9,7 @@ import com.ragservice.rag.filter.JwtAuthFilter;
 import com.ragservice.rag.repository.AdminParamLimitRepository;
 import com.ragservice.rag.repository.ConversationParamOverrideRepository;
 import com.ragservice.rag.repository.UserParamProfileRepository;
+import com.ragservice.rag.service.AdminDefaultsService;
 import com.ragservice.rag.service.ParameterCacheService;
 import com.ragservice.rag.service.ParameterValidator;
 import jakarta.servlet.FilterChain;
@@ -80,6 +81,9 @@ class UserParamControllerTest {
     @MockitoBean
     private ParameterCacheService parameterCacheService;
 
+    @MockitoBean
+    private AdminDefaultsService adminDefaultsService;
+
     @BeforeEach
     void setUp() throws Exception {
         // ApiKeyAuthFilter / AdminSessionFilter call-through
@@ -103,6 +107,8 @@ class UserParamControllerTest {
         when(adminParamLimitRepository.findAll()).thenReturn(List.of());
         // 기본: 검증 통과
         when(parameterValidator.validate(any())).thenReturn(ParameterValidator.ValidationResult.pass());
+        // 기본: Stage 1 기본값 (ADR-0005: admin_param_limits.default_value 기반, 서버 하드코딩 없음)
+        when(adminDefaultsService.resolveDefaults()).thenReturn(Map.of("top_k", 5));
     }
 
     // -------------------------------------------------------------------------

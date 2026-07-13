@@ -12,6 +12,7 @@ import com.ragvault.core.service.RoutingEmbeddingService;
 import com.ragvault.core.service.QueryIntent;
 
 import com.ragvault.core.domain.DocumentChunk;
+import com.ragservice.rag.dto.EffectiveParams;
 import com.ragservice.rag.dto.MessageDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -80,7 +81,8 @@ public class QueryRouterService {
      * null       → 기존 intentClassifier 경로
      */
     public RouterResult route(String userMessage, List<MessageDto> history, String userEmail,
-                               List<String> images, List<String> fileIds, String routingHint) {
+                               List<String> images, List<String> fileIds, String routingHint,
+                               EffectiveParams effectiveParams) {
         // 메시지 자체의 슬래시 커맨드 파싱 (프론트엔드 미지원 클라이언트·브라우저 캐시 대응)
         String hint = routingHint;
         String cleanMessage = userMessage;
@@ -106,20 +108,33 @@ public class QueryRouterService {
             }
         }
 
+        // ADR-0005: force_path — 슬래시 커맨드가 없을 때만 폴백으로 적용 (요청 단위 Stage 6에서만 값이 오므로
+        // 사용자 프로필/대화별 override에 영구 저장된 값으로 REJECT 가드레일을 우회할 수 없다).
+        if (hint == null && effectiveParams != null) {
+            Object forcePath = effectiveParams.values().get("force_path");
+            if (forcePath instanceof String fp && !"AUTO".equals(fp)) {
+                hint = fp;
+            }
+        }
+
         if ("FORCE_RAG".equals(hint)) {
-            return routeForceRag(cleanMessage, history, userEmail, images, fileIds);
+            return routeForceRag(cleanMessage, history, userEmail, images, fileIds, effectiveParams);
         }
         if ("FORCE_WEB".equals(hint)) {
-            return routeForceWeb(cleanMessage, userEmail, history, images, fileIds);
+            return routeForceWeb(cleanMessage, userEmail, history, images, fileIds, effectiveParams);
         }
         if ("FORCE_SQL".equals(hint)) {
-            return routeForceSql(cleanMessage, userEmail);
+            return routeForceSql(cleanMessage, userEmail, effectiveParams);
         }
-        return route(userMessage, history, userEmail, images, fileIds);
+        if ("FORCE_HYBRID".equals(hint)) {
+            return routeForceHybrid(cleanMessage, history, userEmail, effectiveParams);
+        }
+        return route(userMessage, history, userEmail, images, fileIds, effectiveParams);
     }
 
     private RouterResult routeForceRag(String userMessage, List<MessageDto> history, String userEmail,
-                                        List<String> images, List<String> fileIds) {
+                                        List<String> images, List<String> fileIds,
+                                        EffectiveParams effectiveParams) {
         log.debug("FORCE_RAG: '{}'", userMessage);
         long startMs = System.currentTimeMillis();
         String intentName = "RAG";
@@ -134,7 +149,7 @@ public class QueryRouterService {
                 FileContextService.FileQueryResult r = fileContextService.query(userMessage, fileIds, userEmail);
                 result = new RouterResult(r.content(), List.of(), "FILE", r.responseId(), r.error(), null, List.of());
             } else {
-                RagService.RagResult rag = ragService.chat(userMessage, history);
+                RagService.RagResult rag = ragService.chat(userMessage, history, effectiveParams);
                 if (!rag.sources().isEmpty()) {
                     String responseId = rawStorage.store(rag.content(), "RAG", userEmail, llmModel);
                     result = RouterResult.fromRag(rag, responseId);
@@ -160,7 +175,8 @@ public class QueryRouterService {
     }
 
     private RouterResult routeForceWeb(String userMessage, String userEmail, List<MessageDto> history,
-                                        List<String> images, List<String> fileIds) {
+                                        List<String> images, List<String> fileIds,
+                                        EffectiveParams effectiveParams) {
         log.debug("FORCE_WEB: '{}'", userMessage);
         long startMs = System.currentTimeMillis();
         String intentName = "WEB_SEARCH";
@@ -174,7 +190,7 @@ public class QueryRouterService {
                 // WEB_SEARCH 실패 → RAG 폴백
                 log.debug("FORCE_WEB 폴백 → RAG: '{}'", userMessage);
                 intentName = "RAG";
-                RagService.RagResult rag = ragService.chat(userMessage, history);
+                RagService.RagResult rag = ragService.chat(userMessage, history, effectiveParams);
                 String responseId = rawStorage.store(rag.content(), "RAG", userEmail, llmModel);
                 result = RouterResult.fromRag(rag, responseId);
             }
@@ -190,17 +206,34 @@ public class QueryRouterService {
         return result;
     }
 
-    private RouterResult routeForceSql(String userMessage, String userEmail) {
+    private RouterResult routeForceSql(String userMessage, String userEmail, EffectiveParams effectiveParams) {
         log.debug("FORCE_SQL: '{}'", userMessage);
         long startMs = System.currentTimeMillis();
         try {
-            RouterResult result = RouterResult.fromSql(textToSqlService.query(userMessage, userEmail));
+            RouterResult result = RouterResult.fromSql(textToSqlService.query(userMessage, userEmail, effectiveParams));
             metricsService.incrementQuery("SQL");
             metricsService.recordQueryDuration("SQL", System.currentTimeMillis() - startMs);
             if (result.blocked()) metricsService.incrementBlocked("sql");
             return result;
         } catch (Exception e) {
             metricsService.incrementError("SQL");
+            throw e;
+        }
+    }
+
+    private RouterResult routeForceHybrid(String userMessage, List<MessageDto> history, String userEmail,
+                                           EffectiveParams effectiveParams) {
+        log.debug("FORCE_HYBRID: '{}'", userMessage);
+        long startMs = System.currentTimeMillis();
+        try {
+            RouterResult result =
+                    RouterResult.fromHybrid(hybridQueryService.query(userMessage, history, userEmail, effectiveParams));
+            metricsService.incrementQuery("HYBRID");
+            metricsService.recordQueryDuration("HYBRID", System.currentTimeMillis() - startMs);
+            if (result.blocked()) metricsService.incrementBlocked("hybrid");
+            return result;
+        } catch (Exception e) {
+            metricsService.incrementError("HYBRID");
             throw e;
         }
     }
@@ -212,7 +245,7 @@ public class QueryRouterService {
      * @param fileIds 파일 ID 목록 (FILE 경로)
      */
     public RouterResult route(String userMessage, List<MessageDto> history, String userEmail,
-                               List<String> images, List<String> fileIds) {
+                               List<String> images, List<String> fileIds, EffectiveParams effectiveParams) {
         QueryIntent intent = intentClassifier.classify(userMessage, images, fileIds);
         log.debug("Intent: '{}' → {}", userMessage, intent);
 
@@ -226,10 +259,10 @@ public class QueryRouterService {
                         List.of(), "REJECT", null, true, null, List.of());
 
                 case SQL -> RouterResult.fromSql(
-                        textToSqlService.query(userMessage, userEmail));
+                        textToSqlService.query(userMessage, userEmail, effectiveParams));
 
                 case HYBRID -> RouterResult.fromHybrid(
-                        hybridQueryService.query(userMessage, history, userEmail));
+                        hybridQueryService.query(userMessage, history, userEmail, effectiveParams));
 
                 case URL_FETCH -> {
                     String url = extractUrl(userMessage);
@@ -279,7 +312,7 @@ public class QueryRouterService {
                         // RAG 문서검색을 함께 종합하면 일반론이 DB 결과(대주제·하위주제)를
                         // 덮어써 환각을 유발하므로, SQL 결과가 있으면 SQL만 쓰고 없을 때만 RAG로 폴백한다.
                         TextToSqlService.SqlQueryResult sql =
-                                textToSqlService.query(enrichedQuery, userEmail);
+                                textToSqlService.query(enrichedQuery, userEmail, effectiveParams);
                         if (!sql.denied() && sql.hasRows()) {
                             log.debug("IMAGE_RAG: HYBRID → SQL 사용");
                             secondary = RouterResult.fromSql(sql);
@@ -287,12 +320,14 @@ public class QueryRouterService {
                             // SQL 생성/실행 실패(denied) 또는 결과 0행 → 문서검색(RAG)으로 폴백
                             log.debug("IMAGE_RAG: SQL 결과 없음(denied={}, hasRows={}) → RAG 폴백",
                                     sql.denied(), sql.hasRows());
-                            secondary = routeTextOnly(QueryIntent.RAG, enrichedQuery, history, userEmail, fileIds);
+                            secondary = routeTextOnly(QueryIntent.RAG, enrichedQuery, history, userEmail, fileIds,
+                                    effectiveParams);
                         }
                     } else {
                         // RAG / SQL / WEB_SEARCH / URL_FETCH / REJECT 는 분류대로 처리.
                         // (문서검색이 필요한 RAG 질의는 그대로 RAG 경로로 처리됨)
-                        secondary = routeTextOnly(textIntent, enrichedQuery, history, userEmail, fileIds);
+                        secondary = routeTextOnly(textIntent, enrichedQuery, history, userEmail, fileIds,
+                                effectiveParams);
                     }
 
                     // 이미지 에세이를 붙이지 않고 통합 답변(secondary)만 반환. 이미지 개념은
@@ -309,7 +344,7 @@ public class QueryRouterService {
                             r.responseId(), r.denied(), null, r.sourceUrls());
                 }
 
-                case RAG -> ragWithWebFallback(userMessage, history, userEmail);
+                case RAG -> ragWithWebFallback(userMessage, history, userEmail, effectiveParams);
             };
         } catch (Exception e) {
             metricsService.incrementError(intent.name());
@@ -325,21 +360,17 @@ public class QueryRouterService {
         return result;
     }
 
-    /** 하위 호환성 유지 — images/fileIds 없는 경우 */
-    public RouterResult route(String userMessage, List<MessageDto> history, String userEmail) {
-        return route(userMessage, history, userEmail, null, null);
-    }
-
     /** IMAGE_RAG Phase 2 — 이미지 설명이 enriched된 질문으로 텍스트 경로만 실행 */
     private RouterResult routeTextOnly(QueryIntent intent, String question,
                                        List<MessageDto> history, String userEmail,
-                                       List<String> fileIds) {
+                                       List<String> fileIds, EffectiveParams effectiveParams) {
         return switch (intent) {
             case REJECT -> new RouterResult(
                     "요청을 처리할 수 없습니다. 데이터 조회 관련 질문으로 다시 시도해주세요. (err_rejected)",
                     List.of(), "REJECT", null, true, null, List.of());
-            case SQL -> RouterResult.fromSql(textToSqlService.query(question, userEmail));
-            case HYBRID -> RouterResult.fromHybrid(hybridQueryService.query(question, history, userEmail));
+            case SQL -> RouterResult.fromSql(textToSqlService.query(question, userEmail, effectiveParams));
+            case HYBRID -> RouterResult.fromHybrid(
+                    hybridQueryService.query(question, history, userEmail, effectiveParams));
             case WEB_SEARCH -> {
                 WebSearchService.WebSearchResult r = webSearchService.search(question, userEmail);
                 yield new RouterResult(r.content(), List.of(), "WEB_SEARCH",
@@ -351,7 +382,7 @@ public class QueryRouterService {
                 yield new RouterResult(r.content(), List.of(), "URL_FETCH",
                         r.responseId(), r.denied(), null, List.of());
             }
-            default -> ragWithWebFallback(question, history, userEmail);
+            default -> ragWithWebFallback(question, history, userEmail, effectiveParams);
         };
     }
 
@@ -363,8 +394,9 @@ public class QueryRouterService {
      * 되묻는 질문)이 내부 문서에 없을 때도 실패 응답 대신 웹 검색으로 이어지게 한다.
      * rag.web-search.enabled=false 이면 폴백하지 않는다.
      */
-    private RouterResult ragWithWebFallback(String query, List<MessageDto> history, String userEmail) {
-        RagService.RagResult rag = ragService.chat(query, history);
+    private RouterResult ragWithWebFallback(String query, List<MessageDto> history, String userEmail,
+                                             EffectiveParams effectiveParams) {
+        RagService.RagResult rag = ragService.chat(query, history, effectiveParams);
         if (!rag.sources().isEmpty() || !webSearchEnabled) {
             String responseId = rawStorage.store(rag.content(), "RAG", userEmail, llmModel);
             return RouterResult.fromRag(rag, responseId);

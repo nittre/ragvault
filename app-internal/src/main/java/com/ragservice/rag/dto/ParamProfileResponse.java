@@ -9,7 +9,7 @@ import java.util.Map;
  * ADR-0005: 7단계 우선순위 체인에서 Stage 4(사용자 프로필)에 해당.
  *
  * @param params   현재 사용자 프로필 저장값 (없으면 빈 맵)
- * @param defaults HardcodedDefaults.get() — Stage 1 fallback 기본값
+ * @param defaults AdminDefaultsService.resolveDefaults() — Stage 1 기본값(admin_param_limits DB 기반, 하드코딩 없음)
  * @param limits   파라미터별 min/max/locked/lockedReason (Guard A/B 정보)
  */
 public record ParamProfileResponse(

@@ -4,6 +4,7 @@ import com.ragvault.core.prompt.PromptLoader;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.ollama.api.OllamaOptions;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
@@ -53,18 +54,37 @@ public class SqlGeneratorService {
                                   String sampleQueries,
                                   String businessRules,
                                   String previousError) {
-        String prompt = buildPrompt(question, schema, tableDescriptions, foreignKeys,
-                sampleQueries, businessRules, previousError);
-        return callLlm(prompt);
+        return generate(question, schema, tableDescriptions, foreignKeys,
+                sampleQueries, businessRules, previousError, null);
     }
 
-    private List<String> callLlm(String prompt) {
+    /**
+     * 질문에 대한 MySQL SELECT SQL 목록을 생성해 반환 — SQL 생성 temperature 지정 (ADR-0005 Guard B: sql_temperature).
+     *
+     * @param temperature SQL 생성 LLM 호출의 temperature. null이면 ChatClient 기본 옵션을 그대로 사용(하위호환).
+     */
+    public List<String> generate(String question,
+                                  Map<String, List<SchemaInspectorService.ColumnInfo>> schema,
+                                  Map<String, String> tableDescriptions,
+                                  List<SchemaInspectorService.FkInfo> foreignKeys,
+                                  String sampleQueries,
+                                  String businessRules,
+                                  String previousError,
+                                  Double temperature) {
+        String prompt = buildPrompt(question, schema, tableDescriptions, foreignKeys,
+                sampleQueries, businessRules, previousError);
+        return callLlm(prompt, temperature);
+    }
+
+    private List<String> callLlm(String prompt, Double temperature) {
         try {
-            String response = chatClient.prompt()
+            var spec = chatClient.prompt()
                     .system(SYSTEM_PROMPT)
-                    .user(prompt)
-                    .call()
-                    .content();
+                    .user(prompt);
+            if (temperature != null) {
+                spec = spec.options(OllamaOptions.builder().temperature(temperature).build());
+            }
+            String response = spec.call().content();
             return extractQueries(response);
         } catch (Exception e) {
             log.error("LLM call failed during SQL generation: {}", e.getMessage());

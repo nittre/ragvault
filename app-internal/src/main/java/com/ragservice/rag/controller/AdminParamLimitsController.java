@@ -107,6 +107,11 @@ public class AdminParamLimitsController {
                         p.setFixedValue(fv == null ? null : new BigDecimal(fv.toString()));
                         p.setGuardType(fv == null ? "A" : "B");
                     }
+                    if (body.containsKey("defaultValue")) {
+                        // ADR-0005: Stage 1 기본값 — 서버 코드에는 하드코딩하지 않고 이 필드로만 설정한다.
+                        Object dv = body.get("defaultValue");
+                        p.setDefaultValue(dv == null ? null : dv.toString());
+                    }
                     p.setUpdatedBy(email);
                     p.setUpdatedAt(LocalDateTime.now());
                     AdminParamLimit saved = repo.save(p);

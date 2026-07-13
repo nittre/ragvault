@@ -18,7 +18,7 @@ import java.util.Set;
  * ADR-0005 통합 7단계 우선순위 체인 + Guard A/B 구현.
  *
  * 적용 순서 (위→아래, 나중이 이김):
- *   Stage 1: hardcoded fallback      (HardcodedDefaults)
+ *   Stage 1: 관리자 DB 기본값       (AdminDefaultsService — admin_param_limits.default_value, 서버 하드코딩 없음)
  *   Stage 2: search_config DB        (SearchConfigMappingService)
  *   Stage 3: 모델 변형               (Phase 1+ no-op placeholder)
  *   Stage 4: 사용자 프로필           (user_param_profiles)
@@ -41,6 +41,16 @@ public class ParameterResolver {
             "max_context_tokens"
     );
 
+    /**
+     * Stage 4(사용자 프로필)/Stage 5(대화별 override)에서 필터링할 키.
+     * force_path는 REJECT 의도 분류 가드레일을 우회하는 라우팅 힌트라, 요청 단위(Stage 6)로만
+     * 일회성 적용을 허용하고 영구 저장(Stage 4/5)으로는 설정할 수 없게 막는다.
+     */
+    private static final Set<String> REQUEST_ONLY_KEYS = Set.of(
+            "force_path"
+    );
+
+    private final AdminDefaultsService adminDefaultsService;
     private final SearchConfigMappingService searchConfigMappingService;
     private final UserParamProfileRepository userParamProfileRepository;
     private final ConversationParamOverrideRepository conversationParamOverrideRepository;
@@ -106,9 +116,9 @@ public class ParameterResolver {
     // -------------------------------------------------------------------------
 
     private void applyStage1(Map<String, Object> params, Map<String, String> sources) {
-        HardcodedDefaults.get().forEach((k, v) -> {
+        adminDefaultsService.resolveDefaults().forEach((k, v) -> {
             params.put(k, v);
-            sources.put(k, "stage1_hardcoded");
+            sources.put(k, "stage1_admin_default");
         });
     }
 
@@ -135,6 +145,9 @@ public class ParameterResolver {
         userParamProfileRepository.findByUserEmail(userEmail).ifPresent(profile -> {
             if (profile.getParams() != null) {
                 profile.getParams().forEach((k, v) -> {
+                    if (REQUEST_ONLY_KEYS.contains(k)) {
+                        return; // 요청 단위(Stage 6)로만 허용되는 키는 영구 저장분 무시
+                    }
                     params.put(k, v);
                     sources.put(k, "stage4_user_profile");
                 });
@@ -153,6 +166,9 @@ public class ParameterResolver {
                 .ifPresent(override -> {
                     if (override.getParams() != null) {
                         override.getParams().forEach((k, v) -> {
+                            if (REQUEST_ONLY_KEYS.contains(k)) {
+                                return; // 요청 단위(Stage 6)로만 허용되는 키는 영구 저장분 무시
+                            }
                             params.put(k, v);
                             sources.put(k, "stage5_conversation_override");
                         });
@@ -232,10 +248,15 @@ public class ParameterResolver {
                 return;
             }
             String key = limit.getParamName();
+            Object currentValue = params.get(key);
+            if (!(currentValue instanceof Number)) {
+                // force_path/hybrid_synthesis_style 같은 문자열(enum) 파라미터는 fixed_value(NUMERIC)로
+                // 강제할 수 없다 — 관리자가 실수로 guard_type='B'를 켜도 값을 훼손하지 않도록 방어.
+                return;
+            }
             double fixedDouble = limit.getFixedValue().doubleValue();
 
             // 파라미터 타입에 따라 Integer/Double 변환
-            Object currentValue = params.get(key);
             Object fixedValue = currentValue instanceof Integer
                     ? (int) fixedDouble
                     : fixedDouble;

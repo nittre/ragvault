@@ -1,11 +1,13 @@
 package com.ragservice.rag.service;
 
+import com.ragservice.rag.dto.EffectiveParams;
 import com.ragservice.rag.dto.MessageDto;
 import com.ragvault.core.prompt.PromptLoader;
 import com.ragvault.core.security.PiiMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.ollama.api.OllamaOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -57,17 +59,19 @@ public class HybridQueryService {
     /**
      * RAG + SQL 병렬 실행 후 종합 응답 반환.
      *
-     * @param question  사용자 질문
-     * @param history   대화 이력
-     * @param userEmail 사용자 이메일 (감사 로그용)
+     * @param question        사용자 질문
+     * @param history         대화 이력
+     * @param userEmail       사용자 이메일 (감사 로그용)
+     * @param effectiveParams ADR-0005 7단계 우선순위 체인이 계산한 최종 파라미터
      */
-    public HybridResult query(String question, List<MessageDto> history, String userEmail) {
+    public HybridResult query(String question, List<MessageDto> history, String userEmail,
+                               EffectiveParams effectiveParams) {
         // RAG, SQL, (선택) WEB_SEARCH 병렬 실행
         CompletableFuture<RagService.RagResult> ragFuture =
-                CompletableFuture.supplyAsync(() -> ragService.chat(question, history));
+                CompletableFuture.supplyAsync(() -> ragService.chat(question, history, effectiveParams));
 
         CompletableFuture<TextToSqlService.SqlQueryResult> sqlFuture =
-                CompletableFuture.supplyAsync(() -> textToSqlService.query(question, userEmail));
+                CompletableFuture.supplyAsync(() -> textToSqlService.query(question, userEmail, effectiveParams));
 
         CompletableFuture<WebSearchService.WebSearchResult> webFuture =
                 webSearchInHybrid
@@ -101,11 +105,21 @@ public class HybridQueryService {
         String sqlContent = (sqlResult != null && !sqlResult.denied()) ? sqlResult.content() : null;
         String webContent = (webResult != null && !webResult.denied()) ? webResult.content() : null;
 
-        String synthesisPrompt = buildSynthesisPrompt(question, ragContent, sqlContent, webContent);
+        String hybridStyle = extractString(effectiveParams, "hybrid_synthesis_style");
+        String synthesisPrompt = buildSynthesisPrompt(question, ragContent, sqlContent, webContent, hybridStyle);
+
+        double temperature = extractDouble(effectiveParams, "temperature");
+        double topP = extractDouble(effectiveParams, "top_p");
+        int maxTokens = extractInt(effectiveParams, "max_tokens");
 
         String rawResponse = chatClient.prompt()
                 .system(SYNTHESIS_SYSTEM)
                 .user(synthesisPrompt)
+                .options(OllamaOptions.builder()
+                        .temperature(temperature)
+                        .topP(topP)
+                        .numPredict(maxTokens)
+                        .build())
                 .call()
                 .content();
 
@@ -120,7 +134,13 @@ public class HybridQueryService {
         return new HybridResult(masked, "HYBRID", responseId, sourceUrls);
     }
 
-    private String buildSynthesisPrompt(String question, String ragContent, String sqlContent, String webContent) {
+    /**
+     * @param hybridStyle BALANCED(동등 취급) | SQL_FIRST(DB 결과 우선, 기존 하드코딩 동작) | RAG_FIRST(문서 결과 우선)
+     *                    우선순위 안내 문구는 해당 섹션이 실제로 프롬프트에 포함돼 있을 때만 붙인다 —
+     *                    존재하지 않는 섹션을 근거로 삼으라고 지시하면 LLM이 혼란스러워한다.
+     */
+    private String buildSynthesisPrompt(String question, String ragContent, String sqlContent, String webContent,
+                                         String hybridStyle) {
         if (ragContent == null && sqlContent == null && webContent == null) {
             return question + "\n\n관련 정보를 찾을 수 없습니다.";
         }
@@ -135,10 +155,45 @@ public class HybridQueryService {
         if (webContent != null) {
             sb.append("[웹 검색 결과]\n").append(webContent).append("\n\n");
         }
-        sb.append("위 결과들을 하나의 답변으로 통합하세요. ")
-          .append("대주제·하위주제·콘텐츠는 [데이터베이스 조회 결과]만 근거로 제시하고, ")
-          .append("[문서 검색 결과]는 개념 보충 설명에만 사용하세요.");
+        sb.append("위 결과들을 하나의 답변으로 통합하세요. ");
+        if ("SQL_FIRST".equals(hybridStyle) && sqlContent != null) {
+            sb.append("대주제·하위주제·콘텐츠는 [데이터베이스 조회 결과]만 근거로 제시하고, ")
+              .append(ragContent != null ? "[문서 검색 결과]는 개념 보충 설명에만 사용하세요." : "");
+        } else if ("RAG_FIRST".equals(hybridStyle) && ragContent != null) {
+            sb.append("[문서 검색 결과]를 우선 근거로 삼아 설명하고, ")
+              .append(sqlContent != null ? "[데이터베이스 조회 결과]는 구체적인 수치·목록을 보강하는 데만 사용하세요." : "");
+        } else {
+            sb.append("각 결과의 출처를 명시하며 동등하게 종합하세요.");
+        }
         return sb.toString();
+    }
+
+    /**
+     * ADR-0005: 서버 코드에는 폴백 값을 두지 않는다 — Stage 1이 이미 모든 파라미터의
+     * default_value 설정을 강제하므로, 값이 없거나 타입이 안 맞으면 즉시 예외를 던진다.
+     */
+    private String extractString(EffectiveParams effectiveParams, String key) {
+        Object value = effectiveParams.values().get(key);
+        if (!(value instanceof String s)) {
+            throw new IllegalStateException("파라미터 '" + key + "'가 EffectiveParams에 없거나 문자열이 아닙니다.");
+        }
+        return s;
+    }
+
+    private double extractDouble(EffectiveParams effectiveParams, String key) {
+        Object value = effectiveParams.values().get(key);
+        if (!(value instanceof Number n)) {
+            throw new IllegalStateException("파라미터 '" + key + "'가 EffectiveParams에 없거나 숫자가 아닙니다.");
+        }
+        return n.doubleValue();
+    }
+
+    private int extractInt(EffectiveParams effectiveParams, String key) {
+        Object value = effectiveParams.values().get(key);
+        if (!(value instanceof Number n)) {
+            throw new IllegalStateException("파라미터 '" + key + "'가 EffectiveParams에 없거나 숫자가 아닙니다.");
+        }
+        return n.intValue();
     }
 
     private <T> T getSafely(CompletableFuture<T> future) {
