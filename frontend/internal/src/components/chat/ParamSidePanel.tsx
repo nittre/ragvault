@@ -66,9 +66,10 @@ export default function ParamSidePanel() {
         </div>
 
         {/* Top-K */}
-        <SliderField
+        <TunableSlider
           label="Top-K"
           value={params.topK ?? 5}
+          limit={limits?.top_k}
           min={topK.min}
           max={topK.max}
           step={1}
@@ -76,9 +77,10 @@ export default function ParamSidePanel() {
         />
 
         {/* 유사도 임계값 */}
-        <SliderField
+        <TunableSlider
           label="유사도 임계값"
           value={params.threshold ?? 0.5}
+          limit={limits?.similarity_threshold}
           min={threshold.min}
           max={threshold.max}
           step={0.01}
@@ -87,9 +89,10 @@ export default function ParamSidePanel() {
         />
 
         {/* Temperature */}
-        <SliderField
+        <TunableSlider
           label="Temperature"
           value={params.temperature ?? 0.7}
+          limit={limits?.temperature}
           min={temperature.min}
           max={temperature.max}
           step={0.01}
@@ -98,9 +101,10 @@ export default function ParamSidePanel() {
         />
 
         {/* Top P */}
-        <SliderField
+        <TunableSlider
           label="Top P"
           value={params.topP ?? 0.9}
+          limit={limits?.top_p}
           min={topP.min}
           max={topP.max}
           step={0.01}
@@ -109,9 +113,10 @@ export default function ParamSidePanel() {
         />
 
         {/* 최대 토큰 */}
-        <SliderField
+        <TunableSlider
           label="최대 토큰"
           value={params.maxTokens ?? 2048}
+          limit={limits?.max_tokens}
           min={maxTokens.min}
           max={maxTokens.max}
           step={1}
@@ -119,9 +124,10 @@ export default function ParamSidePanel() {
         />
 
         {/* 쿼리 타임아웃 */}
-        <SliderField
+        <TunableSlider
           label="쿼리 타임아웃(초)"
           value={params.queryTimeoutSec ?? 30}
+          limit={limits?.query_timeout_sec}
           min={queryTimeoutSec.min}
           max={queryTimeoutSec.max}
           step={1}
@@ -129,9 +135,10 @@ export default function ParamSidePanel() {
         />
 
         {/* 최대 결과 행수 */}
-        <SliderField
+        <TunableSlider
           label="최대 결과 행수"
           value={params.maxResultRows ?? 100}
+          limit={limits?.max_result_rows}
           min={maxResultRows.min}
           max={maxResultRows.max}
           step={1}
@@ -168,9 +175,10 @@ export default function ParamSidePanel() {
         </div>
 
         {/* 최대 히스토리 턴수 */}
-        <SliderField
+        <TunableSlider
           label="최대 히스토리 턴수"
           value={params.maxHistoryTurns ?? 10}
+          limit={limits?.max_history_turns}
           min={maxHistoryTurns.min}
           max={maxHistoryTurns.max}
           step={1}
@@ -214,6 +222,36 @@ interface SliderFieldProps {
   step: number
   decimals?: number
   onChange: (v: number) => void
+}
+
+/**
+ * 관리자가 Guard B(잠금)로 설정했으면 편집 불가능한 LockedField로, 아니면 SliderField로 렌더링.
+ * "유사도 임계값" 등 8개 파라미터는 이 컴포넌트를 통해서만 노출해야 잠금이 UI에 정확히 반영된다.
+ */
+interface TunableSliderProps extends SliderFieldProps {
+  limit: ParamLimitInfo | undefined
+}
+
+function TunableSlider({ label, value, min, max, step, decimals, onChange, limit }: TunableSliderProps) {
+  if (limit?.locked) {
+    return (
+      <LockedField
+        label={`${label} 🔒`}
+        value={limit.fixedValue != null ? String(limit.fixedValue) : '-'}
+      />
+    )
+  }
+  return (
+    <SliderField
+      label={label}
+      value={value}
+      min={min}
+      max={max}
+      step={step}
+      decimals={decimals}
+      onChange={onChange}
+    />
+  )
 }
 
 function SliderField({ label, value, min, max, step, decimals = 0, onChange }: SliderFieldProps) {

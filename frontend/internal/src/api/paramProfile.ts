@@ -6,6 +6,7 @@ export interface ParamLimitInfo {
   locked: boolean
   lockedReason: string | null
   fixedValue: number | null
+  defaultValue: string | null
 }
 
 export interface ParamProfileResponse {

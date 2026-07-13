@@ -26,13 +26,17 @@ export default function ParamLimitsPage() {
 
   const updateMut = useMutation({
     mutationFn: (
-      { paramName, body }: { paramName: string; body: { minValue?: number; maxValue?: number; fixedValue?: number | null } }
+      { paramName, body }: {
+        paramName: string
+        body: { minValue?: number; maxValue?: number; fixedValue?: number | null; defaultValue?: string | null }
+      }
     ) => updateParamLimit(paramName, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-param-limits'] })
       setMutationError(null)
       setEditing(null)
       setEditingFixed(null)
+      setEditingDefault(null)
     },
     onError: err => setMutationError(extractErrorMessage(err)),
   })
@@ -64,11 +68,13 @@ export default function ParamLimitsPage() {
   const [editReasonValue, setEditReasonValue] = useState('')
   const [editingFixed, setEditingFixed] = useState<string | null>(null)
   const [editFixedValue, setEditFixedValue] = useState('')
+  const [editingDefault, setEditingDefault] = useState<string | null>(null)
+  const [editDefaultValue, setEditDefaultValue] = useState('')
 
-  const startEdit = (paramName: string, min: number, max: number) => {
+  const startEdit = (paramName: string, min: number | null, max: number | null) => {
     setEditing(paramName)
-    setEditMin(String(min))
-    setEditMax(String(max))
+    setEditMin(min != null ? String(min) : '')
+    setEditMax(max != null ? String(max) : '')
   }
 
   const handleSave = (paramName: string) => {
@@ -102,6 +108,18 @@ export default function ParamLimitsPage() {
     })
   }
 
+  const startEditDefault = (paramName: string, currentDefault: string | null) => {
+    setEditingDefault(paramName)
+    setEditDefaultValue(currentDefault ?? '')
+  }
+
+  const handleSaveDefault = (paramName: string) => {
+    updateMut.mutate({
+      paramName,
+      body: { defaultValue: editDefaultValue === '' ? null : editDefaultValue },
+    })
+  }
+
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -126,7 +144,7 @@ export default function ParamLimitsPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {['파라미터', '설명', '최솟값', '최댓값', '고정값', '잠금 여부', '잠금 사유', ''].map(h => (
+              {['파라미터', '설명', '기본값', '최솟값', '최댓값', '고정값', '잠금 여부', '잠금 사유', ''].map(h => (
                 <th
                   key={h}
                   className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide"
@@ -142,6 +160,45 @@ export default function ParamLimitsPage() {
                 <td className="px-4 py-3 font-mono text-gray-900 text-xs">{lim.paramName}</td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{lim.description || '-'}</td>
                 <td className="px-4 py-3">
+                  {editingDefault === lim.paramName ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={editDefaultValue}
+                        onChange={e => setEditDefaultValue(e.target.value)}
+                        placeholder="비우면 미설정"
+                        className="border border-blue-400 rounded px-2 py-1 text-sm w-20 focus:outline-none"
+                      />
+                      <button
+                        onClick={() => handleSaveDefault(lim.paramName)}
+                        disabled={updateMut.isPending}
+                        className="text-green-600 hover:text-green-800 p-1"
+                      >
+                        <Check size={12} />
+                      </button>
+                      <button
+                        onClick={() => setEditingDefault(null)}
+                        className="text-gray-400 hover:text-gray-600 p-1"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <span className={lim.defaultValue == null ? 'text-red-500 font-medium' : 'text-gray-700'}>
+                        {lim.defaultValue ?? '미설정 ⚠️'}
+                      </span>
+                      <button
+                        onClick={() => startEditDefault(lim.paramName, lim.defaultValue)}
+                        className="text-gray-300 hover:text-blue-500 p-0.5"
+                        title="Stage 1 기본값 수정 — 미설정 시 이 파라미터를 쓰는 요청이 전부 실패합니다"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-3">
                   {editing === lim.paramName ? (
                     <input
                       type="number"
@@ -150,7 +207,7 @@ export default function ParamLimitsPage() {
                       className="border border-blue-400 rounded px-2 py-1 text-sm w-20 focus:outline-none"
                     />
                   ) : (
-                    <span className="text-gray-700">{lim.minValue}</span>
+                    <span className="text-gray-700">{lim.minValue ?? '-'}</span>
                   )}
                 </td>
                 <td className="px-4 py-3">
@@ -162,7 +219,7 @@ export default function ParamLimitsPage() {
                       className="border border-blue-400 rounded px-2 py-1 text-sm w-20 focus:outline-none"
                     />
                   ) : (
-                    <span className="text-gray-700">{lim.maxValue}</span>
+                    <span className="text-gray-700">{lim.maxValue ?? '-'}</span>
                   )}
                 </td>
                 <td className="px-4 py-3">
@@ -307,7 +364,7 @@ export default function ParamLimitsPage() {
             ))}
             {limits.length === 0 && !isLoading && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">
                   파라미터 한도 데이터가 없습니다.
                 </td>
               </tr>

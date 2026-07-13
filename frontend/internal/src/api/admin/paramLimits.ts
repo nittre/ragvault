@@ -3,12 +3,13 @@ import apiClient from '../client'
 export interface ParamLimit {
   id: string
   paramName: string
-  minValue: number
-  maxValue: number
+  minValue: number | null
+  maxValue: number | null
   locked: boolean
   lockedReason: string
   description: string
   fixedValue: number | null
+  defaultValue: string | null
 }
 
 export const getParamLimits = () =>
@@ -16,7 +17,7 @@ export const getParamLimits = () =>
 
 export const updateParamLimit = (
   paramName: string,
-  body: { minValue?: number; maxValue?: number; fixedValue?: number | null }
+  body: { minValue?: number; maxValue?: number; fixedValue?: number | null; defaultValue?: string | null }
 ) =>
   apiClient.put<ParamLimit>(`/api/v1/admin/param-limits/${encodeURIComponent(paramName)}`, body).then(r => r.data)
 
