@@ -71,6 +71,27 @@ dependencies {
     // PDF → Markdown(표 구조 보존) + 이미지 (opendataloader-pdf, Apache 2.0)
     api 'org.opendataloader:opendataloader-pdf-core:1.11.0'
 
+    // opendataloader-pdf-core:1.11.0 은 org.verapdf:wcag-validation 을 오픈 버전 레인지
+    // ([1.31.0,1.32.0-RC))로 요구하고, 이는 다시 wcag-algorithms 를 같은 레인지로 요구한다.
+    // vera-dev 저장소에 새 패치가 게시될 때마다 빌드 시점에 다른 버전이 딸려와 API 가 깨질 수 있다.
+    // 실제로 발생한 두 건의 NoSuchMethodError 로 확인된 호환 범위:
+    //   - ContrastRatioConsumer(String,String,boolean,Float) 생성자는 wcag-algorithms 1.31.33 에서 제거됨
+    //     (1.31.1~1.31.32 까지는 존재, javap 으로 확인)
+    //   - StreamInfo(int,String,int,int,int,Integer) 생성자는 1.31.32 부터 ObjectKey 파라미터가
+    //     추가된 시그니처로 변경됨 (1.31.1~1.31.30 까지는 구 시그니처, javap 으로 확인) —
+    //     org.verapdf:core:1.31.22(오래된 구 시그니처 기준으로 컴파일된, vera-dev 에 게시된 최신 버전)가
+    //     이 구 시그니처를 그대로 호출하고 있어 새 시그니처와 맞지 않으면 깨진다.
+    // org.verapdf:core 자체가 1.31.22 에서 더 이상 갱신되지 않으므로, wcag-algorithms/wcag-validation 도
+    // 같은 1.31.22 로 고정해 core 모듈이 컴파일 당시 기대한 API 와 맞춘다.
+    constraints {
+        api('org.verapdf:wcag-validation:1.31.22') {
+            because 'org.verapdf:core(최신 1.31.22)가 기대하는 wcag-algorithms API 와 짝을 맞추기 위해 고정'
+        }
+        api('org.verapdf:wcag-algorithms:1.31.22') {
+            because 'ContrastRatioConsumer/StreamInfo 생성자가 org.verapdf:core:1.31.22 기준과 어긋나지 않는 마지막 공통 버전'
+        }
+    }
+
     // OCR (Tess4j — native Tesseract wrapper). PDF 텍스트 추출 실패 시 페이지 렌더링 후 OCR 폴백,
     // 및 TesseractOcrService(이미지 단독 OCR) 공용 — app-widget/app-internal 양쪽이 core를 통해 공유.
     api 'net.sourceforge.tess4j:tess4j:5.12.0'
