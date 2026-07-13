@@ -1,5 +1,6 @@
 import apiClient from './client'
 import type { RagParams, CitationSource, Intent } from '../types'
+import { toBackendRagParams } from '../utils/ragParamKeys'
 
 interface ChatMessage { role: string; content: string }
 interface ChatRequest {
@@ -14,8 +15,12 @@ interface ChatResponse {
 }
 export interface FileUploadResponse { id: string; object: string; status: string; token_count: number }
 
-export const sendMessage = (req: ChatRequest) =>
-  apiClient.post<ChatResponse>('/v1/chat/completions', req).then(r => r.data)
+export const sendMessage = (req: ChatRequest) => {
+  const payload = req.rag_params
+    ? { ...req, rag_params: toBackendRagParams(req.rag_params) }
+    : req
+  return apiClient.post<ChatResponse>('/v1/chat/completions', payload).then(r => r.data)
+}
 
 export const uploadFile = (file: File) => {
   const fd = new FormData(); fd.append('file', file)

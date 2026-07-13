@@ -1,11 +1,46 @@
 import React from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { useParamStore } from '../../stores/paramStore'
+import { getParamProfile, type ParamLimitInfo } from '../../api/paramProfile'
 import type { ForcePath, HybridStyle } from '../../types'
+
+/** limits 맵에서 한도를 꺼내되, 아직 로딩 전이거나 admin_param_limits에 row가 없으면 하드코딩 fallback 사용. */
+function resolveRange(
+  limits: Record<string, ParamLimitInfo> | undefined,
+  key: string,
+  fallbackMin: number,
+  fallbackMax: number
+): { min: number; max: number } {
+  const limit = limits?.[key]
+  return {
+    min: limit?.minValue ?? fallbackMin,
+    max: limit?.maxValue ?? fallbackMax,
+  }
+}
 
 export default function ParamSidePanel() {
   const { params, systemPrompt, setParams, setSystemPrompt, togglePanel, resetParams } =
     useParamStore()
+
+  const { data: profile } = useQuery({
+    queryKey: ['user-param-profile'],
+    queryFn: getParamProfile,
+  })
+  const limits = profile?.limits
+
+  const topK = resolveRange(limits, 'top_k', 1, 20)
+  const threshold = resolveRange(limits, 'similarity_threshold', 0, 1)
+  const temperature = resolveRange(limits, 'temperature', 0, 2)
+  const topP = resolveRange(limits, 'top_p', 0, 1)
+  const maxTokens = resolveRange(limits, 'max_tokens', 100, 4096)
+  const queryTimeoutSec = resolveRange(limits, 'query_timeout_sec', 5, 60)
+  const maxResultRows = resolveRange(limits, 'max_result_rows', 10, 10000)
+  const maxHistoryTurns = resolveRange(limits, 'max_history_turns', 1, 50)
+
+  const sqlTemperature = limits?.sql_temperature
+  const sqlFewShotExamples = limits?.sql_few_shot_examples
+  const maxContextTokens = limits?.max_context_tokens
 
   return (
     <aside className="w-80 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
@@ -34,8 +69,8 @@ export default function ParamSidePanel() {
         <SliderField
           label="Top-K"
           value={params.topK ?? 5}
-          min={1}
-          max={20}
+          min={topK.min}
+          max={topK.max}
           step={1}
           onChange={v => setParams({ topK: v })}
         />
@@ -44,8 +79,8 @@ export default function ParamSidePanel() {
         <SliderField
           label="유사도 임계값"
           value={params.threshold ?? 0.5}
-          min={0}
-          max={1}
+          min={threshold.min}
+          max={threshold.max}
           step={0.01}
           decimals={2}
           onChange={v => setParams({ threshold: v })}
@@ -55,8 +90,8 @@ export default function ParamSidePanel() {
         <SliderField
           label="Temperature"
           value={params.temperature ?? 0.7}
-          min={0}
-          max={2}
+          min={temperature.min}
+          max={temperature.max}
           step={0.01}
           decimals={2}
           onChange={v => setParams({ temperature: v })}
@@ -66,8 +101,8 @@ export default function ParamSidePanel() {
         <SliderField
           label="Top P"
           value={params.topP ?? 0.9}
-          min={0}
-          max={1}
+          min={topP.min}
+          max={topP.max}
           step={0.01}
           decimals={2}
           onChange={v => setParams({ topP: v })}
@@ -77,8 +112,8 @@ export default function ParamSidePanel() {
         <SliderField
           label="최대 토큰"
           value={params.maxTokens ?? 2048}
-          min={100}
-          max={4096}
+          min={maxTokens.min}
+          max={maxTokens.max}
           step={1}
           onChange={v => setParams({ maxTokens: v })}
         />
@@ -87,8 +122,8 @@ export default function ParamSidePanel() {
         <SliderField
           label="쿼리 타임아웃(초)"
           value={params.queryTimeoutSec ?? 30}
-          min={5}
-          max={60}
+          min={queryTimeoutSec.min}
+          max={queryTimeoutSec.max}
           step={1}
           onChange={v => setParams({ queryTimeoutSec: v })}
         />
@@ -97,8 +132,8 @@ export default function ParamSidePanel() {
         <SliderField
           label="최대 결과 행수"
           value={params.maxResultRows ?? 100}
-          min={10}
-          max={10000}
+          min={maxResultRows.min}
+          max={maxResultRows.max}
           step={1}
           onChange={v => setParams({ maxResultRows: v })}
         />
@@ -136,16 +171,25 @@ export default function ParamSidePanel() {
         <SliderField
           label="최대 히스토리 턴수"
           value={params.maxHistoryTurns ?? 10}
-          min={1}
-          max={50}
+          min={maxHistoryTurns.min}
+          max={maxHistoryTurns.max}
           step={1}
           onChange={v => setParams({ maxHistoryTurns: v })}
         />
 
-        {/* 잠금 파라미터 */}
-        <LockedField label="SQL Temperature 🔒" value="0.1" />
-        <LockedField label="Few-Shot 예시 수 🔒" value="5" />
-        <LockedField label="최대 컨텍스트 토큰 🔒" value="5000" />
+        {/* 잠금 파라미터 — 어드민이 설정한 실제 고정값 표시 */}
+        <LockedField
+          label="SQL Temperature 🔒"
+          value={sqlTemperature?.fixedValue != null ? String(sqlTemperature.fixedValue) : '-'}
+        />
+        <LockedField
+          label="Few-Shot 예시 수 🔒"
+          value={sqlFewShotExamples?.fixedValue != null ? String(sqlFewShotExamples.fixedValue) : '-'}
+        />
+        <LockedField
+          label="최대 컨텍스트 토큰 🔒"
+          value={maxContextTokens?.fixedValue != null ? String(maxContextTokens.fixedValue) : '-'}
+        />
       </div>
 
       {/* 초기화 버튼 */}
