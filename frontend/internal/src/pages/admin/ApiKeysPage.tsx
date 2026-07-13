@@ -2,6 +2,14 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Copy, RefreshCw, Trash2, Eye, EyeOff } from 'lucide-react'
 import { getApiKeys, createApiKey, deleteApiKey, rotateApiKey } from '../../api/admin/apiKeys'
+import type { ApiKeyInfo } from '../../types'
+
+interface NewKeyInfo { rawKey: string; name: string; scopes: string }
+
+const SCOPE_OPTIONS = [
+  { value: 'api:chat', label: 'api:chat', description: '챗 API(/v1/chat/**) 호출 권한' },
+  { value: 'api:admin', label: 'api:admin', description: '어드민 API(/api/v1/admin/**) 전반 접근 권한' },
+]
 
 export default function ApiKeysPage() {
   const qc = useQueryClient()
@@ -15,9 +23,9 @@ export default function ApiKeysPage() {
     mutationFn: createApiKey,
     onSuccess: data => {
       qc.invalidateQueries({ queryKey: ['admin-api-keys'] })
-      setNewKey(data.rawKey ?? null)
+      setNewKey({ rawKey: data.rawKey, name: data.name, scopes: data.scopes })
       setShowForm(false)
-      setForm({ name: '', scopes: 'chat', expiresAt: '' })
+      setForm({ name: '', scopes: ['api:chat'], expiresAt: '' })
     },
   })
 
@@ -27,27 +35,38 @@ export default function ApiKeysPage() {
   })
 
   const rotateMut = useMutation({
-    mutationFn: rotateApiKey,
-    onSuccess: data => {
+    mutationFn: (row: ApiKeyInfo) => rotateApiKey(row.id),
+    onSuccess: (data, row) => {
       qc.invalidateQueries({ queryKey: ['admin-api-keys'] })
-      setNewKey(data.rawKey ?? null)
+      setNewKey({ rawKey: data.rawKey, name: row.name, scopes: row.scopes })
     },
   })
 
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ name: '', scopes: 'chat', expiresAt: '' })
-  const [newKey, setNewKey] = useState<string | null>(null)
+  const [form, setForm] = useState<{ name: string; scopes: string[]; expiresAt: string }>({
+    name: '', scopes: ['api:chat'], expiresAt: '',
+  })
+  const [newKey, setNewKey] = useState<NewKeyInfo | null>(null)
   const [showKey, setShowKey] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [hoveredScope, setHoveredScope] = useState<string | null>(null)
+
+  const toggleScope = (value: string) => {
+    setForm(p => ({
+      ...p,
+      scopes: p.scopes.includes(value) ? p.scopes.filter(s => s !== value) : [...p.scopes, value],
+    }))
+  }
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault()
-    createMut.mutate(form)
+    if (form.scopes.length === 0) return
+    createMut.mutate({ ...form, scopes: form.scopes.join(',') })
   }
 
   const handleCopy = () => {
     if (!newKey) return
-    navigator.clipboard.writeText(newKey)
+    navigator.clipboard.writeText(newKey.rawKey)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -73,9 +92,12 @@ export default function ApiKeysPage() {
           <p className="text-sm font-medium text-yellow-800 mb-2">
             ⚠️ 새 API 키가 발급되었습니다. 이 키는 지금만 표시됩니다 — 반드시 복사하세요.
           </p>
+          <p className="text-xs text-yellow-700 mb-2">
+            <span className="font-medium">{newKey.name}</span> · 스코프: {newKey.scopes}
+          </p>
           <div className="flex items-center gap-2">
             <code className="flex-1 bg-white border border-yellow-300 rounded px-3 py-2 text-sm font-mono text-gray-900 overflow-x-auto">
-              {showKey ? newKey : '•'.repeat(Math.min(newKey.length, 48))}
+              {showKey ? newKey.rawKey : '•'.repeat(Math.min(newKey.rawKey.length, 48))}
             </code>
             <button
               onClick={() => setShowKey(v => !v)}
@@ -119,12 +141,32 @@ export default function ApiKeysPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">스코프</label>
-            <input
-              value={form.scopes}
-              onChange={e => setForm(p => ({ ...p, scopes: e.target.value }))}
-              placeholder="chat,admin"
-              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <div className="flex items-center gap-3 h-[34px]">
+              {SCOPE_OPTIONS.map(opt => (
+                <label
+                  key={opt.value}
+                  onMouseEnter={() => setHoveredScope(opt.value)}
+                  onMouseLeave={() => setHoveredScope(null)}
+                  className="relative flex items-center gap-1.5 text-sm text-gray-700 cursor-help"
+                >
+                  <input
+                    type="checkbox"
+                    checked={form.scopes.includes(opt.value)}
+                    onChange={() => toggleScope(opt.value)}
+                    className="accent-blue-600"
+                  />
+                  {opt.label}
+                  {hoveredScope === opt.value && (
+                    <span className="pointer-events-none absolute left-0 top-full z-10 mt-1 w-max max-w-[220px] rounded-md bg-gray-900 px-2 py-1 text-xs text-white">
+                      {opt.description}
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
+            {form.scopes.length === 0 && (
+              <p className="text-xs text-red-500 mt-1">스코프를 하나 이상 선택하세요.</p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">만료일 (선택)</label>
@@ -134,10 +176,11 @@ export default function ApiKeysPage() {
               onChange={e => setForm(p => ({ ...p, expiresAt: e.target.value }))}
               className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+            <p className="text-xs text-gray-400 mt-1">선택하지 않으면 발급일로부터 1년 후 자동 만료됩니다.</p>
           </div>
           <button
             type="submit"
-            disabled={createMut.isPending}
+            disabled={createMut.isPending || form.scopes.length === 0}
             className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-sm font-medium"
           >
             {createMut.isPending ? '발급 중…' : '발급'}
@@ -176,7 +219,7 @@ export default function ApiKeysPage() {
                 <td className="px-4 py-3 font-mono text-gray-500 text-xs">{k.keyPrefix}…</td>
                 <td className="px-4 py-3 text-gray-600 text-xs">{k.scopes}</td>
                 <td className="px-4 py-3 text-gray-400 text-xs">
-                  {k.expiresAt ? new Date(k.expiresAt).toLocaleDateString() : '무기한'}
+                  {new Date(k.expiresAt).toLocaleDateString()}
                 </td>
                 <td className="px-4 py-3 text-gray-400 text-xs">
                   {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : '-'}
@@ -191,29 +234,31 @@ export default function ApiKeysPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`${k.name} 키를 교체하시겠습니까? 기존 키는 즉시 폐기됩니다.`)) {
-                          rotateMut.mutate(k.id)
-                        }
-                      }}
-                      disabled={rotateMut.isPending}
-                      className="flex items-center gap-1 text-blue-500 hover:text-blue-700 text-xs disabled:opacity-50"
-                    >
-                      <RefreshCw size={12} /> 교체
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`${k.name} 키를 폐기하시겠습니까?`)) {
-                          deleteMut.mutate(k.id)
-                        }
-                      }}
-                      className="text-red-400 hover:text-red-600"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  {k.active && (
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`${k.name} 키를 교체하시겠습니까? 기존 키는 즉시 폐기됩니다.`)) {
+                            rotateMut.mutate(k)
+                          }
+                        }}
+                        disabled={rotateMut.isPending}
+                        className="flex items-center gap-1 text-blue-500 hover:text-blue-700 text-xs disabled:opacity-50"
+                      >
+                        <RefreshCw size={12} /> 교체
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`${k.name} 키를 폐기하시겠습니까?`)) {
+                            deleteMut.mutate(k.id)
+                          }
+                        }}
+                        className="text-red-400 hover:text-red-600"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

@@ -5,10 +5,13 @@ import com.ragservice.rag.repository.ApiKeyRepository;
 import com.ragservice.rag.runner.ApiKeyBootstrapRunner;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
@@ -31,14 +34,19 @@ public class AdminApiKeyController {
     @GetMapping
     public ResponseEntity<?> list() {
         var keys = apiKeyRepository.findAll().stream()
-                .map(k -> Map.of(
-                        "id", k.getId().toString(),
-                        "email", k.getCreatedBy() != null ? k.getCreatedBy() : "",
-                        "keyPrefix", k.getKeyPrefix(),
-                        "scope", k.getScopes(),
-                        "active", k.isActive(),
-                        "createdAt", k.getCreatedAt() != null ? k.getCreatedAt().toString() : ""
-                ))
+                .map(k -> {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("id", k.getId().toString());
+                    row.put("name", k.getName());
+                    row.put("email", k.getCreatedBy() != null ? k.getCreatedBy() : "");
+                    row.put("keyPrefix", k.getKeyPrefix());
+                    row.put("scopes", k.getScopes());
+                    row.put("active", k.isActive());
+                    row.put("expiresAt", k.getExpiresAt() != null ? k.getExpiresAt().toString() : "");
+                    row.put("lastUsedAt", k.getLastUsedAt() != null ? k.getLastUsedAt().toString() : "");
+                    row.put("createdAt", k.getCreatedAt() != null ? k.getCreatedAt().toString() : "");
+                    return row;
+                })
                 .toList();
         return ResponseEntity.ok(keys);
     }
@@ -48,12 +56,27 @@ public class AdminApiKeyController {
      * raw key 는 응답에서 1회만 노출됨 (이후 재조회 불가).
      */
     @PostMapping
-    public ResponseEntity<?> issue(@RequestBody Map<String, String> body) {
-        String email = body.get("email");
-        String scope = body.getOrDefault("scope", "api:chat");
+    public ResponseEntity<?> issue(@RequestBody Map<String, String> body, Authentication authentication) {
+        String email = authentication != null ? authentication.getName() : null;
+        String scope = body.getOrDefault("scopes", "api:chat");
         String name = body.getOrDefault("name", email);
+        String expiresAtRaw = body.get("expiresAt");
         if (email == null || email.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "email 필수"));
+            return ResponseEntity.badRequest().body(Map.of("error", "인증 정보에서 email 을 확인할 수 없습니다."));
+        }
+        if (name == null || name.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "name 필수"));
+        }
+
+        Instant expiresAt;
+        if (expiresAtRaw == null || expiresAtRaw.isBlank()) {
+            expiresAt = Instant.now().plus(365, ChronoUnit.DAYS);
+        } else {
+            try {
+                expiresAt = LocalDate.parse(expiresAtRaw).atTime(23, 59, 59).toInstant(ZoneOffset.UTC);
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().body(Map.of("error", "expiresAt 형식이 올바르지 않습니다. (yyyy-MM-dd)"));
+            }
         }
 
         String rawKey = "rk_" + UUID.randomUUID().toString().replace("-", "");
@@ -68,15 +91,19 @@ public class AdminApiKeyController {
         key.setActive(true);
         key.setCreatedBy(email);
         key.setCreatedAt(Instant.now());
-        key.setExpiresAt(Instant.now().plus(365, ChronoUnit.DAYS));
+        key.setExpiresAt(expiresAt);
         apiKeyRepository.save(key);
 
         return ResponseEntity.ok(Map.of(
                 "id", key.getId().toString(),
+                "name", name,
                 "email", email,
-                "key", rawKey,       // 발급 시 1회만 노출
+                "rawKey", rawKey,       // 발급 시 1회만 노출
                 "keyPrefix", prefix,
-                "scope", scope
+                "scopes", scope,
+                "active", true,
+                "expiresAt", expiresAt.toString(),
+                "createdAt", key.getCreatedAt().toString()
         ));
     }
 
@@ -108,7 +135,7 @@ public class AdminApiKeyController {
             apiKeyRepository.save(k);
             return ResponseEntity.ok(Map.of(
                     "id", id.toString(),
-                    "key", rawKey,
+                    "rawKey", rawKey,
                     "keyPrefix", prefix
             ));
         }).orElse(ResponseEntity.notFound().build());
