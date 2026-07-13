@@ -31,11 +31,10 @@ import java.util.UUID;
  * 처리 순서:
  * 1. SiteKeyFilter 에서 X-Site-Key 검증 (401 if invalid)
  * 2. 마지막 user 메시지 추출
- * 3. WidgetRagService.chat() — RAG 검색 → LLM 생성 → PII 마스킹
+ * 3. WidgetRagService.chat() (RAG 전용) 또는 QueryRouterService.route() (sql_enabled=true 시 RAG/SQL/HYBRID 라우팅)
  * 4. OpenAI 호환 응답 포맷팅
  *
- * SQL/파일/URL 경로 없음 — FAQ RAG 전용.
- * 사내 MySQL DataSource 없음.
+ * sql_enabled 설정(SearchConfigService)이 true 인 경우에만 text-to-sql 라우팅이 활성화된다 (기본 false).
  */
 @Slf4j
 @RestController
@@ -81,7 +80,8 @@ public class WidgetChatController {
         List<ChunkResult> sources;
         if (searchConfigService.getSqlEnabled()) {
             // text-to-sql 허용 — 공개 위젯 기본 비활성(본인 인증 흐름 부재 시 내부/데모 용도)
-            RouterResult routed = queryRouterService.route(userMessage, history, "widget:" + siteKey);
+            RouterResult routed = queryRouterService.route(userMessage, history, "widget:" + siteKey,
+                    sessionId, siteKey);
             content = routed.content();
             sources = routed.sources();
         } else {

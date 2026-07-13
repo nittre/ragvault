@@ -1,5 +1,7 @@
 package com.ragvault.widget.controller;
 
+import com.ragvault.core.repository.SqlExecutionLogRepository;
+import com.ragvault.core.util.DailyCountFiller;
 import com.ragvault.widget.dto.ConversationLogDto;
 import com.ragvault.widget.dto.StatsDto;
 import com.ragvault.widget.repository.ConversationLogRepository;
@@ -11,10 +13,11 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * GET /admin/conversations  — 대화 로그 조회 + 통계.
@@ -27,9 +30,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ConversationLogController {
 
-    private static final DateTimeFormatter DAY_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-
     private final ConversationLogRepository conversationLogRepository;
+    private final SqlExecutionLogRepository sqlExecutionLogRepository;
 
     /**
      * GET /admin/conversations?page=0&size=20&siteKey=...
@@ -67,22 +69,21 @@ public class ConversationLogController {
         double blockedRate    = last30d > 0 ? (double) blocked30d / last30d : 0.0;
 
         List<Object[]> rows = conversationLogRepository.dailyCountsSince(from30d);
-        List<StatsDto.DailyCount> daily = rows.stream()
-                .map(r -> new StatsDto.DailyCount(
-                        toDateString(r[0]),
-                        ((Number) r[1]).longValue()))
-                .toList();
+        List<DailyCountFiller.DailyCount> daily = DailyCountFiller.fill(rows, 30);
 
-        return new StatsDto(total, last7d, last30d, contextHitRate, blockedRate, daily);
-    }
+        Map<String, Long> routing = new LinkedHashMap<>(Map.of(
+                "RAG", 0L, "SQL", 0L, "HYBRID", 0L, "REJECT", 0L, "OTHER", 0L));
+        for (Object[] row : conversationLogRepository.actionCountsSince(from30d)) {
+            routing.put((String) row[0], ((Number) row[1]).longValue());
+        }
 
-    private String toDateString(Object dayObj) {
-        if (dayObj instanceof java.sql.Date sqlDate) {
-            return sqlDate.toLocalDate().format(DAY_FORMAT);
-        }
-        if (dayObj instanceof LocalDate ld) {
-            return ld.format(DAY_FORMAT);
-        }
-        return String.valueOf(dayObj);
+        // SQL 실행 횟수 (최근 30일) — 챗 서비스 어드민의 '실행 통계'와 동일한 체계.
+        // widget_db 에는 web_search_execution_log 테이블이 없으므로(위젯은 웹검색 라우팅 미지원) sqlQuery 만 집계한다.
+        LocalDateTime sqlFrom30d = LocalDateTime.now().minusDays(30);
+        long sqlExecutionCount30d = sqlExecutionLogRepository
+                .countByValidationResultAndCreatedAtBetween("allowed", sqlFrom30d, LocalDateTime.now());
+        Map<String, Long> executions = Map.of("sqlQuery", sqlExecutionCount30d);
+
+        return new StatsDto(total, last7d, last30d, contextHitRate, blockedRate, daily, routing, executions);
     }
 }

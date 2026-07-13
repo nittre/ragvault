@@ -45,6 +45,10 @@ public class ConversationLog {
     @Column(name = "source_count", nullable = false)
     private int sourceCount;
 
+    /** 라우팅 분류: RAG / SQL / HYBRID / REJECT / OTHER. */
+    @Column(name = "action", nullable = false)
+    private String action;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

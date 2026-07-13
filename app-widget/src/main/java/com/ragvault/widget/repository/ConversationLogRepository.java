@@ -33,4 +33,13 @@ public interface ConversationLogRepository extends JpaRepository<ConversationLog
             GROUP BY day ORDER BY day
             """, nativeQuery = true)
     List<Object[]> dailyCountsSince(@Param("from") Instant from);
+
+    // 라우팅 분류별 집계 (챗 서비스 어드민의 '라우팅 상세'와 동일한 체계)
+    @Query(value = """
+            SELECT action, COUNT(*) as cnt
+            FROM conversation_logs
+            WHERE created_at >= :from
+            GROUP BY action
+            """, nativeQuery = true)
+    List<Object[]> actionCountsSince(@Param("from") Instant from);
 }

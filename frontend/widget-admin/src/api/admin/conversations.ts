@@ -24,6 +24,16 @@ export interface StatsDto {
   contextHitRate30d: number
   blockedRate30d: number
   daily30d: DailyCount[]
+  routing30d: {
+    RAG: number
+    SQL: number
+    HYBRID: number
+    REJECT: number
+    OTHER: number
+  }
+  executions: {
+    sqlQuery: number
+  }
 }
 
 export interface Page<T> {

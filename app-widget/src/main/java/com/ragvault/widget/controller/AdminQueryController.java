@@ -25,7 +25,7 @@ public class AdminQueryController {
     public QueryResponse query(@RequestBody QueryRequest req, Authentication authentication) {
         String userEmail = authentication != null ? authentication.getName() : "admin";
         QueryRouterService.RouterResult result =
-                queryRouterService.route(req.message(), List.of(), userEmail);
+                queryRouterService.route(req.message(), List.of(), userEmail, "admin-console", null);
         return new QueryResponse(result.content(), result.intent(), result.generatedSql());
     }
 

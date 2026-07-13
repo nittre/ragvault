@@ -53,7 +53,14 @@ public class WidgetRagService {
      * RAG 질의응답 — 기존 2인자 오버로드 (테스트 호환 유지).
      */
     public RagResult chat(String userMessage, List<HistoryMessage> history) {
-        return chat(userMessage, history, "unknown", null);
+        return chat(userMessage, history, "unknown", null, "RAG");
+    }
+
+    /**
+     * RAG 질의응답 — 기존 4인자 오버로드 (테스트/기존 호출부 호환 유지).
+     */
+    public RagResult chat(String userMessage, List<HistoryMessage> history, String sessionId, String siteKey) {
+        return chat(userMessage, history, sessionId, siteKey, "RAG");
     }
 
     /**
@@ -63,9 +70,11 @@ public class WidgetRagService {
      * @param history     대화 이력 (최근 N턴)
      * @param sessionId   세션 ID (로그 기록용)
      * @param siteKey     사이트 키 (로그 기록용, nullable)
+     * @param action      대화 로그 라우팅 분류 (RAG/HYBRID/OTHER — QueryRouterService 가 어떤 경로로 이 메서드를 호출했는지)
      * @return RagResult (마스킹된 응답 + 출처 청크)
      */
-    public RagResult chat(String userMessage, List<HistoryMessage> history, String sessionId, String siteKey) {
+    public RagResult chat(String userMessage, List<HistoryMessage> history, String sessionId, String siteKey,
+                           String action) {
         // 검색 파라미터 실시간 조회 (SearchConfigService — DB 우선, fallback 포함)
         int topK = searchConfigService.getTopK();
         double threshold = searchConfigService.getThreshold();
@@ -78,7 +87,7 @@ public class WidgetRagService {
             log.warn("Input validation failed: {}", validation.reason());
             RagResult result = RagResult.blocked(injectionBlockedResp);
             conversationLogService.saveAsync(sessionId, siteKey, userMessage,
-                    injectionBlockedResp, true, false, 0);
+                    injectionBlockedResp, true, false, 0, action);
             return result;
         }
 
@@ -111,7 +120,7 @@ public class WidgetRagService {
                     retrievalQuery, userMessage);
             RagResult result = RagResult.noContext(noResultsResp);
             conversationLogService.saveAsync(sessionId, siteKey, userMessage,
-                    noResultsResp, false, false, 0);
+                    noResultsResp, false, false, 0, action);
             return result;
         }
 
@@ -133,7 +142,7 @@ public class WidgetRagService {
 
         // 9. 대화 로그 비동기 저장
         conversationLogService.saveAsync(sessionId, siteKey, userMessage,
-                maskedResponse, false, true, chunks.size());
+                maskedResponse, false, true, chunks.size(), action);
 
         return RagResult.success(maskedResponse, chunks);
     }

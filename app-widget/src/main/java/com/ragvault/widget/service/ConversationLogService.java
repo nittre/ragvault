@@ -28,7 +28,8 @@ public class ConversationLogService {
      */
     @Async
     public void saveAsync(String sessionId, String siteKey, String userMessage,
-                          String botResponse, boolean isBlocked, boolean hasContext, int sourceCount) {
+                          String botResponse, boolean isBlocked, boolean hasContext, int sourceCount,
+                          String action) {
         try {
             ConversationLog log = ConversationLog.builder()
                     .sessionId(sessionId)
@@ -38,6 +39,7 @@ public class ConversationLogService {
                     .isBlocked(isBlocked)
                     .hasContext(hasContext)
                     .sourceCount(sourceCount)
+                    .action(action)
                     .build();
             conversationLogRepository.save(log);
         } catch (Exception e) {

@@ -32,6 +32,7 @@ public class QueryRouterService {
     private final IntentClassifierService intentClassifier;
     private final WidgetRagService widgetRagService;
     private final TextToSqlService textToSqlService;
+    private final ConversationLogService conversationLogService;
 
     public record RouterResult(
             String content,
@@ -55,36 +56,48 @@ public class QueryRouterService {
      * @param userMessage 사용자 질문
      * @param history     대화 이력 (RAG 경로 전용)
      * @param userEmail   사용자 이메일 (감사 로그용)
+     * @param sessionId   세션 ID (conversation_logs 기록용)
+     * @param siteKey     사이트 키 (conversation_logs 기록용, nullable)
      */
-    public RouterResult route(String userMessage, List<HistoryMessage> history, String userEmail) {
+    public RouterResult route(String userMessage, List<HistoryMessage> history, String userEmail,
+                               String sessionId, String siteKey) {
         QueryIntent intent = intentClassifier.classify(userMessage);
         log.debug("Intent: '{}' → {}", userMessage, intent);
 
         return switch (intent) {
-            case REJECT -> new RouterResult(
-                    "요청을 처리할 수 없습니다. 데이터 조회 관련 질문으로 다시 시도해주세요. (err_rejected)",
-                    List.of(), "REJECT", null, true, null);
+            case REJECT -> {
+                String content = "요청을 처리할 수 없습니다. 데이터 조회 관련 질문으로 다시 시도해주세요. (err_rejected)";
+                conversationLogService.saveAsync(sessionId, siteKey, userMessage, content, true, false, 0, "REJECT");
+                yield new RouterResult(content, List.of(), "REJECT", null, true, null);
+            }
 
-            case SQL -> RouterResult.fromSql(textToSqlService.query(userMessage, userEmail));
+            case SQL -> {
+                TextToSqlService.SqlQueryResult sql = textToSqlService.query(userMessage, userEmail);
+                conversationLogService.saveAsync(sessionId, siteKey, userMessage, sql.content(),
+                        sql.denied(), false, 0, "SQL");
+                yield RouterResult.fromSql(sql);
+            }
 
             case HYBRID -> {
                 // HYBRID: SQL 우선. 결과가 있으면 SQL, 없으면 RAG 폴백.
                 TextToSqlService.SqlQueryResult sql = textToSqlService.query(userMessage, userEmail);
                 if (!sql.denied() && sql.hasRows()) {
+                    conversationLogService.saveAsync(sessionId, siteKey, userMessage, sql.content(),
+                            false, false, 0, "HYBRID");
                     yield new RouterResult(sql.content(), List.of(), "HYBRID",
                             sql.responseId(), false, sql.generatedSql());
                 }
                 log.debug("HYBRID: SQL 결과 없음 → RAG 폴백");
-                WidgetRagService.RagResult rag = widgetRagService.chat(userMessage, history);
+                WidgetRagService.RagResult rag = widgetRagService.chat(userMessage, history, sessionId, siteKey, "HYBRID");
                 yield new RouterResult(rag.content(), rag.sources(), "HYBRID",
                         null, rag.blocked(), null);
             }
 
-            case RAG -> RouterResult.fromRag(widgetRagService.chat(userMessage, history));
+            case RAG -> RouterResult.fromRag(widgetRagService.chat(userMessage, history, sessionId, siteKey, "RAG"));
 
             // widget 은 멀티모달/URL/FILE/WEB 경로를 지원하지 않으므로 RAG 로 폴백
             case URL_FETCH, FILE, IMAGE, IMAGE_RAG, WEB_SEARCH ->
-                    RouterResult.fromRag(widgetRagService.chat(userMessage, history));
+                    RouterResult.fromRag(widgetRagService.chat(userMessage, history, sessionId, siteKey, "OTHER"));
         };
     }
 }
