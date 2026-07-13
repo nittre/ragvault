@@ -99,7 +99,8 @@ public class ChatController {
                 request.routingHint());
 
         auditLogService.log(userEmail, resolveAction(result.intent()), result.intent(),
-                userMessage, httpRequest.getRemoteAddr(), result.responseId());
+                userMessage, httpRequest.getRemoteAddr(), result.responseId(),
+                !result.sources().isEmpty(), result.blocked(), result.sources().size());
 
         return ResponseEntity.ok(buildResponse(result, request.model()));
     }

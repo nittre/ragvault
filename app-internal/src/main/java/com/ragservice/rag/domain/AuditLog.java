@@ -34,5 +34,14 @@ public class AuditLog {
 
     private String ipAddress;
 
+    /** LL-0005: Lombok이 isXxx boolean 필드를 isXxx()로 생성해 Jackson이 "xxx"로 직렬화하므로 컬럼명을 명시한다. */
+    @Column(name = "has_context")
+    private boolean hasContext;
+
+    @Column(name = "is_blocked")
+    private boolean isBlocked;
+
+    private int sourceCount;
+
     private LocalDateTime createdAt;
 }

@@ -1,14 +1,24 @@
 import apiClient from '../client'
 
-export interface DailyUsageStat {
-  date: string
-  totalQueries: number
+export interface DailyCount {
+  day: string
+  count: number
+}
+
+export interface UsageStatsSummary {
+  totalCount: number
+  last7dCount: number
+  last30dCount: number
+  contextHitRate30d: number
+  blockedRate30d: number
+  daily30d: DailyCount[]
   routing: {
     RAG: number
     SQL_QUERY: number
     FILE_UPLOAD: number
     HYBRID: number
     WEB_SEARCH: number
+    REJECT: number
     OTHER: number
   }
   executions: {
@@ -17,9 +27,7 @@ export interface DailyUsageStat {
   }
 }
 
-export const getDailyUsageStat = (date?: string) =>
+export const getSummaryUsageStat = () =>
   apiClient
-    .get<DailyUsageStat>('/api/v1/admin/usage-stats/daily', {
-      params: date ? { date } : undefined,
-    })
+    .get<UsageStatsSummary>('/api/v1/admin/usage-stats/summary')
     .then(r => r.data)

@@ -42,6 +42,21 @@ public class AuditLogService {
     @Transactional
     public void log(String userEmail, String action, String intent,
                      String userMessage, String ipAddress, String responseId) {
+        log(userEmail, action, intent, userMessage, ipAddress, responseId, false, false, 0);
+    }
+
+    /**
+     * 감사 로그 비동기 저장 (RAG 매칭/차단 지표 포함).
+     *
+     * @param hasContext  RAG 검색 결과 문서가 있었는지 (위젯 서비스 conversation_logs.has_context 와 동일 개념)
+     * @param isBlocked   응답이 차단됐는지 (위젯 서비스 conversation_logs.is_blocked 와 동일 개념)
+     * @param sourceCount 검색된 문서 수 (위젯 서비스 conversation_logs.source_count 와 동일 개념)
+     */
+    @Async
+    @Transactional
+    public void log(String userEmail, String action, String intent,
+                     String userMessage, String ipAddress, String responseId,
+                     boolean hasContext, boolean isBlocked, int sourceCount) {
         try {
             AuditLog auditLog = AuditLog.builder()
                     .userEmail(userEmail)
@@ -50,6 +65,9 @@ public class AuditLogService {
                     .requestSummary(summarize(userMessage))
                     .ipAddress(ipAddress)
                     .responseId(responseId)
+                    .hasContext(hasContext)
+                    .isBlocked(isBlocked)
+                    .sourceCount(sourceCount)
                     .createdAt(LocalDateTime.now())
                     .build();
             auditLogRepository.save(auditLog);
