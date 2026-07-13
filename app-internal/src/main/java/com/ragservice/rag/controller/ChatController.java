@@ -161,7 +161,7 @@ public class ChatController {
      */
     private int resolveMaxHistoryMessages(EffectiveParams effectiveParams) {
         Object value = effectiveParams.values().get("max_history_turns");
-        return (value instanceof Number n) ? n.intValue() : 10;
+        return (value instanceof Number n) ? Math.max(0, n.intValue()) : 10;
     }
 
     private ChatCompletionResponse buildResponse(QueryRouterService.RouterResult result, String model) {
