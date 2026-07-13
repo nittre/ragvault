@@ -1,26 +1,27 @@
 package com.ragservice.rag.service;
 
+import com.ragservice.rag.domain.AdminParamLimit;
+import com.ragservice.rag.repository.AdminParamLimitRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 사용자 입력 파라미터 범위 · 타입 검증.
  *
  * requirements/09-user-parameter-tuning.md 섹션 5-1 기준.
- * ADR-0005: Guard B 파라미터(sql_temperature, sql_few_shot_examples, max_context_tokens)
- *           사용자 변경 시도 시 거부.
+ * ADR-0005: admin_param_limits 가 유일한 진실 소스. DB에 해당 키 행이 있으면
+ *           그 min/max·잠금여부를 사용하고, 없으면 하드코딩 값을 폴백으로 사용.
  */
 @Component
+@RequiredArgsConstructor
 public class ParameterValidator {
 
-    /** Guard B 강제 고정 파라미터 — 사용자 입력 자체를 거부한다. */
-    private static final Set<String> GUARD_B_KEYS = Set.of(
-            "sql_temperature",
-            "sql_few_shot_examples",
-            "max_context_tokens"
-    );
+    private final AdminParamLimitRepository adminParamLimitRepository;
 
     /** force_path 허용 열거값 */
     private static final Set<String> FORCE_PATH_VALUES = Set.of(
@@ -31,6 +32,28 @@ public class ParameterValidator {
     private static final Set<String> HYBRID_STYLE_VALUES = Set.of(
             "BALANCED", "SQL_FIRST", "RAG_FIRST"
     );
+
+    /** 정수형 파라미터 하드코딩 범위 폴백 — admin_param_limits 에 행이 없을 때만 사용. */
+    private static final Map<String, int[]> INT_RANGE_FALLBACKS = Map.of(
+            "top_k", new int[]{1, 20},
+            "max_tokens", new int[]{100, 4096},
+            "query_timeout_sec", new int[]{5, 60},
+            "max_result_rows", new int[]{10, 10000},
+            "max_history_turns", new int[]{1, 50}
+    );
+
+    /** 실수형 파라미터 하드코딩 범위 폴백 — admin_param_limits 에 행이 없을 때만 사용. */
+    private static final Map<String, double[]> DOUBLE_RANGE_FALLBACKS = Map.of(
+            "similarity_threshold", new double[]{0.0, 1.0},
+            "temperature", new double[]{0.0, 2.0},
+            "top_p", new double[]{0.0, 1.0}
+    );
+
+    /** DB 조회 없이 범위 검증이 필요한 정수 키(하드코딩 폴백 대상 목록과 동일). */
+    private static final Set<String> INT_KEYS = INT_RANGE_FALLBACKS.keySet();
+
+    /** DB 조회 없이 범위 검증이 필요한 실수 키(하드코딩 폴백 대상 목록과 동일). */
+    private static final Set<String> DOUBLE_KEYS = DOUBLE_RANGE_FALLBACKS.keySet();
 
     /**
      * 검증 결과 DTO.
@@ -57,17 +80,22 @@ public class ParameterValidator {
             return ValidationResult.pass();
         }
 
+        // N+1 방지: 키마다 조회하지 않고 한 번만 findAll() 후 맵으로 조회.
+        Map<String, AdminParamLimit> limitsByName = adminParamLimitRepository.findAll().stream()
+                .collect(Collectors.toMap(AdminParamLimit::getParamName, Function.identity()));
+
         for (Map.Entry<String, Object> entry : params.entrySet()) {
             String key = entry.getKey();
             Object value = entry.getValue();
+            AdminParamLimit limit = limitsByName.get(key);
 
-            // Guard B 파라미터 사용자 변경 시도 거부
-            if (GUARD_B_KEYS.contains(key)) {
+            // Guard B(관리자 강제 고정) 파라미터 사용자 변경 시도 거부
+            if (limit != null && limit.isLocked()) {
                 return ValidationResult.fail(
                         key + " 는 관리자 정책으로 고정되어 있어 변경할 수 없습니다.");
             }
 
-            ValidationResult result = validateSingle(key, value);
+            ValidationResult result = validateSingle(key, value, limit);
             if (!result.ok()) {
                 return result;
             }
@@ -77,18 +105,27 @@ public class ParameterValidator {
 
     /**
      * 단일 파라미터 검증.
-     * 알 수 없는 키는 통과 (Guard A/B 가 처리).
+     * admin_param_limits 에 해당 키 행(Guard A)이 있으면 그 min/max를 사용하고,
+     * 없으면 하드코딩 범위를 폴백으로 사용한다. 알 수 없는 키는 통과 (Guard A/B 가 처리).
      */
-    private ValidationResult validateSingle(String key, Object value) {
+    private ValidationResult validateSingle(String key, Object value, AdminParamLimit limit) {
+        if (INT_KEYS.contains(key)) {
+            int[] fallback = INT_RANGE_FALLBACKS.get(key);
+            int min = limit != null ? limit.getMinValue().intValue() : fallback[0];
+            int max = limit != null ? limit.getMaxValue().intValue() : fallback[1];
+            return validateInteger(key, value, min, max);
+        }
+        if (DOUBLE_KEYS.contains(key)) {
+            double[] fallback = DOUBLE_RANGE_FALLBACKS.get(key);
+            double min = limit != null ? limit.getMinValue().doubleValue() : fallback[0];
+            double max = limit != null ? limit.getMaxValue().doubleValue() : fallback[1];
+            return validateDouble(key, value, min, max);
+        }
+        if (limit != null && limit.getMinValue() != null && limit.getMaxValue() != null) {
+            // admin_param_limits 에만 존재하는 알려지지 않은 숫자 키 — 실수 범위로 검증.
+            return validateDouble(key, value, limit.getMinValue().doubleValue(), limit.getMaxValue().doubleValue());
+        }
         return switch (key) {
-            case "top_k" -> validateInteger(key, value, 1, 20);
-            case "similarity_threshold" -> validateDouble(key, value, 0.0, 1.0);
-            case "temperature" -> validateDouble(key, value, 0.0, 2.0);
-            case "top_p" -> validateDouble(key, value, 0.0, 1.0);
-            case "max_tokens" -> validateInteger(key, value, 100, 4096);
-            case "query_timeout_sec" -> validateInteger(key, value, 5, 60);
-            case "max_result_rows" -> validateInteger(key, value, 10, 10000);
-            case "max_history_turns" -> validateInteger(key, value, 1, 50);
             case "force_path" -> validateEnum(key, value, FORCE_PATH_VALUES);
             case "hybrid_synthesis_style" -> validateEnum(key, value, HYBRID_STYLE_VALUES);
             default -> ValidationResult.pass(); // 알 수 없는 키는 통과

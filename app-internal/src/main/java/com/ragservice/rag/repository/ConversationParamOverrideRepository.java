@@ -2,6 +2,7 @@ package com.ragservice.rag.repository;
 
 import com.ragservice.rag.domain.ConversationParamOverride;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,9 +20,11 @@ public interface ConversationParamOverrideRepository extends JpaRepository<Conve
             String conversationId, String userEmail);
 
     /** 특정 대화의 특정 사용자 override 삭제. */
+    @Transactional
     void deleteByConversationIdAndUserEmail(String conversationId, String userEmail);
 
     /** 사용자의 모든 대화 override 삭제 (전체 초기화). */
+    @Transactional
     void deleteByUserEmail(String userEmail);
 
     /** 사용자의 모든 대화 override 목록 조회. */

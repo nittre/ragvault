@@ -31,7 +31,7 @@ public class AdminParamLimitsController {
 
     @GetMapping
     public ResponseEntity<List<AdminParamLimit>> list() {
-        return ResponseEntity.ok(repo.findAll());
+        return ResponseEntity.ok(repo.findAllByOrderByIdAsc());
     }
 
     /**

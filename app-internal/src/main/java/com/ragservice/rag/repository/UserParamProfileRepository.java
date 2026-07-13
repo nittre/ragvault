@@ -2,6 +2,7 @@ package com.ragservice.rag.repository;
 
 import com.ragservice.rag.domain.UserParamProfile;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -17,5 +18,6 @@ public interface UserParamProfileRepository extends JpaRepository<UserParamProfi
     Optional<UserParamProfile> findByUserEmail(String userEmail);
 
     /** 사용자 프로필 삭제 (프로필 초기화). */
+    @Transactional
     void deleteByUserEmail(String userEmail);
 }
