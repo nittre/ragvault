@@ -13,7 +13,6 @@ const RagTablesPage = lazy(() => import('./pages/admin/RagTablesPage'))
 const SqlTablesPage = lazy(() => import('./pages/admin/SqlTablesPage'))
 const KnowledgePage = lazy(() => import('./pages/admin/KnowledgePage'))
 const MaskingRulesPage = lazy(() => import('./pages/admin/MaskingRulesPage'))
-const SearchConfigPage = lazy(() => import('./pages/admin/SearchConfigPage'))
 const DdlEventsPage = lazy(() => import('./pages/admin/DdlEventsPage'))
 const AuditLogsPage = lazy(() => import('./pages/admin/AuditLogsPage'))
 const SqlLogsPage = lazy(() => import('./pages/admin/SqlLogsPage'))
@@ -78,7 +77,6 @@ export default function App() {
             <Route path="ds/:dsId/knowledge" element={<KnowledgePage />} />
             <Route path="ds/:dsId/masking-rules" element={<MaskingRulesPage />} />
             <Route path="ds/:dsId/ddl-events" element={<DdlEventsPage />} />
-            <Route path="ds/:dsId/search-config" element={<SearchConfigPage />} />
 
             {/* 구버전 URL 리다이렉트 */}
             <Route path="datasources" element={<Navigate to="/admin/ds" replace />} />

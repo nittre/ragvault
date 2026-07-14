@@ -10,7 +10,6 @@ export interface ParamLimitInfo {
 }
 
 export interface ParamProfileResponse {
-  params: Record<string, unknown>
   defaults: Record<string, unknown>
   limits: Record<string, ParamLimitInfo>
 }

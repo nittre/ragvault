@@ -70,7 +70,6 @@ public class ChatController {
     public ResponseEntity<ChatCompletionResponse> chatCompletions(
             @RequestBody ChatCompletionRequest request,
             Authentication authentication,
-            @RequestHeader(value = "X-Conversation-Id", required = false) String conversationId,
             HttpServletRequest httpRequest) {
 
         // ADR-0011: SecurityContext 에서 이메일 추출
@@ -89,14 +88,11 @@ public class ChatController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, validation.reason());
         }
 
-        // ADR-0005 7단계 파라미터 우선순위 체인 — history 추출보다 먼저 계산해야
+        // ADR-0005 파라미터 우선순위 체인 — history 추출보다 먼저 계산해야
         // max_history_turns 가 실제로 적용된다.
-        EffectiveParams effectiveParams = parameterResolver.resolve(
-                userEmail,
-                conversationId,
-                mergedRagParams);
-        log.debug("Effective params resolved: user={}, conv={}, sources={}",
-                userEmail, conversationId, effectiveParams.sources());
+        EffectiveParams effectiveParams = parameterResolver.resolve(mergedRagParams);
+        log.debug("Effective params resolved: user={}, sources={}",
+                userEmail, effectiveParams.sources());
 
         int maxHistoryMessages = resolveMaxHistoryMessages(effectiveParams);
         List<MessageDto> history = extractHistory(request.messages(), maxHistoryMessages);

@@ -39,12 +39,12 @@
 - `service/DiscordNotifier` — 동기화 이벤트 Discord 웹훅 알림
 
 ### 파라미터 튜닝 (M5)
-- `service/ParameterResolver`, `ParameterValidator`, `ParameterCacheService` — 대화·사용자별 파라미터 오버라이드
-- `domain/UserParamProfile`, `ConversationParamOverride`, `AdminParamLimit`
-- `controller/UserParamController`, `ConversationParamController`, `AdminParamLimitsController`
+- `service/ParameterResolver`, `ParameterValidator` — 전역 기본값(Stage 1) + 요청별/세션 오버라이드(Stage 2) + Guard A/B
+- `domain/AdminParamLimit`
+- `controller/UserParamController`(조회 전용), `AdminParamLimitsController`
 
 ### 어드민 콘솔 API
-API Key(`AdminApiKeyController`), 감사 로그(`AdminAuditLogController`), 데이터소스(`AdminDataSourceController`, `AdminDdlController`), RAG/SQL 테이블(`AdminRagTableController`, `AdminSqlTableController`, `AdminDs*`), 마스킹 규칙(`AdminMaskingRuleController`), 스키마(`AdminSchemaController`), 검색 설정(`AdminSearchConfigController`), 동기화(`AdminSyncController`, `AdminSyncModeController`, `AdminRagSyncStatusController`), 사용 통계(`AdminUsageStatsController`), 사용자 관리(`AdminUserMgmtController`), SQL 로그(`AdminSqlLogController`) 등.
+API Key(`AdminApiKeyController`), 감사 로그(`AdminAuditLogController`), 데이터소스(`AdminDataSourceController`, `AdminDdlController`), RAG/SQL 테이블(`AdminRagTableController`, `AdminSqlTableController`, `AdminDs*`), 마스킹 규칙(`AdminMaskingRuleController`), 스키마(`AdminSchemaController`), 동기화(`AdminSyncController`, `AdminSyncModeController`, `AdminRagSyncStatusController`), 사용 통계(`AdminUsageStatsController`), 사용자 관리(`AdminUserMgmtController`), SQL 로그(`AdminSqlLogController`) 등.
 
 ### 인증 / 보안
 - `filter/JwtAuthFilter` — 자체 JWT 인증 (ADR-0011, `rag.auth.jwt-secret`)

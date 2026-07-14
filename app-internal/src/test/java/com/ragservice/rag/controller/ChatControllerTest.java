@@ -72,7 +72,7 @@ class ChatControllerTest {
 
     @SuppressWarnings("unchecked")
     private List<MessageDto> captureHistory(ChatCompletionRequest request) {
-        chatController.chatCompletions(request, null, null, httpServletRequest);
+        chatController.chatCompletions(request, null, httpServletRequest);
         ArgumentCaptor<List<MessageDto>> captor = ArgumentCaptor.forClass(List.class);
         verify(queryRouterService).route(anyString(), captor.capture(), any(), any(), any(), any(), any());
         return captor.getValue();
@@ -80,7 +80,7 @@ class ChatControllerTest {
 
     @Test
     void resolvedMaxHistoryTurns_limitsHistorySize() {
-        when(parameterResolver.resolve(any(), any(), any()))
+        when(parameterResolver.resolve(any()))
                 .thenReturn(EffectiveParams.of(Map.of("max_history_turns", 3), Map.of()));
 
         List<ChatMessage> messages = messagesWithPriorCount(7); // 7개 이전 메시지 + 현재 질문
@@ -93,22 +93,22 @@ class ChatControllerTest {
     @Test
     void missingMaxHistoryTurns_throwsIllegalStateException() {
         // ADR-0005: 서버 코드에는 폴백이 없다 — 관리자 설정 누락은 조용히 넘어가지 않고 즉시 실패한다.
-        when(parameterResolver.resolve(any(), any(), any()))
+        when(parameterResolver.resolve(any()))
                 .thenReturn(EffectiveParams.of(Map.of(), Map.of()));
 
         List<ChatMessage> messages = messagesWithPriorCount(12);
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
-                () -> chatController.chatCompletions(requestWithMessages(messages), null, null, httpServletRequest));
+                () -> chatController.chatCompletions(requestWithMessages(messages), null, httpServletRequest));
     }
 
     @Test
     void nonNumericMaxHistoryTurns_throwsIllegalStateException() {
-        when(parameterResolver.resolve(any(), any(), any()))
+        when(parameterResolver.resolve(any()))
                 .thenReturn(EffectiveParams.of(Map.of("max_history_turns", "invalid"), Map.of()));
 
         List<ChatMessage> messages = messagesWithPriorCount(12);
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
-                () -> chatController.chatCompletions(requestWithMessages(messages), null, null, httpServletRequest));
+                () -> chatController.chatCompletions(requestWithMessages(messages), null, httpServletRequest));
     }
 
     // ── resolveAction: audit_log.action 매핑 검증 ──────────────────────────────
@@ -116,14 +116,14 @@ class ChatControllerTest {
 
     @SuppressWarnings("unchecked")
     private String captureLoggedAction(String intent) {
-        when(parameterResolver.resolve(any(), any(), any()))
+        when(parameterResolver.resolve(any()))
                 .thenReturn(EffectiveParams.of(Map.of("max_history_turns", 10), Map.of()));
         when(queryRouterService.route(anyString(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new QueryRouterService.RouterResult(
                         "답변", List.of(), intent, null, false, null, List.of()));
 
         chatController.chatCompletions(
-                requestWithMessages(messagesWithPriorCount(1)), null, null, httpServletRequest);
+                requestWithMessages(messagesWithPriorCount(1)), null, httpServletRequest);
 
         ArgumentCaptor<String> actionCaptor = ArgumentCaptor.forClass(String.class);
         verify(auditLogService).log(any(), actionCaptor.capture(), any(), any(), any(), any(),

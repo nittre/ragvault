@@ -6,7 +6,6 @@ import {
   Database,
   Table2,
   Shield,
-  Settings,
   AlertTriangle,
   FileText,
   BarChart2,
@@ -38,7 +37,6 @@ const DS_SUB_ITEMS = [
   { path: 'knowledge', label: '백과사전', icon: BookOpen },
   { path: 'masking-rules', label: 'PII 마스킹', icon: Shield },
   { path: 'ddl-events', label: 'DDL 이벤트', icon: AlertTriangle },
-  { path: 'search-config', label: '검색 설정', icon: Settings },
 ]
 
 const navCls = (isActive: boolean) =>

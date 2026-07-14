@@ -11,13 +11,13 @@
 
 - **채팅** (`src/pages/ChatPage.tsx`, `src/components/chat`) — RAG 답변 스트리밍/표시, 마크다운(react-markdown + remark-gfm) 렌더, 출처 표기, 파일/이미지 업로드(heic2any 로 HEIC 변환)
 - **로그인** (`src/pages/LoginPage.tsx`) — JWT 인증
-- **어드민 콘솔** (`src/pages/admin/`) — 사용자, API Key, 데이터소스, DDL 이벤트, 지식/지식문서, 마스킹 규칙, 파라미터 한도, RAG/SQL 테이블, 검색 설정, SQL 로그, 사용 통계 페이지
+- **어드민 콘솔** (`src/pages/admin/`) — 사용자, API Key, 데이터소스, DDL 이벤트, 지식/지식문서, 마스킹 규칙, 파라미터 한도, RAG/SQL 테이블, SQL 로그, 사용 통계 페이지
 
 ```
 src/pages/admin/
   UsersPage · ApiKeysPage · DataSourcesPage · DdlEventsPage
   KnowledgePage · KnowledgeDocsPage · MaskingRulesPage · ParamLimitsPage
-  RagTablesPage · SqlTablesPage · SearchConfigPage · SqlLogsPage · UsageStatsPage · AuditLogsPage
+  RagTablesPage · SqlTablesPage · SqlLogsPage · UsageStatsPage · AuditLogsPage
 ```
 
 ---

@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { useParamStore } from '../../stores/paramStore'
 import { getParamProfile, type ParamLimitInfo } from '../../api/paramProfile'
-import type { ForcePath, HybridStyle } from '../../types'
+import { backendKeyToRagParamKey } from '../../utils/ragParamKeys'
+import type { ForcePath, HybridStyle, RagParams } from '../../types'
 
 /** limits 맵에서 한도를 꺼내되, 아직 로딩 전이거나 admin_param_limits에 row가 없으면 하드코딩 fallback 사용. */
 function resolveRange(
@@ -19,6 +20,19 @@ function resolveRange(
   }
 }
 
+/** 백엔드 전역 기본값(snake_case)을 RagParams(camelCase)로 변환. 매핑 없는 키는 무시. */
+function toRagParams(defaults: Record<string, unknown> | undefined): Partial<RagParams> {
+  const result: Partial<RagParams> = {}
+  if (!defaults) return result
+  Object.entries(defaults).forEach(([backendKey, value]) => {
+    const ragKey = backendKeyToRagParamKey(backendKey)
+    if (ragKey) {
+      ;(result as Record<string, unknown>)[ragKey] = value
+    }
+  })
+  return result
+}
+
 export default function ParamSidePanel() {
   const { params, systemPrompt, setParams, setSystemPrompt, togglePanel, resetParams } =
     useParamStore()
@@ -28,6 +42,12 @@ export default function ParamSidePanel() {
     queryFn: getParamProfile,
   })
   const limits = profile?.limits
+
+  // 전역 기본값(화면 표시 전용 — params 자체에는 절대 채워 넣지 않는다). params는 사용자가
+  // 실제로 건드린 키만 담아야 요청 rag_params에 사용자가 바꾼 파라미터만 실린다. 여기서
+  // params에 기본값을 채워 넣으면 손대지 않은 파라미터까지 전부 세션 오버라이드로 굳어버려,
+  // 관리자가 나중에 전역 기본값을 바꿔도 이미 연 세션에는 반영되지 않는 문제가 생긴다.
+  const defaults = toRagParams(profile?.defaults)
 
   const topK = resolveRange(limits, 'top_k', 1, 20)
   const threshold = resolveRange(limits, 'similarity_threshold', 0, 1)
@@ -68,7 +88,7 @@ export default function ParamSidePanel() {
         {/* Top-K */}
         <TunableSlider
           label="Top-K"
-          value={params.topK ?? 5}
+          value={params.topK ?? defaults.topK ?? 5}
           limit={limits?.top_k}
           min={topK.min}
           max={topK.max}
@@ -79,7 +99,7 @@ export default function ParamSidePanel() {
         {/* 유사도 임계값 */}
         <TunableSlider
           label="유사도 임계값"
-          value={params.threshold ?? 0.5}
+          value={params.threshold ?? defaults.threshold ?? 0.5}
           limit={limits?.similarity_threshold}
           min={threshold.min}
           max={threshold.max}
@@ -91,7 +111,7 @@ export default function ParamSidePanel() {
         {/* Temperature */}
         <TunableSlider
           label="Temperature"
-          value={params.temperature ?? 0.7}
+          value={params.temperature ?? defaults.temperature ?? 0.7}
           limit={limits?.temperature}
           min={temperature.min}
           max={temperature.max}
@@ -103,7 +123,7 @@ export default function ParamSidePanel() {
         {/* Top P */}
         <TunableSlider
           label="Top P"
-          value={params.topP ?? 0.9}
+          value={params.topP ?? defaults.topP ?? 0.9}
           limit={limits?.top_p}
           min={topP.min}
           max={topP.max}
@@ -115,7 +135,7 @@ export default function ParamSidePanel() {
         {/* 최대 토큰 */}
         <TunableSlider
           label="최대 토큰"
-          value={params.maxTokens ?? 2048}
+          value={params.maxTokens ?? defaults.maxTokens ?? 2048}
           limit={limits?.max_tokens}
           min={maxTokens.min}
           max={maxTokens.max}
@@ -126,7 +146,7 @@ export default function ParamSidePanel() {
         {/* 쿼리 타임아웃 */}
         <TunableSlider
           label="쿼리 타임아웃(초)"
-          value={params.queryTimeoutSec ?? 30}
+          value={params.queryTimeoutSec ?? defaults.queryTimeoutSec ?? 30}
           limit={limits?.query_timeout_sec}
           min={queryTimeoutSec.min}
           max={queryTimeoutSec.max}
@@ -137,7 +157,7 @@ export default function ParamSidePanel() {
         {/* 최대 결과 행수 */}
         <TunableSlider
           label="최대 결과 행수"
-          value={params.maxResultRows ?? 100}
+          value={params.maxResultRows ?? defaults.maxResultRows ?? 100}
           limit={limits?.max_result_rows}
           min={maxResultRows.min}
           max={maxResultRows.max}
@@ -149,7 +169,7 @@ export default function ParamSidePanel() {
         <div>
           <label className="block font-medium text-gray-700 mb-1">라우팅 강제</label>
           <select
-            value={params.forcePath ?? 'AUTO'}
+            value={params.forcePath ?? defaults.forcePath ?? 'AUTO'}
             onChange={e => setParams({ forcePath: e.target.value as ForcePath })}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
@@ -164,7 +184,7 @@ export default function ParamSidePanel() {
         <div>
           <label className="block font-medium text-gray-700 mb-1">하이브리드 스타일</label>
           <select
-            value={params.hybridStyle ?? 'BALANCED'}
+            value={params.hybridStyle ?? defaults.hybridStyle ?? 'BALANCED'}
             onChange={e => setParams({ hybridStyle: e.target.value as HybridStyle })}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
@@ -177,7 +197,7 @@ export default function ParamSidePanel() {
         {/* 최대 히스토리 턴수 */}
         <TunableSlider
           label="최대 히스토리 턴수"
-          value={params.maxHistoryTurns ?? 10}
+          value={params.maxHistoryTurns ?? defaults.maxHistoryTurns ?? 10}
           limit={limits?.max_history_turns}
           min={maxHistoryTurns.min}
           max={maxHistoryTurns.max}
@@ -200,10 +220,12 @@ export default function ParamSidePanel() {
         />
       </div>
 
-      {/* 초기화 버튼 */}
+      {/* 초기화 버튼 — 세션 오버라이드를 모두 지워 전역 기본값(Stage 1)으로 되돌림.
+          params를 비우면 화면은 위 defaults 폴백으로 전역값을 그대로 보여주고, 요청에는
+          아무 값도 실리지 않아 매 요청마다 그 시점의 전역 기본값을 새로 반영한다. */}
       <div className="px-4 py-3 border-t border-gray-200">
         <button
-          onClick={resetParams}
+          onClick={() => resetParams()}
           className="w-full border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
         >
           초기화

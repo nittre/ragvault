@@ -2,7 +2,6 @@ package com.ragservice.rag.controller;
 
 import com.ragservice.rag.domain.AdminParamLimit;
 import com.ragservice.rag.repository.AdminParamLimitRepository;
-import com.ragservice.rag.service.ParameterCacheService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +18,6 @@ import java.util.Map;
  * A6 시나리오: Guard A 클램핑 / Guard B 강제 고정 (ADR-0005)
  *
  * 접근 권한: api:admin scope (SecurityConfig 에서 강제)
- * M5-2: PUT 변경 시 전체 파라미터 캐시 무효화 (ADR-0005 캐싱 전략).
  */
 @RestController
 @RequestMapping("/api/v1/admin/param-limits")
@@ -27,7 +25,6 @@ import java.util.Map;
 public class AdminParamLimitsController {
 
     private final AdminParamLimitRepository repo;
-    private final ParameterCacheService parameterCacheService;
 
     @GetMapping
     public ResponseEntity<List<AdminParamLimit>> list() {
@@ -37,7 +34,6 @@ public class AdminParamLimitsController {
     /**
      * PUT /api/v1/admin/param-limits/{paramKey}/lock
      * Guard B 설정 (강제 고정). ADR-0005.
-     * 전체 파라미터 캐시 무효화.
      */
     @PutMapping("/{paramKey}/lock")
     public AdminParamLimit lockParam(
@@ -54,15 +50,12 @@ public class AdminParamLimitsController {
             limit.setFixedValue(lockRequest.fixedValue());
         }
         limit.setUpdatedAt(LocalDateTime.now());
-        AdminParamLimit saved = repo.save(limit);
-        parameterCacheService.evictAll();
-        return saved;
+        return repo.save(limit);
     }
 
     /**
      * DELETE /api/v1/admin/param-limits/{paramKey}/lock
      * Guard A 복원 (잠금 해제). ADR-0005.
-     * 전체 파라미터 캐시 무효화.
      */
     @DeleteMapping("/{paramKey}/lock")
     public AdminParamLimit unlockParam(@PathVariable String paramKey) {
@@ -74,9 +67,7 @@ public class AdminParamLimitsController {
         limit.setLockedReason(null);
         limit.setFixedValue(null);
         limit.setUpdatedAt(LocalDateTime.now());
-        AdminParamLimit saved = repo.save(limit);
-        parameterCacheService.evictAll();
-        return saved;
+        return repo.save(limit);
     }
 
     /** Guard B 잠금 요청 DTO. */
@@ -115,8 +106,6 @@ public class AdminParamLimitsController {
                     p.setUpdatedBy(email);
                     p.setUpdatedAt(LocalDateTime.now());
                     AdminParamLimit saved = repo.save(p);
-                    // Guard A/B 변경 시 모든 파라미터 캐시 무효화 (ADR-0005)
-                    parameterCacheService.evictAll();
                     return ResponseEntity.ok((Object) saved);
                 })
                 .orElse(ResponseEntity.notFound().build());
