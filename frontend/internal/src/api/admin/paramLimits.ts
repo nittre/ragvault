@@ -21,7 +21,7 @@ export const updateParamLimit = (
 ) =>
   apiClient.put<ParamLimit>(`/api/v1/admin/param-limits/${encodeURIComponent(paramName)}`, body).then(r => r.data)
 
-export const lockParam = (paramKey: string, body: { reason?: string }) =>
+export const lockParam = (paramKey: string, body: { reason?: string; fixedValue?: number }) =>
   apiClient.put<ParamLimit>(`/api/v1/admin/param-limits/${encodeURIComponent(paramKey)}/lock`, body).then(r => r.data)
 
 export const unlockParam = (paramKey: string) =>
