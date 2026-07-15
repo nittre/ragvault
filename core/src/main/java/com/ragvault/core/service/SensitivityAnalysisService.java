@@ -84,9 +84,14 @@ public class SensitivityAnalysisService {
                 sqlTableConfigRepository.findBySourceTableAndDatasourceId(tableName, dsId)
                         .ifPresent(config -> {
                             SensitivityResult r = results.get(config.getSourceTable());
-                            if (r != null && !"restricted".equals(r.sensitivity())) {
+                            if (r != null) {
                                 config.setDataSensitivity(r.sensitivity());
-                                log.info("Sensitivity updated: table={}, sensitivity={}", config.getSourceTable(), r.sensitivity());
+                                if ("restricted".equals(r.sensitivity())) {
+                                    log.warn("Sensitivity re-classified as RESTRICTED — manual lock review needed: table={}, reason={}",
+                                            config.getSourceTable(), r.reason());
+                                } else {
+                                    log.info("Sensitivity updated: table={}, sensitivity={}", config.getSourceTable(), r.sensitivity());
+                                }
                             }
                             config.setLlmStatus("done");
                             sqlTableConfigRepository.save(config);
