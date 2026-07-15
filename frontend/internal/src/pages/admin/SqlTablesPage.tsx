@@ -24,6 +24,7 @@ import {
 } from '../../api/admin/syncMode'
 import { triggerSync } from '../../api/admin/sync'
 import SchemaDiscoverModal from '../../components/admin/SchemaDiscoverModal'
+import Tooltip from '../../components/common/Tooltip'
 
 export default function SqlTablesPage() {
   const { dsId: dsIdStr } = useParams<{ dsId: string }>()
@@ -77,8 +78,9 @@ export default function SqlTablesPage() {
       const ok = window.confirm(
         `비활성화 시점(${new Date(sqlDisabledAt).toLocaleString()})부터 현재까지의 변경사항을 즉시 자동 동기화하시겠습니까?`
       )
+      if (!ok) return
       await toggleSyncMut.mutateAsync(true)
-      if (ok) replayMut.mutate()
+      replayMut.mutate()
     } else {
       await toggleSyncMut.mutateAsync(next)
     }
@@ -107,13 +109,20 @@ export default function SqlTablesPage() {
   const refreshMut = useMutation({ mutationFn: () => refreshSchemaCache(dsId) })
 
   const syncNowMut = useMutation({
-    mutationFn: () => triggerSync(dsId),
-    onSuccess: (job) => {
+    mutationFn: async () => {
+      const job = await triggerSync(dsId)
+      const replay = await replaySyncMode(dsId, 'sql')
+      return { job, replay }
+    },
+    onSuccess: ({ job, replay }) => {
       qc.invalidateQueries({ queryKey: ['admin-sql-tables', dsId] })
       if (job.status === 'failed') {
         setSyncError(job.errorMessage ?? '동기화 실패')
       } else {
-        setBulkResult(`동기화 완료: 성공 ${job.recordsSuccess}건 / 실패 ${job.recordsFailed}건`)
+        setBulkResult(
+          `동기화 완료: 성공 ${job.recordsSuccess}건 / 실패 ${job.recordsFailed}건, ` +
+          `화이트리스트 반영: ${replay.applied}개 적용 / ${replay.skipped}개 건너뜀`
+        )
       }
     },
     onError: (err: unknown) => {
@@ -121,6 +130,18 @@ export default function SqlTablesPage() {
       setSyncError(`동기화 요청 실패: ${msg}`)
     },
   })
+
+  const handleSyncNow = () => {
+    if (!sqlAutoSync) {
+      const ok = window.confirm(
+        '밀린 스키마 변경사항(컬럼 추가/삭제/이름변경)을 화이트리스트에 반영합니다. ' +
+        '새로 추가된 컬럼은 검토 없이 즉시 text-to-SQL 조회 대상이 되며, ' +
+        '이후 민감도 분석이 끝나도 자동으로 차단되지 않습니다. 계속할까요?'
+      )
+      if (!ok) return
+    }
+    syncNowMut.mutate()
+  }
 
   // ── state ─────────────────────────────────────────────────────────────────
   const [showForm, setShowForm] = useState(false)
@@ -223,60 +244,70 @@ export default function SqlTablesPage() {
         </div>
         <div className="flex gap-2 items-center">
           {/* 자동 동기화 모드 토글 */}
-          <button
-            onClick={handleToggleAutoSync}
-            disabled={toggleSyncMut.isPending}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border transition-colors disabled:opacity-50 ${
-              sqlAutoSync
-                ? 'bg-green-50 border-green-300 text-green-700 hover:bg-green-100'
-                : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
-            }`}
-            title={sqlAutoSync ? '자동 동기화 ON — 클릭하면 비활성화' : '자동 동기화 OFF — 클릭하면 활성화'}
-          >
-            <Zap size={14} className={sqlAutoSync ? 'text-green-600' : 'text-gray-400'} />
-            {sqlAutoSync ? '자동 동기화 ON' : '자동 동기화 OFF'}
-          </button>
+          <Tooltip side="bottom" text={sqlAutoSync ? '자동 동기화 ON — 클릭하면 비활성화' : '자동 동기화 OFF — 클릭하면 활성화'}>
+            <button
+              onClick={handleToggleAutoSync}
+              disabled={toggleSyncMut.isPending}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border transition-colors disabled:opacity-50 ${
+                sqlAutoSync
+                  ? 'bg-green-50 border-green-300 text-green-700 hover:bg-green-100'
+                  : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Zap size={14} className={sqlAutoSync ? 'text-green-600' : 'text-gray-400'} />
+              {sqlAutoSync ? '자동 동기화 ON' : '자동 동기화 OFF'}
+            </button>
+          </Tooltip>
           {/* 드리프트 확인 (자동 동기화 OFF일 때) */}
           {!sqlAutoSync && (
-            <button
-              onClick={() => refetchDrift()}
-              disabled={driftFetching}
-              className="flex items-center gap-2 border border-orange-300 hover:bg-orange-50 text-orange-600 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-            >
-              <RefreshCw size={14} className={driftFetching ? 'animate-spin' : ''} />
-              드리프트 확인
-            </button>
+            <Tooltip side="bottom" text="라이브 DB 스키마와 화이트리스트 설정을 비교해 테이블 삭제·컬럼 변경 여부를 확인합니다 (읽기 전용, 변경 없음)">
+              <button
+                onClick={() => refetchDrift()}
+                disabled={driftFetching}
+                className="flex items-center gap-2 border border-orange-300 hover:bg-orange-50 text-orange-600 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={driftFetching ? 'animate-spin' : ''} />
+                드리프트 확인
+              </button>
+            </Tooltip>
           )}
-          <button
-            onClick={() => syncNowMut.mutate()}
-            disabled={syncNowMut.isPending}
-            className="flex items-center gap-2 border border-blue-300 hover:bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-            title="MySQL binlog를 즉시 동기화합니다"
-          >
-            <PlayCircle size={14} className={syncNowMut.isPending ? 'animate-spin' : ''} />
-            {syncNowMut.isPending ? '동기화 중...' : '지금 동기화'}
-          </button>
-          <button
-            onClick={() => refreshMut.mutate()}
-            disabled={refreshMut.isPending}
-            className="flex items-center gap-2 border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-          >
-            <RefreshCw size={14} className={refreshMut.isPending ? 'animate-spin' : ''} />
-            캐시 갱신
-          </button>
-          <button
-            onClick={() => setShowDiscover(true)}
-            className="flex items-center gap-2 border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium"
-          >
-            <ScanSearch size={15} />
-            스키마 탐색
-          </button>
-          <button
-            onClick={() => setShowForm(v => !v)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium"
-          >
-            <Plus size={15} /> 직접 추가
-          </button>
+          <Tooltip side="bottom" text="MySQL binlog를 즉시 동기화하고 밀린 DDL을 화이트리스트에 반영합니다">
+            <button
+              onClick={handleSyncNow}
+              disabled={syncNowMut.isPending}
+              className="flex items-center gap-2 border border-blue-300 hover:bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+            >
+              <PlayCircle size={14} className={syncNowMut.isPending ? 'animate-spin' : ''} />
+              {syncNowMut.isPending ? '동기화 중...' : '지금 동기화'}
+            </button>
+          </Tooltip>
+          <Tooltip side="bottom" text="text-to-SQL이 사용하는 컬럼 스키마 캐시를 강제로 새로고침합니다 (사용자 챗 전용, 어드민 화면 표시엔 영향 없음)">
+            <button
+              onClick={() => refreshMut.mutate()}
+              disabled={refreshMut.isPending}
+              className="flex items-center gap-2 border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+            >
+              <RefreshCw size={14} className={refreshMut.isPending ? 'animate-spin' : ''} />
+              캐시 갱신
+            </button>
+          </Tooltip>
+          <Tooltip side="bottom" text="원본 DB의 전체 테이블을 조회해 화이트리스트에 없는 테이블을 일괄 등록합니다">
+            <button
+              onClick={() => setShowDiscover(true)}
+              className="flex items-center gap-2 border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium"
+            >
+              <ScanSearch size={15} />
+              스키마 탐색
+            </button>
+          </Tooltip>
+          <Tooltip side="bottom" align="end" text="테이블명을 직접 입력해 화이트리스트에 등록합니다">
+            <button
+              onClick={() => setShowForm(v => !v)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium"
+            >
+              <Plus size={15} /> 직접 추가
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -354,14 +385,16 @@ export default function SqlTablesPage() {
         <div className="mb-3 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
           <span className="text-sm font-medium text-blue-800">{selected.size}개 선택됨</span>
           <div className="flex gap-2 ml-auto">
-            <button
-              onClick={handleBulkDelete}
-              disabled={bulkLoading}
-              className="flex items-center gap-1.5 border border-red-300 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
-            >
-              <Trash2 size={12} />
-              {bulkLoading ? '삭제 중…' : '일괄 삭제'}
-            </button>
+            <Tooltip text="선택한 테이블을 한 번에 화이트리스트에서 삭제합니다">
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkLoading}
+                className="flex items-center gap-1.5 border border-red-300 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+              >
+                <Trash2 size={12} />
+                {bulkLoading ? '삭제 중…' : '일괄 삭제'}
+              </button>
+            </Tooltip>
             <button
               onClick={() => setSelected(new Set())}
               className="text-gray-400 hover:text-gray-600 text-xs px-2"
@@ -421,14 +454,15 @@ export default function SqlTablesPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-xs">{t.displayName || '-'}</td>
                   <td className="px-4 py-3 text-xs">
-                    <button
-                      onClick={() => openDescModal(t)}
-                      className="flex items-center gap-1.5 text-xs px-2 py-1 rounded border transition-colors hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 border-gray-200 text-gray-400"
-                      title={t.description ? t.description : '설명 없음 — 클릭하여 추가'}
-                    >
-                      <FileText size={12} className={t.description ? 'text-blue-500' : ''} />
-                      {t.description ? '설명 있음' : '추가'}
-                    </button>
+                    <Tooltip text={t.description ? t.description : '설명 없음 — 클릭하여 추가'}>
+                      <button
+                        onClick={() => openDescModal(t)}
+                        className="flex items-center gap-1.5 text-xs px-2 py-1 rounded border transition-colors hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 border-gray-200 text-gray-400"
+                      >
+                        <FileText size={12} className={t.description ? 'text-blue-500' : ''} />
+                        {t.description ? '설명 있음' : '추가'}
+                      </button>
+                    </Tooltip>
                   </td>
                   <td className="px-4 py-3 text-xs">
                     {t.llmStatus === 'pending' ? (
@@ -455,32 +489,36 @@ export default function SqlTablesPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => updateMut.mutate({ id: t.id, body: { isActive: !t.isActive } })}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-                        t.isActive ? 'bg-green-500' : 'bg-gray-300'
-                      }`}
-                      role="switch"
-                      aria-checked={t.isActive}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform duration-200 ${
-                          t.isActive ? 'translate-x-4' : 'translate-x-0'
+                    <Tooltip text={t.isActive ? '클릭하면 text-to-SQL 조회 대상에서 제외합니다' : '클릭하면 text-to-SQL 조회 대상에 포함합니다'}>
+                      <button
+                        onClick={() => updateMut.mutate({ id: t.id, body: { isActive: !t.isActive } })}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                          t.isActive ? 'bg-green-500' : 'bg-gray-300'
                         }`}
-                      />
-                    </button>
+                        role="switch"
+                        aria-checked={t.isActive}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform duration-200 ${
+                            t.isActive ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </Tooltip>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`${t.sourceTable}을 삭제하시겠습니까?`)) {
-                          deleteMut.mutate(t.id)
-                        }
-                      }}
-                      className="text-red-400 hover:text-red-600"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <Tooltip text="화이트리스트에서 이 테이블을 완전히 제거합니다">
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`${t.sourceTable}을 삭제하시겠습니까?`)) {
+                            deleteMut.mutate(t.id)
+                          }
+                        }}
+                        className="text-red-400 hover:text-red-600"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </Tooltip>
                   </td>
                 </tr>
               )

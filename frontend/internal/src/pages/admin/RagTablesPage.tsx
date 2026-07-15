@@ -17,12 +17,14 @@ import {
 import {
   getSyncMode,
   updateSyncMode,
+  replaySyncMode,
   getRagDriftStatus,
   type DriftEntry,
 } from '../../api/admin/syncMode'
 import { triggerSync } from '../../api/admin/sync'
 import SchemaDiscoverModal from '../../components/admin/SchemaDiscoverModal'
 import RagColumnConfigModal from '../../components/admin/RagColumnConfigModal'
+import Tooltip from '../../components/common/Tooltip'
 
 export default function RagTablesPage() {
   const { dsId: dsIdStr } = useParams<{ dsId: string }>()
@@ -102,13 +104,20 @@ export default function RagTablesPage() {
   })
 
   const syncNowMut = useMutation({
-    mutationFn: () => triggerSync(dsId),
-    onSuccess: (job) => {
+    mutationFn: async () => {
+      const job = await triggerSync(dsId)
+      const replay = await replaySyncMode(dsId, 'rag')
+      return { job, replay }
+    },
+    onSuccess: ({ job, replay }) => {
       qc.invalidateQueries({ queryKey: ['admin-rag-tables', dsId] })
       if (job.status === 'failed') {
         setSyncError(job.errorMessage ?? '동기화 실패')
       } else {
-        setBulkResult(`동기화 완료: 성공 ${job.recordsSuccess}건 / 실패 ${job.recordsFailed}건`)
+        setBulkResult(
+          `동기화 완료: 성공 ${job.recordsSuccess}건 / 실패 ${job.recordsFailed}건, ` +
+          `화이트리스트 반영: ${replay.applied}개 적용 / ${replay.skipped}개 건너뜀`
+        )
       }
     },
     onError: (err: unknown) => {
@@ -116,6 +125,17 @@ export default function RagTablesPage() {
       setSyncError(`동기화 요청 실패: ${msg}`)
     },
   })
+
+  const handleSyncNow = () => {
+    if (!ragAutoSync) {
+      const ok = window.confirm(
+        '밀린 스키마 변경사항(컬럼 추가/삭제/이름변경)을 RAG 설정에 반영합니다. ' +
+        '새로 추가된 컬럼은 검토 없이 즉시 임베딩·검색 대상에 포함될 수 있습니다. 계속할까요?'
+      )
+      if (!ok) return
+    }
+    syncNowMut.mutate()
+  }
 
   const [isRagSyncing, setIsRagSyncing] = useState(false)
 
@@ -222,57 +242,65 @@ export default function RagTablesPage() {
           <p className="text-sm text-gray-500 mt-0.5">벡터 임베딩 대상 테이블을 관리합니다.</p>
         </div>
         <div className="flex gap-2 items-center">
-          <button
-            onClick={handleToggleAutoSync}
-            disabled={toggleSyncMut.isPending || isRagSyncing}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border transition-colors disabled:opacity-50 ${
-              isRagSyncing
-                ? 'bg-blue-50 border-blue-300 text-blue-700'
-                : ragAutoSync
-                ? 'bg-green-50 border-green-300 text-green-700 hover:bg-green-100'
-                : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
-            }`}
-            title={ragAutoSync ? '자동 동기화 ON — 클릭하면 비활성화' : '자동 동기화 OFF — 클릭하면 활성화'}
-          >
-            <Zap size={14} className={isRagSyncing ? 'text-blue-600 animate-pulse' : ragAutoSync ? 'text-green-600' : 'text-gray-400'} />
-            {isRagSyncing
-              ? '자동 동기화중...'
-              : ragAutoSync
-              ? '자동 동기화 ON'
-              : '자동 동기화 OFF'
-            }
-          </button>
-          {!ragAutoSync && (
+          <Tooltip side="bottom" text={ragAutoSync ? '자동 동기화 ON — 클릭하면 비활성화' : '자동 동기화 OFF — 클릭하면 활성화'}>
             <button
-              onClick={() => refetchDrift()}
-              disabled={driftFetching}
-              className="flex items-center gap-2 border border-orange-300 hover:bg-orange-50 text-orange-600 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+              onClick={handleToggleAutoSync}
+              disabled={toggleSyncMut.isPending || isRagSyncing}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border transition-colors disabled:opacity-50 ${
+                isRagSyncing
+                  ? 'bg-blue-50 border-blue-300 text-blue-700'
+                  : ragAutoSync
+                  ? 'bg-green-50 border-green-300 text-green-700 hover:bg-green-100'
+                  : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
+              }`}
             >
-              <RefreshCw size={14} className={driftFetching ? 'animate-spin' : ''} />
-              변경사항 확인
+              <Zap size={14} className={isRagSyncing ? 'text-blue-600 animate-pulse' : ragAutoSync ? 'text-green-600' : 'text-gray-400'} />
+              {isRagSyncing
+                ? '자동 동기화중...'
+                : ragAutoSync
+                ? '자동 동기화 ON'
+                : '자동 동기화 OFF'
+              }
             </button>
+          </Tooltip>
+          {!ragAutoSync && (
+            <Tooltip side="bottom" text="라이브 DB 스키마와 RAG 설정을 비교해 테이블 삭제·컬럼 변경 여부를 확인합니다 (읽기 전용, 변경 없음)">
+              <button
+                onClick={() => refetchDrift()}
+                disabled={driftFetching}
+                className="flex items-center gap-2 border border-orange-300 hover:bg-orange-50 text-orange-600 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={driftFetching ? 'animate-spin' : ''} />
+                변경사항 확인
+              </button>
+            </Tooltip>
           )}
-          <button
-            onClick={() => syncNowMut.mutate()}
-            disabled={syncNowMut.isPending}
-            className="flex items-center gap-2 border border-blue-300 hover:bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-            title="MySQL binlog를 즉시 동기화합니다"
-          >
-            <PlayCircle size={14} className={syncNowMut.isPending ? 'animate-spin' : ''} />
-            {syncNowMut.isPending ? '동기화 중...' : '지금 동기화'}
-          </button>
-          <button
-            onClick={() => setShowDiscover(true)}
-            className="flex items-center gap-2 border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium"
-          >
-            <ScanSearch size={15} /> 스키마 탐색
-          </button>
-          <button
-            onClick={() => setShowForm(v => !v)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium"
-          >
-            <Plus size={15} /> 직접 등록
-          </button>
+          <Tooltip side="bottom" text="MySQL binlog를 즉시 동기화하고 밀린 DDL을 RAG 설정에 반영합니다">
+            <button
+              onClick={handleSyncNow}
+              disabled={syncNowMut.isPending}
+              className="flex items-center gap-2 border border-blue-300 hover:bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+            >
+              <PlayCircle size={14} className={syncNowMut.isPending ? 'animate-spin' : ''} />
+              {syncNowMut.isPending ? '동기화 중...' : '지금 동기화'}
+            </button>
+          </Tooltip>
+          <Tooltip side="bottom" text="원본 DB의 전체 테이블을 조회해 RAG 대상에 없는 테이블을 일괄 등록합니다">
+            <button
+              onClick={() => setShowDiscover(true)}
+              className="flex items-center gap-2 border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium"
+            >
+              <ScanSearch size={15} /> 스키마 탐색
+            </button>
+          </Tooltip>
+          <Tooltip side="bottom" align="end" text="테이블명을 직접 입력해 RAG 임베딩 대상으로 등록합니다">
+            <button
+              onClick={() => setShowForm(v => !v)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium"
+            >
+              <Plus size={15} /> 직접 등록
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -337,22 +365,26 @@ export default function RagTablesPage() {
         <div className="mb-3 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
           <span className="text-sm font-medium text-blue-800">{selected.size}개 선택됨</span>
           <div className="flex gap-2 ml-auto">
-            <button
-              onClick={handleBulkResync}
-              disabled={bulkLoading !== null}
-              className="flex items-center gap-1.5 border border-blue-300 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
-            >
-              <RefreshCw size={12} className={bulkLoading === 'resync' ? 'animate-spin' : ''} />
-              {bulkLoading === 'resync' ? '자동설정 중…' : '일괄 자동설정'}
-            </button>
-            <button
-              onClick={handleBulkDelete}
-              disabled={bulkLoading !== null}
-              className="flex items-center gap-1.5 border border-red-300 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
-            >
-              <Trash2 size={12} />
-              {bulkLoading === 'delete' ? '삭제 중…' : '일괄 삭제'}
-            </button>
+            <Tooltip text="선택한 테이블들의 컬럼 설정을 LLM으로 재분석하고 전체 데이터를 다시 임베딩합니다">
+              <button
+                onClick={handleBulkResync}
+                disabled={bulkLoading !== null}
+                className="flex items-center gap-1.5 border border-blue-300 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+              >
+                <RefreshCw size={12} className={bulkLoading === 'resync' ? 'animate-spin' : ''} />
+                {bulkLoading === 'resync' ? '자동설정 중…' : '일괄 자동설정'}
+              </button>
+            </Tooltip>
+            <Tooltip text="선택한 테이블을 한 번에 RAG 대상에서 삭제합니다">
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkLoading !== null}
+                className="flex items-center gap-1.5 border border-red-300 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+              >
+                <Trash2 size={12} />
+                {bulkLoading === 'delete' ? '삭제 중…' : '일괄 삭제'}
+              </button>
+            </Tooltip>
             <button
               onClick={() => setSelected(new Set())}
               className="text-gray-400 hover:text-gray-600 text-xs px-2"
@@ -431,44 +463,51 @@ export default function RagTablesPage() {
                     }
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => statusMut.mutate({ sourceTable: t.sourceTable, isActive: !t.isActive })}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-                        t.isActive ? 'bg-green-500' : 'bg-gray-300'
-                      }`}
-                      role="switch"
-                      aria-checked={t.isActive}
-                    >
-                      <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform duration-200 ${
-                        t.isActive ? 'translate-x-4' : 'translate-x-0'
-                      }`} />
-                    </button>
+                    <Tooltip text={t.isActive ? '클릭하면 RAG 검색 대상에서 제외합니다' : '클릭하면 RAG 검색 대상에 포함합니다'}>
+                      <button
+                        onClick={() => statusMut.mutate({ sourceTable: t.sourceTable, isActive: !t.isActive })}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                          t.isActive ? 'bg-green-500' : 'bg-gray-300'
+                        }`}
+                        role="switch"
+                        aria-checked={t.isActive}
+                      >
+                        <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform duration-200 ${
+                          t.isActive ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </button>
+                    </Tooltip>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setConfigTable(t)}
-                        className={`flex items-center gap-1 text-xs ${missingCols ? 'text-orange-500 hover:text-orange-700' : 'text-gray-400 hover:text-gray-600'}`}
-                      >
-                        <Settings size={13} /> 컬럼 설정
-                      </button>
-                      <button
-                        onClick={() => handleResync(t.sourceTable)}
-                        disabled={syncing === t.sourceTable}
-                        className="flex items-center gap-1 text-blue-500 hover:text-blue-700 text-xs disabled:opacity-50"
-                        title="컬럼 설정을 LLM으로 재분석하고 전체 데이터를 다시 임베딩합니다"
-                      >
-                        <RefreshCw size={12} className={syncing === t.sourceTable ? 'animate-spin' : ''} />
-                        임베딩 자동설정
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (window.confirm(`${t.sourceTable}을 삭제하시겠습니까?`)) deleteMut.mutate(t.sourceTable)
-                        }}
-                        className="text-red-400 hover:text-red-600"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <Tooltip text="title/content/metadata로 쓸 컬럼과 청킹 전략을 지정합니다">
+                        <button
+                          onClick={() => setConfigTable(t)}
+                          className={`flex items-center gap-1 text-xs ${missingCols ? 'text-orange-500 hover:text-orange-700' : 'text-gray-400 hover:text-gray-600'}`}
+                        >
+                          <Settings size={13} /> 컬럼 설정
+                        </button>
+                      </Tooltip>
+                      <Tooltip text="컬럼 설정을 LLM으로 재분석하고 전체 데이터를 다시 임베딩합니다">
+                        <button
+                          onClick={() => handleResync(t.sourceTable)}
+                          disabled={syncing === t.sourceTable}
+                          className="flex items-center gap-1 text-blue-500 hover:text-blue-700 text-xs disabled:opacity-50"
+                        >
+                          <RefreshCw size={12} className={syncing === t.sourceTable ? 'animate-spin' : ''} />
+                          임베딩 자동설정
+                        </button>
+                      </Tooltip>
+                      <Tooltip text="RAG 대상에서 이 테이블을 완전히 제거합니다">
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`${t.sourceTable}을 삭제하시겠습니까?`)) deleteMut.mutate(t.sourceTable)
+                          }}
+                          className="text-red-400 hover:text-red-600"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </Tooltip>
                     </div>
                   </td>
                 </tr>
