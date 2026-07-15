@@ -47,6 +47,7 @@ public class WhitelistSyncService {
     private final SchemaInspectorService schemaInspector;
     private final SensitivityAnalysisService sensitivityAnalysisService;
     private final RagColumnSuggestionService ragColumnSuggestionService;
+    private final RagTableConfigService ragTableConfigService;
 
     // ── DDL 파싱 ──────────────────────────────────────────────────────────────
 
@@ -272,6 +273,7 @@ public class WhitelistSyncService {
                 if (action.type() == DdlType.RENAME_TABLE && action.targetName() != null) {
                     autoRegisterSqlTable(dsId, action.targetName());
                 }
+                schemaInspector.evictSchemaCache(dsId);
             }
             case CREATE_TABLE -> autoRegisterSqlTable(dsId, tbl);
             case ALTER_DROP_COLUMN -> {
@@ -282,6 +284,7 @@ public class WhitelistSyncService {
                     sqlTableConfigRepository.save(cfg);
                     log.info("[SQL Auto] ALTER_DROP_COLUMN: table={}, col={}", tbl, action.columnName());
                 });
+                schemaInspector.evictSchemaCache(dsId);
             }
             case ALTER_ADD_COLUMN -> {
                 if (action.columnName() == null) return;
@@ -301,6 +304,7 @@ public class WhitelistSyncService {
                     triggerSqlLlmAsync(dsId, tbl);
                     log.info("[SQL Auto] ALTER_ADD_COLUMN: table={}, col={}", tbl, newCol);
                 });
+                schemaInspector.evictSchemaCache(dsId);
             }
             case ALTER_RENAME_COLUMN -> {
                 if (action.columnName() == null || action.targetName() == null) return;
@@ -310,6 +314,7 @@ public class WhitelistSyncService {
                     sqlTableConfigRepository.save(cfg);
                     log.info("[SQL Auto] ALTER_RENAME_COLUMN: table={}, {}→{}", tbl, action.columnName(), action.targetName());
                 });
+                schemaInspector.evictSchemaCache(dsId);
             }
             default -> {}
         }
@@ -439,6 +444,8 @@ public class WhitelistSyncService {
             }
             default -> {}
         }
+        // DB에 반영된 변경사항을 binlog 데이터 처리가 참조하는 인메모리 캐시에도 즉시 반영.
+        ragTableConfigService.refreshCache();
     }
 
     private void autoRegisterRagTable(Integer dsId, String tableName) {
@@ -460,6 +467,7 @@ public class WhitelistSyncService {
         autoDetectColumnsForRag(cfg, schemaMap.get(tableName));
         ragTableConfigRepository.save(cfg);
         schemaInspector.evictSchemaCache(dsId);
+        ragTableConfigService.refreshCache();
         triggerRagLlmAsync(dsId, tableName);
         log.info("[RAG Auto] CREATE_TABLE registered: table={}, dsId={}", tableName, dsId);
     }

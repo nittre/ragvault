@@ -36,7 +36,8 @@ class WhitelistSyncServiceDdlParseTest {
                 mock(DdlEventRepository.class),
                 mock(SchemaInspectorService.class),
                 mock(SensitivityAnalysisService.class),
-                mock(RagColumnSuggestionService.class)
+                mock(RagColumnSuggestionService.class),
+                mock(RagTableConfigService.class)
         );
     }
 

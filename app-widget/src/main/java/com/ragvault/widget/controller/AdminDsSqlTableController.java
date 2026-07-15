@@ -83,7 +83,8 @@ public class AdminDsSqlTableController {
         if (req.dataSensitivity() != null) {
             config.setDataSensitivity(req.dataSensitivity());
         }
-        if (req.isActive() != null) {
+        boolean activeChanged = req.isActive() != null;
+        if (activeChanged) {
             config.setActive(req.isActive());
         }
         if (req.displayName() != null) {
@@ -96,8 +97,11 @@ public class AdminDsSqlTableController {
         config.setUpdatedAt(LocalDateTime.now());
         SqlTableConfig saved = repository.save(config);
 
-        if (descriptionChanged) {
+        // isActive는 schemaCache의 필터 기준(findByDatasourceIdAndIsActiveTrue)이므로 무효화 필요.
+        if (activeChanged || descriptionChanged) {
             schemaInspector.evictSchemaCache(dsId);
+        }
+        if (descriptionChanged) {
             routingEmbeddingService.reindexDatasource(dsId);
         }
         return ResponseEntity.ok(saved);

@@ -37,6 +37,7 @@ class WhitelistSyncServiceScenarioTest {
     @Mock SchemaInspectorService schemaInspector;
     @Mock SensitivityAnalysisService sensitivityAnalysisService;
     @Mock RagColumnSuggestionService ragColumnSuggestionService;
+    @Mock RagTableConfigService ragTableConfigService;
 
     @InjectMocks WhitelistSyncService svc;
 
