@@ -141,7 +141,7 @@ public class InitialSyncService {
         DataSourceConfig ds = dataSourceConfigService.findById(datasourceId);
 
         for (String tableName : tables == null ? List.<String>of() : tables) {
-            RagTableConfig config = ragTableConfigService.findByTable(tableName).orElse(null);
+            RagTableConfig config = ragTableConfigService.findByTable(datasourceId, tableName).orElse(null);
             if (config == null || !java.util.Objects.equals(config.getDatasourceId(), datasourceId)) {
                 log.warn("Skip sync — no active rag_table_config: dsId={}, table={}", datasourceId, tableName);
                 continue;

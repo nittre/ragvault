@@ -3,6 +3,7 @@ package com.ragvault.widget.service;
 import com.ragvault.core.domain.DocumentChunk.ChunkResult;
 import com.ragvault.core.prompt.PromptLoader;
 import com.ragvault.core.repository.DocumentChunkRepository;
+import com.ragvault.core.service.DataSourceRouterService;
 import com.ragvault.widget.security.InputValidator;
 import com.ragvault.core.security.PiiMasker;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,7 @@ public class WidgetRagService {
     private final InputValidator inputValidator;
     private final ConversationLogService conversationLogService;
     private final SearchConfigService searchConfigService;
+    private final DataSourceRouterService dataSourceRouter;
 
     private static final String SYSTEM_PROMPT =
             PromptLoader.load("prompts/widget-rag-service/system.txt");
@@ -105,7 +107,8 @@ public class WidgetRagService {
         //    답변 근거로 쓸 수 있는 청크를 더 확보한다 (동일 topK로는 첫 턴과 같은 청크만
         //    다시 뽑혀 "더 자세히" 요청에도 내용이 늘어나지 않는 문제가 있었다).
         int searchTopK = history.isEmpty() ? topK : Math.min(topK * 2, 20);
-        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, threshold, searchTopK);
+        Integer datasourceId = dataSourceRouter.route(retrievalQuery);
+        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, threshold, searchTopK, datasourceId);
         List<ChunkResult> chunks = rows.stream()
                 .map(r -> new ChunkResult(
                         (String) r[0],

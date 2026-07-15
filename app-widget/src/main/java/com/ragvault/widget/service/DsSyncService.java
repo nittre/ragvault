@@ -90,7 +90,7 @@ public class DsSyncService {
         String sourceTable = "ds_" + datasourceId + "_" + tableName;
 
         // 기존 청크 전체 삭제 (멱등성)
-        chunkRepository.deleteBySourceTable(sourceTable);
+        chunkRepository.deleteBySourceTable(datasourceId, sourceTable);
 
         int count = 0;
         try (Connection conn = dataSourceConfigService.openConnection(config)) {
@@ -117,6 +117,7 @@ public class DsSyncService {
                         float[] embedding = embeddingModel.embed(text);
 
                         DocumentChunk dc = DocumentChunk.builder()
+                                .datasourceId(datasourceId)
                                 .sourceTable(sourceTable)
                                 .sourceId(pkVal != null ? pkVal : String.valueOf(count))
                                 .sourceType("db")

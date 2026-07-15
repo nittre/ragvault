@@ -5,6 +5,7 @@ import com.ragservice.rag.dto.EffectiveParams;
 import com.ragservice.rag.dto.MessageDto;
 import com.ragvault.core.prompt.PromptLoader;
 import com.ragvault.core.repository.DocumentChunkRepository;
+import com.ragvault.core.service.DataSourceRouterService;
 import com.ragservice.rag.security.InputValidator;
 import com.ragvault.core.security.PiiMasker;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +45,7 @@ public class RagService {
     private final DocumentChunkRepository chunkRepository;
     private final PiiMasker piiMasker;
     private final InputValidator inputValidator;
+    private final DataSourceRouterService dataSourceRouter;
 
     private static final String SYSTEM_PROMPT =
             PromptLoader.load("prompts/rag-service/system.txt");
@@ -95,7 +97,8 @@ public class RagService {
         int effectiveTopK = extractInt(effectiveParams, "top_k");
         double effectiveThreshold = extractDouble(effectiveParams, "similarity_threshold");
         int searchTopK = history.isEmpty() ? effectiveTopK : Math.min(effectiveTopK * 2, 20);
-        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, effectiveThreshold, searchTopK);
+        Integer datasourceId = dataSourceRouter.route(retrievalQuery);
+        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, effectiveThreshold, searchTopK, datasourceId);
         List<ChunkResult> chunks = rows.stream()
                 .map(r -> new ChunkResult(
                         (String) r[0],

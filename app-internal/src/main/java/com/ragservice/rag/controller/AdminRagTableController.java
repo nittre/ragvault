@@ -64,7 +64,9 @@ public class AdminRagTableController {
     public ResponseEntity<Void> resync(
             @PathVariable String sourceTable,
             @RequestHeader(value = "X-User-Email", required = false) String email) {
-        RagTableConfig config = ragTableConfigService.findByTable(sourceTable)
+        // 레거시 엔드포인트(dsId가 경로에 없음) — 캐시는 dsId로 스코프되므로 여기선
+        // DB에서 직접 조회한다. 동일 테이블명이 여러 데이터소스에 있으면 모호할 수 있음.
+        RagTableConfig config = ragTableConfigRepository.findBySourceTable(sourceTable)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "테이블 설정을 찾을 수 없습니다: " + sourceTable));
         if (config.getDatasourceId() == null) {

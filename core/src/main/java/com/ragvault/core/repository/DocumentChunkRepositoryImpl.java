@@ -46,12 +46,13 @@ public class DocumentChunkRepositoryImpl implements DocumentChunkRepositoryCusto
      */
     @Override
     @SuppressWarnings("unchecked")
-    public List<Object[]> findSimilarChunks(String embeddingJson, double threshold, int topK) {
+    public List<Object[]> findSimilarChunks(String embeddingJson, double threshold, int topK, Integer datasourceId) {
         String sql = """
                 SELECT content, source_table, source_id,
                        CAST(1 - (embedding <=> CAST(:embedding AS vector)) AS double precision) AS score
                 FROM document_chunks
                 WHERE (embedding <=> CAST(:embedding AS vector)) < CAST(:maxDistance AS double precision)
+                  AND (:datasourceId IS NULL OR datasource_id = :datasourceId OR datasource_id IS NULL)
                 ORDER BY embedding <=> CAST(:embedding AS vector)
                 LIMIT :topK
                 """;
@@ -59,6 +60,7 @@ public class DocumentChunkRepositoryImpl implements DocumentChunkRepositoryCusto
         Query query = entityManager.createNativeQuery(sql)
                 .setParameter("embedding", embeddingJson)
                 .setParameter("maxDistance", 1.0 - threshold)
+                .setParameter("datasourceId", datasourceId)
                 .setParameter("topK", topK);
 
         return query.getResultList();
@@ -75,14 +77,14 @@ public class DocumentChunkRepositoryImpl implements DocumentChunkRepositoryCusto
     public void upsertChunk(DocumentChunk chunk, float[] embedding) {
         String sql = """
                 INSERT INTO document_chunks
-                    (source_table, source_id, source_type, chunk_index, content, content_hash,
+                    (datasource_id, source_table, source_id, source_type, chunk_index, content, content_hash,
                      token_count, embedding, embedding_model, tokenizer_model, metadata,
                      created_at, updated_at)
                 VALUES
-                    (:sourceTable, :sourceId, :sourceType, :chunkIndex, :content, :contentHash,
+                    (:datasourceId, :sourceTable, :sourceId, :sourceType, :chunkIndex, :content, :contentHash,
                      :tokenCount, CAST(:embedding AS vector), :embeddingModel, :tokenizerModel,
                      CAST(:metadata AS jsonb), NOW(), NOW())
-                ON CONFLICT (source_table, source_id, chunk_index, embedding_model)
+                ON CONFLICT (datasource_id, source_table, source_id, chunk_index, embedding_model)
                 DO UPDATE SET
                     content = EXCLUDED.content,
                     content_hash = EXCLUDED.content_hash,
@@ -94,6 +96,7 @@ public class DocumentChunkRepositoryImpl implements DocumentChunkRepositoryCusto
                 """;
 
         entityManager.createNativeQuery(sql)
+                .setParameter("datasourceId", chunk.getDatasourceId())
                 .setParameter("sourceTable", chunk.getSourceTable())
                 .setParameter("sourceId", chunk.getSourceId())
                 .setParameter("sourceType", chunk.getSourceType())
@@ -109,26 +112,28 @@ public class DocumentChunkRepositoryImpl implements DocumentChunkRepositoryCusto
     }
 
     /**
-     * 특정 소스 테이블 + 소스 ID의 모든 청크 삭제.
+     * 특정 데이터소스의 소스 테이블 + 소스 ID의 모든 청크 삭제.
      */
     @Override
     @Transactional
-    public void deleteBySourceTableAndSourceId(String sourceTable, String sourceId) {
+    public void deleteBySourceTableAndSourceId(Integer datasourceId, String sourceTable, String sourceId) {
         entityManager.createNativeQuery(
-                "DELETE FROM document_chunks WHERE source_table = :t AND source_id = :id")
+                "DELETE FROM document_chunks WHERE datasource_id = :dsId AND source_table = :t AND source_id = :id")
+                .setParameter("dsId", datasourceId)
                 .setParameter("t", sourceTable)
                 .setParameter("id", sourceId)
                 .executeUpdate();
     }
 
     /**
-     * source_table 전체 청크 삭제 — DB 동기화 재적재 멱등성.
+     * 특정 데이터소스의 source_table 전체 청크 삭제 — DB 동기화 재적재 멱등성.
      */
     @Override
     @Transactional
-    public void deleteBySourceTable(String sourceTable) {
+    public void deleteBySourceTable(Integer datasourceId, String sourceTable) {
         entityManager.createNativeQuery(
-                "DELETE FROM document_chunks WHERE source_table = :t")
+                "DELETE FROM document_chunks WHERE datasource_id = :dsId AND source_table = :t")
+                .setParameter("dsId", datasourceId)
                 .setParameter("t", sourceTable)
                 .executeUpdate();
     }

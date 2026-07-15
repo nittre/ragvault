@@ -24,6 +24,9 @@ public class DocumentChunk {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "datasource_id")
+    private Integer datasourceId;
+
     @Column(name = "source_table", nullable = false, length = 100)
     private String sourceTable;
 

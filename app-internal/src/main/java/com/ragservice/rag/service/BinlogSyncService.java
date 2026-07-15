@@ -232,13 +232,13 @@ public class BinlogSyncService {
                         tableMap.put(tme.getTableId(), tme);
 
                     } else if (data instanceof WriteRowsEventData wr) {
-                        processDataEvent("INSERT", tableMap.get(wr.getTableId()), wr.getRows(), counts);
+                        processDataEvent(dsId, "INSERT", tableMap.get(wr.getTableId()), wr.getRows(), counts);
 
                     } else if (data instanceof UpdateRowsEventData ur) {
-                        processUpdateEvent(tableMap.get(ur.getTableId()), ur.getRows(), counts);
+                        processUpdateEvent(dsId, tableMap.get(ur.getTableId()), ur.getRows(), counts);
 
                     } else if (data instanceof DeleteRowsEventData dr) {
-                        processDataEvent("DELETE", tableMap.get(dr.getTableId()), dr.getRows(), counts);
+                        processDataEvent(dsId, "DELETE", tableMap.get(dr.getTableId()), dr.getRows(), counts);
 
                     } else if (data instanceof QueryEventData qe) {
                         processDdlEvent(dsId, qe.getSql());
@@ -407,14 +407,14 @@ public class BinlogSyncService {
         throw new Exception("MariaDB SHOW BINARY LOGS 결과 없음 — binlog가 활성화되지 않은 것 같습니다");
     }
 
-    private void processDataEvent(String opType,
+    private void processDataEvent(Integer dsId, String opType,
             TableMapEventData tme,
             List<?> rows,
             int[] counts) {
         if (tme == null) return;
         String tableName = tme.getTable();
 
-        Optional<RagTableConfig> configOpt = ragTableConfigService.findByTable(tableName);
+        Optional<RagTableConfig> configOpt = ragTableConfigService.findByTable(dsId, tableName);
         if (configOpt.isEmpty()) return;
 
         RagTableConfig config = configOpt.get();
@@ -426,7 +426,7 @@ public class BinlogSyncService {
                 String sourceId = String.valueOf(rowMap.get(config.getPkColumn()));
 
                 if ("DELETE".equals(opType)) {
-                    chunkingService.deleteChunks(tableName, sourceId);
+                    chunkingService.deleteChunks(dsId, tableName, sourceId);
                 } else {
                     chunkingService.processRow(config, rowMap);
                 }
@@ -444,13 +444,13 @@ public class BinlogSyncService {
         }
     }
 
-    private void processUpdateEvent(
+    private void processUpdateEvent(Integer dsId,
             TableMapEventData tme,
             List<Map.Entry<java.io.Serializable[], java.io.Serializable[]>> rows,
             int[] counts) {
         if (tme == null) return;
         String tableName = tme.getTable();
-        Optional<RagTableConfig> configOpt = ragTableConfigService.findByTable(tableName);
+        Optional<RagTableConfig> configOpt = ragTableConfigService.findByTable(dsId, tableName);
         if (configOpt.isEmpty()) return;
 
         RagTableConfig config = configOpt.get();
@@ -458,7 +458,7 @@ public class BinlogSyncService {
             try {
                 Map<String, Object> newRowMap = buildRowMap(tme, entry.getValue());
                 String sourceId = String.valueOf(newRowMap.get(config.getPkColumn()));
-                chunkingService.deleteChunks(tableName, sourceId);
+                chunkingService.deleteChunks(dsId, tableName, sourceId);
                 chunkingService.processRow(config, newRowMap);
                 counts[0]++;
             } catch (Exception e) {

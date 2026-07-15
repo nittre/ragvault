@@ -56,7 +56,7 @@ public class KnowledgeIngestionService {
     }
 
     public void ingestMarkdown(String docId, String markdown, int chunkSize, int overlap) {
-        chunkRepository.deleteBySourceTableAndSourceId(SOURCE_TABLE, docId);
+        chunkRepository.deleteBySourceTableAndSourceId(null, SOURCE_TABLE, docId);
         upsertChunks(docId, markdown, "markdown", chunkSize, overlap);
     }
 
@@ -68,7 +68,7 @@ public class KnowledgeIngestionService {
      * @param filename 파일명 (확장자 포함, 파서 선택·메타데이터용)
      */
     public void ingestFile(String docId, byte[] bytes, String filename) {
-        chunkRepository.deleteBySourceTableAndSourceId(SOURCE_TABLE, docId);
+        chunkRepository.deleteBySourceTableAndSourceId(null, SOURCE_TABLE, docId);
 
         ParsedDocument parsed;
         try {

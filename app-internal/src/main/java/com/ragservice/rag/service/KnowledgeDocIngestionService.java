@@ -43,12 +43,12 @@ public class KnowledgeDocIngestionService {
     }
 
     public void ingestMarkdown(String docId, String markdown, int chunkSize, int overlap) {
-        chunkRepository.deleteBySourceTableAndSourceId(SOURCE_TABLE, docId);
+        chunkRepository.deleteBySourceTableAndSourceId(null, SOURCE_TABLE, docId);
         upsertChunks(docId, markdown, "markdown", chunkSize, overlap);
     }
 
     public void ingestFile(String docId, byte[] bytes, String filename) {
-        chunkRepository.deleteBySourceTableAndSourceId(SOURCE_TABLE, docId);
+        chunkRepository.deleteBySourceTableAndSourceId(null, SOURCE_TABLE, docId);
         ParsedDocument parsed;
         try {
             parsed = parserRouter.parse(bytes, filename);
@@ -61,7 +61,7 @@ public class KnowledgeDocIngestionService {
     }
 
     public void deleteDoc(String docId) {
-        chunkRepository.deleteBySourceTableAndSourceId(SOURCE_TABLE, docId);
+        chunkRepository.deleteBySourceTableAndSourceId(null, SOURCE_TABLE, docId);
     }
 
     private String inlineCaptions(ParsedDocument parsed) {

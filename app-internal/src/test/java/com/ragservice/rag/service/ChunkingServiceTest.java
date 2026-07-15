@@ -85,8 +85,8 @@ class ChunkingServiceTest {
 
     @Test
     void deleteChunks_callsRepository() {
-        chunkingService.deleteChunks("products", "123");
-        verify(chunkRepository).deleteBySourceTableAndSourceId("products", "123");
+        chunkingService.deleteChunks(1, "products", "123");
+        verify(chunkRepository).deleteBySourceTableAndSourceId(1, "products", "123");
     }
 
     @Test

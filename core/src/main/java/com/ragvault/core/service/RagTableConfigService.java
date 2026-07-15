@@ -26,8 +26,14 @@ public class RagTableConfigService {
 
     private final RagTableConfigRepository repository;
 
+    // 키: "datasourceId:sourceTable" — 서로 다른 데이터소스가 같은 테이블명을 쓸 수 있으므로
+    // 테이블명만으로 키를 잡으면 서로 다른 데이터소스의 설정이 충돌한다.
     private final ConcurrentHashMap<String, RagTableConfig> cache = new ConcurrentHashMap<>();
     private volatile boolean cacheLoaded = false;
+
+    private static String key(Integer datasourceId, String sourceTable) {
+        return datasourceId + ":" + sourceTable;
+    }
 
     @PostConstruct
     public void loadCache() {
@@ -37,13 +43,13 @@ public class RagTableConfigService {
     public void refreshCache() {
         List<RagTableConfig> all = repository.findAllByIsActiveTrue();
         cache.clear();
-        all.forEach(c -> cache.put(c.getSourceTable(), c));
+        all.forEach(c -> cache.put(key(c.getDatasourceId(), c.getSourceTable()), c));
         cacheLoaded = true;
         log.info("RagTableConfig cache loaded: {} tables", cache.size());
     }
 
-    public Optional<RagTableConfig> findByTable(String tableName) {
-        return Optional.ofNullable(cache.get(tableName));
+    public Optional<RagTableConfig> findByTable(Integer datasourceId, String tableName) {
+        return Optional.ofNullable(cache.get(key(datasourceId, tableName)));
     }
 
     public List<RagTableConfig> findAllActive() {
@@ -76,7 +82,7 @@ public class RagTableConfigService {
                     .ifPresent(existing -> { repository.delete(existing); repository.flush(); });
         }
         RagTableConfig saved = repository.save(config);
-        cache.put(saved.getSourceTable(), saved);
+        cache.put(key(saved.getDatasourceId(), saved.getSourceTable()), saved);
         return saved;
     }
 
@@ -87,7 +93,7 @@ public class RagTableConfigService {
     public void deactivate(String sourceTable) {
         repository.findBySourceTable(sourceTable).ifPresent(c -> {
             repository.delete(c);
-            cache.remove(sourceTable);
+            cache.remove(key(c.getDatasourceId(), sourceTable));
             log.info("RagTableConfig deleted: {}", sourceTable);
         });
     }
@@ -99,7 +105,7 @@ public class RagTableConfigService {
     public void deactivate(String sourceTable, Integer datasourceId) {
         repository.findBySourceTableAndDatasourceId(sourceTable, datasourceId).ifPresent(c -> {
             repository.delete(c);
-            cache.remove(sourceTable);
+            cache.remove(key(datasourceId, sourceTable));
             log.info("RagTableConfig deleted: table={}, dsId={}", sourceTable, datasourceId);
         });
     }

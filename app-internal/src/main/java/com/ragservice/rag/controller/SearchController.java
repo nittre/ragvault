@@ -60,7 +60,7 @@ public class SearchController {
 
         // 2. pgvector 코사인 유사도 검색
         int limit = Math.min(topK, defaultTopK * 2);
-        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, defaultThreshold, limit);
+        List<Object[]> rows = chunkRepository.findSimilarChunks(embeddingJson, defaultThreshold, limit, null);
 
         // 3. PII 마스킹 + 응답 변환 (ADR-0008)
         // DocumentChunkRepositoryImpl 반환 순서: [content, source_table, source_id, score]

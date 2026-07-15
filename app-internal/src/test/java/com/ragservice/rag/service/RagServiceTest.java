@@ -5,6 +5,7 @@ import com.ragservice.rag.dto.MessageDto;
 import com.ragservice.rag.security.InputValidator;
 import com.ragvault.core.repository.DocumentChunkRepository;
 import com.ragvault.core.security.PiiMasker;
+import com.ragvault.core.service.DataSourceRouterService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,6 +43,7 @@ class RagServiceTest {
     @Mock DocumentChunkRepository chunkRepository;
     @Mock PiiMasker piiMasker;
     @Mock InputValidator inputValidator;
+    @Mock DataSourceRouterService dataSourceRouter;
 
     @InjectMocks
     RagService ragService;
@@ -58,7 +60,7 @@ class RagServiceTest {
                 .thenReturn(new InputValidator.ValidationResult(true, null));
         when(embeddingModel.embed(anyString())).thenReturn(new float[1024]);
         // 청크 검색 결과를 비워 재작성 이후 흐름(LLM 최종 호출)을 테스트 범위 밖으로 둔다.
-        when(chunkRepository.findSimilarChunks(anyString(), anyDouble(), anyInt())).thenReturn(List.of());
+        when(chunkRepository.findSimilarChunks(anyString(), anyDouble(), anyInt(), any())).thenReturn(List.of());
 
         when(chatClient.prompt()).thenReturn(requestSpec);
         when(requestSpec.system(anyString())).thenReturn(requestSpec);

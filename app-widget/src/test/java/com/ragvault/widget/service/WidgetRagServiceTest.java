@@ -2,6 +2,7 @@ package com.ragvault.widget.service;
 
 import com.ragvault.core.repository.DocumentChunkRepository;
 import com.ragvault.core.security.PiiMasker;
+import com.ragvault.core.service.DataSourceRouterService;
 import com.ragvault.widget.security.InputValidator;
 import com.ragvault.widget.service.WidgetRagService.HistoryMessage;
 import com.ragvault.widget.service.WidgetRagService.RagResult;
@@ -41,6 +42,7 @@ class WidgetRagServiceTest {
     @Mock InputValidator inputValidator;
     @Mock ConversationLogService conversationLogService;
     @Mock SearchConfigService searchConfigService;
+    @Mock DataSourceRouterService dataSourceRouter;
 
     @InjectMocks
     WidgetRagService widgetRagService;
@@ -56,7 +58,7 @@ class WidgetRagServiceTest {
                 .thenReturn(new InputValidator.ValidationResult(true, null));
         when(embeddingModel.embed(anyString())).thenReturn(new float[1024]);
         // 청크 검색 결과를 비워 재작성 이후 흐름(LLM 최종 호출)을 테스트 범위 밖으로 둔다.
-        when(chunkRepository.findSimilarChunks(anyString(), anyDouble(), anyInt())).thenReturn(List.of());
+        when(chunkRepository.findSimilarChunks(anyString(), anyDouble(), anyInt(), any())).thenReturn(List.of());
 
         when(chatClient.prompt()).thenReturn(requestSpec);
         when(requestSpec.system(anyString())).thenReturn(requestSpec);

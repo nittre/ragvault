@@ -65,6 +65,7 @@ public class ChunkingService {
             float[] embedding = embeddingModel.embed(chunk);
 
             DocumentChunk dc = DocumentChunk.builder()
+                    .datasourceId(config.getDatasourceId())
                     .sourceTable(config.getSourceTable())
                     .sourceId(sourceId)
                     .sourceType(config.getSourceType())
@@ -91,8 +92,8 @@ public class ChunkingService {
     /**
      * 특정 소스 레코드의 모든 청크 삭제 (DELETE 이벤트).
      */
-    public void deleteChunks(String sourceTable, String sourceId) {
-        chunkRepository.deleteBySourceTableAndSourceId(sourceTable, sourceId);
+    public void deleteChunks(Integer datasourceId, String sourceTable, String sourceId) {
+        chunkRepository.deleteBySourceTableAndSourceId(datasourceId, sourceTable, sourceId);
     }
 
     // -------------------------------------------------------------------------

@@ -187,7 +187,7 @@ public class InitialSyncService {
                         .toList();
             } else {
                 targets = tables.stream()
-                        .map(t -> ragTableConfigService.findByTable(t))
+                        .map(t -> ragTableConfigService.findByTable(datasourceId, t))
                         .filter(java.util.Optional::isPresent)
                         .map(java.util.Optional::get)
                         .filter(t -> java.util.Objects.equals(t.getDatasourceId(), datasourceId))

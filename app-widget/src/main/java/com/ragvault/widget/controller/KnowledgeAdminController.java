@@ -204,7 +204,7 @@ public class KnowledgeAdminController {
         String name = filePath.getFileName().toString();
         try {
             Files.delete(filePath);
-            chunkRepository.deleteBySourceTableAndSourceId("knowledge_doc", name);
+            chunkRepository.deleteBySourceTableAndSourceId(null, "knowledge_doc", name);
             auditLog(auth, "KNOWLEDGE_DELETE", name, httpReq);
             return ResponseEntity.ok(Map.of("name", name, "status", "deleted"));
         } catch (Exception e) {
