@@ -128,19 +128,20 @@ export default function AdminLayout() {
 
           {/* 데이터소스 섹션 */}
           <div>
-            <div className="flex items-center justify-between px-3 mb-2">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                데이터소스
-              </p>
-              <NavLink
-                to="/admin/datasources"
-                className="text-xs text-blue-500 hover:text-blue-700 transition-colors"
-              >
-                관리
-              </NavLink>
-            </div>
+            <p className="px-3 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              데이터소스
+            </p>
 
             <div className="space-y-0.5">
+              <NavLink
+                to="/admin/datasources"
+                end
+                className={({ isActive }) => (isActive ? activeCls : inactiveCls)}
+              >
+                <Database size={15} />
+                DS 관리
+              </NavLink>
+
               {datasources.length === 0 && (
                 <p className="px-3 py-2 text-xs text-gray-400">등록된 데이터소스 없음</p>
               )}

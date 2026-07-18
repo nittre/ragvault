@@ -35,7 +35,8 @@
 ### 외부 데이터소스 동기화
 - `service/BinlogSyncService`, `domain/BinlogEvent`, `domain/BinlogPosition` — MySQL binlog 실시간 동기화 (ADR-0001 관련)
 - `service/InitialSyncService` — 초기 풀 스냅샷
-- `service/WhitelistSyncService`, `service/DataSourceAutoSetupService`, `domain/SyncJob`, `domain/SyncModeConfig` — 동기화 화이트리스트·모드 관리
+- `service/WhitelistSyncService`, `domain/SyncJob`, `domain/SyncModeConfig` — 동기화 화이트리스트·모드 관리
+- `core` 모듈 `service/DataSourceAutoSetupService` — 데이터소스 등록 시 SQL/RAG 테이블·PII 마스킹 자동 설정 (app-widget과 공유)
 - `service/DiscordNotifier` — 동기화 이벤트 Discord 웹훅 알림
 
 ### 파라미터 튜닝 (M5)

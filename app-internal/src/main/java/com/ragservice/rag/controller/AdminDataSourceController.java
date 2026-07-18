@@ -3,7 +3,7 @@ package com.ragservice.rag.controller;
 import com.ragvault.core.domain.DataSourceConfig;
 import com.ragvault.core.dto.DataSourceRequest;
 import com.ragservice.rag.dto.DataSourceResponse;
-import com.ragservice.rag.service.DataSourceAutoSetupService;
+import com.ragvault.core.service.DataSourceAutoSetupService;
 import com.ragvault.core.service.DataSourceConfigService;
 import com.ragvault.core.service.RoutingEmbeddingService;
 import com.ragvault.core.service.SchemaInspectorService;

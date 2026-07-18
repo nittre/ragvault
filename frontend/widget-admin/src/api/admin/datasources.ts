@@ -10,6 +10,10 @@ export interface DataSource {
   dbName: string
   username: string
   isActive: boolean
+  sshEnabled: boolean
+  sshHost: string | null
+  sshPort: number | null
+  sshUser: string | null
   createdAt: string
   updatedAt: string
 }
@@ -22,31 +26,15 @@ export interface DataSourceRequest {
   port: number
   dbName: string
   username: string
-  password: string
-}
-
-export interface RagTable {
-  id: number
-  datasourceId: number
-  tableName: string
-  isActive: boolean
-  lastSyncedAt: string | null
-}
-
-export interface SyncJob {
-  id: number
-  datasourceId: number
-  tableName: string
-  status: 'pending' | 'running' | 'done' | 'failed'
-  rowCount: number | null
-  errorMsg: string | null
-  startedAt: string
-  finishedAt: string | null
-}
-
-export interface TableInfo {
-  tableName: string
-  tableComment: string
+  password?: string
+  // SSH 터널 설정
+  sshEnabled?: boolean
+  sshHost?: string
+  sshPort?: number
+  sshUser?: string
+  sshPrivateKey?: string  // PEM 전문 — 서버에서 암호화 저장
+  sshPassphrase?: string  // passphrase — 서버에서 암호화 저장
+  autoDescribe?: boolean  // 등록 시 LLM으로 테이블·컬럼 설명 자동 생성
 }
 
 export interface ConnectionTestResult {
@@ -68,21 +56,3 @@ export const deleteDataSource = (id: number) =>
 
 export const testConnection = (id: number) =>
   apiClient.post<ConnectionTestResult>(`/api/admin/datasources/${id}/test`).then(r => r.data)
-
-export const listTables = (id: number) =>
-  apiClient.get<TableInfo[]>(`/api/admin/datasources/${id}/tables`).then(r => r.data)
-
-export const listRagTables = (id: number) =>
-  apiClient.get<RagTable[]>(`/api/admin/datasources/${id}/rag-tables`).then(r => r.data)
-
-export const addRagTable = (id: number, tableName: string) =>
-  apiClient.post<RagTable>(`/api/admin/datasources/${id}/rag-tables`, { tableName }).then(r => r.data)
-
-export const removeRagTable = (datasourceId: number, ragTableId: number) =>
-  apiClient.delete(`/api/admin/datasources/${datasourceId}/rag-tables/${ragTableId}`)
-
-export const triggerSync = (datasourceId: number, tableName: string) =>
-  apiClient.post(`/api/admin/datasources/${datasourceId}/sync/${tableName}`).then(r => r.data)
-
-export const listSyncJobs = (datasourceId: number) =>
-  apiClient.get<SyncJob[]>(`/api/admin/datasources/${datasourceId}/sync-jobs`).then(r => r.data)

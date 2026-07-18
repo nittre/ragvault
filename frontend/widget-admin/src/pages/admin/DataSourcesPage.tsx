@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Database,
@@ -8,42 +7,23 @@ import {
   RefreshCw,
   CheckCircle,
   XCircle,
-  ChevronDown,
-  ChevronUp,
-  Play,
-  Layers,
-  TableProperties,
+  Pencil,
+  Eye,
+  EyeOff,
+  Terminal,
 } from 'lucide-react'
 import {
   listDataSources,
   createDataSource,
+  updateDataSource,
   deleteDataSource,
   testConnection,
-  listTables,
-  listRagTables,
-  addRagTable,
-  removeRagTable,
-  triggerSync,
-  listSyncJobs,
 } from '../../api/admin/datasources'
 import type {
   DataSource,
   DataSourceRequest,
   ConnectionTestResult,
-  TableInfo,
-  RagTable,
-  SyncJob,
 } from '../../api/admin/datasources'
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message
@@ -59,186 +39,25 @@ const DEFAULT_FORM: DataSourceRequest = {
   dbName: '',
   username: '',
   password: '',
-}
-
-function statusBadge(status: SyncJob['status']) {
-  const map: Record<SyncJob['status'], { label: string; cls: string }> = {
-    pending: { label: '대기중', cls: 'bg-gray-100 text-gray-500 border-gray-200' },
-    running: { label: '실행중', cls: 'bg-blue-50 text-blue-600 border-blue-200' },
-    done: { label: '완료', cls: 'bg-green-50 text-green-700 border-green-200' },
-    failed: { label: '실패', cls: 'bg-red-50 text-red-600 border-red-200' },
-  }
-  const { label, cls } = map[status]
-  return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${cls}`}>{label}</span>
-  )
-}
-
-interface TablePanelProps {
-  ds: DataSource
-}
-
-function TablePanel({ ds }: TablePanelProps) {
-  const qc = useQueryClient()
-  const [syncingTable, setSyncingTable] = useState<string | null>(null)
-  const [syncMsg, setSyncMsg] = useState<string | null>(null)
-
-  const { data: tables = [], isLoading: tablesLoading } = useQuery({
-    queryKey: ['ds-tables', ds.id],
-    queryFn: () => listTables(ds.id),
-  })
-
-  const { data: ragTables = [], isLoading: ragLoading } = useQuery({
-    queryKey: ['ds-rag-tables', ds.id],
-    queryFn: () => listRagTables(ds.id),
-  })
-
-  const { data: syncJobs = [] } = useQuery({
-    queryKey: ['ds-sync-jobs', ds.id],
-    queryFn: () => listSyncJobs(ds.id),
-  })
-
-  const addRagMut = useMutation({
-    mutationFn: (tableName: string) => addRagTable(ds.id, tableName),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['ds-rag-tables', ds.id] }),
-  })
-
-  const removeRagMut = useMutation({
-    mutationFn: (ragTableId: number) => removeRagTable(ds.id, ragTableId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['ds-rag-tables', ds.id] }),
-  })
-
-  const ragTableMap = new Map<string, RagTable>(ragTables.map(rt => [rt.tableName, rt]))
-
-  const handleSync = async (tableName: string) => {
-    setSyncingTable(tableName)
-    setSyncMsg(null)
-    try {
-      await triggerSync(ds.id, tableName)
-      setSyncMsg(`"${tableName}" 동기화가 시작되었습니다.`)
-      qc.invalidateQueries({ queryKey: ['ds-sync-jobs', ds.id] })
-    } catch (err) {
-      setSyncMsg(`동기화 오류: ${errorMessage(err)}`)
-    } finally {
-      setSyncingTable(null)
-    }
-  }
-
-  const recentJobsForTable = (tableName: string) =>
-    syncJobs
-      .filter(j => j.tableName === tableName)
-      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-      .slice(0, 3)
-
-  if (tablesLoading || ragLoading) {
-    return <p className="text-sm text-gray-400 py-3">테이블 정보 불러오는 중…</p>
-  }
-
-  return (
-    <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden">
-      {syncMsg && (
-        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 text-xs text-blue-700">
-          {syncMsg}
-        </div>
-      )}
-      {tables.length === 0 ? (
-        <div className="px-4 py-6 text-center text-sm text-gray-400">
-          테이블이 없거나 연결에 실패했습니다.
-        </div>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
-              <th className="text-left px-4 py-2 font-medium">테이블명</th>
-              <th className="text-left px-4 py-2 font-medium">설명</th>
-              <th className="text-left px-4 py-2 font-medium">마지막 동기화</th>
-              <th className="text-right px-4 py-2 font-medium">동작</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tables.map((t: TableInfo) => {
-              const ragTable = ragTableMap.get(t.tableName)
-              const isRag = !!ragTable
-              const recentJobs = recentJobsForTable(t.tableName)
-
-              return (
-                <>
-                  <tr key={t.tableName} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-2 font-mono text-xs text-gray-800">{t.tableName}</td>
-                    <td className="px-4 py-2 text-xs text-gray-500">{t.tableComment || '-'}</td>
-                    <td className="px-4 py-2 text-xs text-gray-400">
-                      {ragTable?.lastSyncedAt ? formatDate(ragTable.lastSyncedAt) : '-'}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {isRag ? (
-                          <>
-                            <button
-                              onClick={() => handleSync(t.tableName)}
-                              disabled={syncingTable === t.tableName}
-                              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                            >
-                              <Play size={11} />
-                              동기화
-                            </button>
-                            <button
-                              onClick={() => ragTable && removeRagMut.mutate(ragTable.id)}
-                              disabled={removeRagMut.isPending}
-                              className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                            >
-                              <Trash2 size={11} />
-                              RAG 제거
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => addRagMut.mutate(t.tableName)}
-                            disabled={addRagMut.isPending}
-                            className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800 hover:bg-green-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                          >
-                            <Plus size={11} />
-                            RAG 추가
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                  {recentJobs.length > 0 && (
-                    <tr key={`${t.tableName}-jobs`} className="bg-gray-50 border-b border-gray-100">
-                      <td colSpan={4} className="px-6 py-2">
-                        <div className="flex flex-wrap gap-3">
-                          {recentJobs.map(job => (
-                            <div key={job.id} className="flex items-center gap-2 text-xs text-gray-500">
-                              {statusBadge(job.status)}
-                              <span>{job.rowCount != null ? `${job.rowCount}행` : ''}</span>
-                              <span>{formatDate(job.startedAt)}</span>
-                              {job.errorMsg && (
-                                <span className="text-red-500 truncate max-w-xs">{job.errorMsg}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </>
-              )
-            })}
-          </tbody>
-        </table>
-      )}
-    </div>
-  )
+  sshEnabled: false,
+  sshHost: '',
+  sshPort: 22,
+  sshUser: '',
+  sshPrivateKey: '',
+  sshPassphrase: '',
+  autoDescribe: false,
 }
 
 export default function DataSourcesPage() {
   const qc = useQueryClient()
 
-  const [showModal, setShowModal] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId] = useState<number | null>(null)
   const [form, setForm] = useState<DataSourceRequest>(DEFAULT_FORM)
   const [formError, setFormError] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [showPw, setShowPw] = useState(false)
+  const [showPassphrase, setShowPassphrase] = useState(false)
   const [testResults, setTestResults] = useState<Record<number, ConnectionTestResult>>({})
   const [testingId, setTestingId] = useState<number | null>(null)
 
@@ -251,7 +70,17 @@ export default function DataSourcesPage() {
     mutationFn: (req: DataSourceRequest) => createDataSource(req),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-datasources'] })
-      closeModal()
+      closeForm()
+    },
+    onError: (err: unknown) => setFormError(errorMessage(err)),
+  })
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Partial<DataSourceRequest> }) =>
+      updateDataSource(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-datasources'] })
+      closeForm()
     },
     onError: (err: unknown) => setFormError(errorMessage(err)),
   })
@@ -262,22 +91,72 @@ export default function DataSourcesPage() {
     onError: (err: unknown) => setErrorMsg(errorMessage(err)),
   })
 
-  function openModal() {
+  const isSaving = createMut.isPending || updateMut.isPending
+
+  function openCreate() {
+    setEditId(null)
     setForm(DEFAULT_FORM)
     setFormError(null)
-    setShowModal(true)
+    setShowPw(false)
+    setShowPassphrase(false)
+    setShowForm(true)
   }
 
-  function closeModal() {
-    setShowModal(false)
+  function openEdit(ds: DataSource) {
+    setEditId(ds.id)
+    setForm({
+      name: ds.name,
+      description: ds.description ?? '',
+      dbType: ds.dbType,
+      host: ds.host,
+      port: ds.port,
+      dbName: ds.dbName,
+      username: ds.username,
+      password: '',
+      sshEnabled: ds.sshEnabled,
+      sshHost: ds.sshHost ?? '',
+      sshPort: ds.sshPort ?? 22,
+      sshUser: ds.sshUser ?? '',
+      sshPrivateKey: '',    // 보안상 서버에서 내려오지 않음
+      sshPassphrase: '',    // 보안상 서버에서 내려오지 않음
+    })
+    setFormError(null)
+    setShowPw(false)
+    setShowPassphrase(false)
+    setShowForm(true)
+  }
+
+  function closeForm() {
+    setShowForm(false)
+    setEditId(null)
     setForm(DEFAULT_FORM)
     setFormError(null)
+    setShowPw(false)
+    setShowPassphrase(false)
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setFormError(null)
-    createMut.mutate(form)
+    const body: Partial<DataSourceRequest> = { ...form }
+    if (!body.password) delete body.password
+    if (!body.sshEnabled) {
+      // SSH 비활성화 시 하위 필드만 제거 — sshEnabled 키 자체는 반드시 그대로 전송해야
+      // 수정 시 "SSH 껐는데 안 꺼짐" 버그가 생기지 않는다.
+      delete body.sshHost
+      delete body.sshPort
+      delete body.sshUser
+      delete body.sshPrivateKey
+      delete body.sshPassphrase
+    } else {
+      if (!body.sshPrivateKey) delete body.sshPrivateKey
+      if (!body.sshPassphrase) delete body.sshPassphrase
+    }
+    if (editId !== null) {
+      updateMut.mutate({ id: editId, body })
+    } else {
+      createMut.mutate(body as DataSourceRequest)
+    }
   }
 
   function handleDelete(ds: DataSource) {
@@ -301,10 +180,6 @@ export default function DataSourcesPage() {
     }
   }
 
-  function toggleExpand(id: number) {
-    setExpandedId(prev => (prev === id ? null : id))
-  }
-
   return (
     <div className="p-6">
       {/* 헤더 */}
@@ -314,7 +189,7 @@ export default function DataSourcesPage() {
           <h1 className="text-xl font-semibold text-gray-900">데이터소스</h1>
         </div>
         <button
-          onClick={openModal}
+          onClick={openCreate}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
         >
           <Plus size={15} />
@@ -332,6 +207,233 @@ export default function DataSourcesPage() {
           >
             닫기
           </button>
+        </div>
+      )}
+
+      {/* 등록/수정 인라인 폼 */}
+      {showForm && (
+        <div className="mb-6 bg-white border border-gray-200 rounded-xl p-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <h2 className="text-sm font-semibold text-gray-800">
+              {editId !== null ? '데이터소스 수정' : '새 데이터소스 등록'}
+            </h2>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="이름 *">
+                <input
+                  required
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="예: 운영 DB"
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="DB 종류">
+                <select
+                  value={form.dbType}
+                  onChange={e => setForm(f => ({ ...f, dbType: e.target.value }))}
+                  className={inputCls}
+                >
+                  <option value="mysql">MySQL</option>
+                  <option value="mariadb">MariaDB</option>
+                </select>
+              </Field>
+            </div>
+
+            <Field label="설명 (LLM 라우팅 힌트)">
+              <input
+                value={form.description ?? ''}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="이 DB에 어떤 데이터가 있는지 설명합니다. LLM이 DB 선택에 활용합니다."
+                className={inputCls}
+              />
+            </Field>
+
+            {editId === null && (
+              <label className="flex items-start gap-2 cursor-pointer select-none bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={!!form.autoDescribe}
+                  onChange={e => setForm(f => ({ ...f, autoDescribe: e.target.checked }))}
+                  className="w-4 h-4 mt-0.5 rounded accent-blue-600"
+                />
+                <span className="text-sm text-blue-800">
+                  테이블·컬럼 설명 자동 생성
+                  <span className="block text-xs text-blue-600 mt-0.5">
+                    등록 후 LLM이 각 테이블·컬럼의 의미를 자동으로 채웁니다. (DB COMMENT가 있으면 우선 사용)
+                  </span>
+                </span>
+              </label>
+            )}
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2">
+                <Field label="DB 호스트 *">
+                  <input
+                    required
+                    value={form.host}
+                    onChange={e => setForm(f => ({ ...f, host: e.target.value }))}
+                    placeholder="예: 127.0.0.1"
+                    className={inputCls}
+                  />
+                </Field>
+              </div>
+              <Field label="포트">
+                <input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={form.port}
+                  onChange={e => setForm(f => ({ ...f, port: Number(e.target.value) }))}
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="데이터베이스명 *">
+                <input
+                  required
+                  value={form.dbName}
+                  onChange={e => setForm(f => ({ ...f, dbName: e.target.value }))}
+                  placeholder="예: mydb"
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="사용자명 *">
+                <input
+                  required
+                  value={form.username}
+                  onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+                  placeholder="예: root"
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+
+            <Field label={editId !== null ? '비밀번호 (변경 시만 입력)' : '비밀번호 *'}>
+              <div className="relative">
+                <input
+                  required={editId === null}
+                  type={showPw ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                  placeholder={editId !== null ? '변경하지 않으면 비워두세요' : '••••••••'}
+                  className={inputCls + ' pr-9'}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw(v => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </Field>
+
+            {/* SSH 터널 섹션 */}
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!form.sshEnabled}
+                  onChange={e => setForm(f => ({ ...f, sshEnabled: e.target.checked }))}
+                  className="w-4 h-4 rounded accent-blue-600"
+                />
+                <Terminal size={14} className="text-gray-500" />
+                <span className="text-sm font-medium text-gray-700">SSH 터널 사용</span>
+                <span className="text-xs text-gray-400">— Bastion EC2 경유 + PEM 키 인증</span>
+              </label>
+
+              {form.sshEnabled && (
+                <div className="space-y-3 pt-1 border-t border-gray-100">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="col-span-2">
+                      <Field label="Bastion 호스트 *">
+                        <input
+                          required={!!form.sshEnabled}
+                          value={form.sshHost ?? ''}
+                          onChange={e => setForm(f => ({ ...f, sshHost: e.target.value }))}
+                          placeholder="3.36.255.123"
+                          className={inputCls}
+                        />
+                      </Field>
+                    </div>
+                    <Field label="SSH 포트">
+                      <input
+                        type="number"
+                        value={form.sshPort ?? 22}
+                        onChange={e => setForm(f => ({ ...f, sshPort: Number(e.target.value) }))}
+                        className={inputCls}
+                      />
+                    </Field>
+                  </div>
+
+                  <Field label="SSH 사용자명 *">
+                    <input
+                      required={!!form.sshEnabled}
+                      value={form.sshUser ?? ''}
+                      onChange={e => setForm(f => ({ ...f, sshUser: e.target.value }))}
+                      placeholder="ec2-user"
+                      className={inputCls}
+                    />
+                  </Field>
+
+                  <Field label={editId !== null ? 'PEM 개인키 (변경 시만 입력)' : 'PEM 개인키 *'}>
+                    <textarea
+                      required={editId === null && !!form.sshEnabled}
+                      value={form.sshPrivateKey ?? ''}
+                      onChange={e => setForm(f => ({ ...f, sshPrivateKey: e.target.value }))}
+                      placeholder={'-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----'}
+                      rows={6}
+                      className={inputCls + ' font-mono text-xs resize-y'}
+                    />
+                    <p className="mt-1 text-xs text-gray-400">PEM 파일 내용을 그대로 붙여넣으세요. 서버에서 암호화 저장됩니다.</p>
+                  </Field>
+
+                  <Field label="Passphrase (없으면 비워두세요)">
+                    <div className="relative">
+                      <input
+                        type={showPassphrase ? 'text' : 'password'}
+                        value={form.sshPassphrase ?? ''}
+                        onChange={e => setForm(f => ({ ...f, sshPassphrase: e.target.value }))}
+                        placeholder="PEM 키에 passphrase가 없으면 비워두세요"
+                        className={inputCls + ' pr-9'}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassphrase(v => !v)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPassphrase ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                  </Field>
+                </div>
+              )}
+            </div>
+
+            {formError && (
+              <p className="text-sm text-red-500">오류: {formError}</p>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-sm font-medium"
+              >
+                {isSaving ? '저장 중…' : editId !== null ? '저장' : '등록'}
+              </button>
+              <button
+                type="button"
+                onClick={closeForm}
+                className="text-gray-500 hover:text-gray-700 px-3 py-1.5 text-sm"
+              >
+                취소
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
@@ -361,106 +463,85 @@ export default function DataSourcesPage() {
                 </thead>
                 <tbody>
                   {dataSources.map(ds => (
-                    <>
-                      <tr
-                        key={ds.id}
-                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900">{ds.name}</div>
-                          {ds.description && (
-                            <div className="text-xs text-gray-400 mt-0.5">{ds.description}</div>
+                    <tr
+                      key={ds.id}
+                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900">{ds.name}</span>
+                          {ds.sshEnabled && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700">
+                              <Terminal size={10} /> SSH
+                            </span>
                           )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="font-mono text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
-                            {ds.dbType}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-xs text-gray-600 font-mono">
-                          {ds.host}:{ds.port} / {ds.dbName}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                              ds.isActive
-                                ? 'bg-green-50 text-green-700 border-green-200'
-                                : 'bg-gray-100 text-gray-400 border-gray-200'
-                            }`}
+                        </div>
+                        {ds.description && (
+                          <div className="text-xs text-gray-400 mt-0.5">{ds.description}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
+                          {ds.dbType}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-600 font-mono">
+                        {ds.host}:{ds.port} / {ds.dbName}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                            ds.isActive
+                              ? 'bg-green-50 text-green-700 border-green-200'
+                              : 'bg-gray-100 text-gray-400 border-gray-200'
+                          }`}
+                        >
+                          {ds.isActive ? '활성' : '비활성'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* 연결 테스트 결과 인라인 표시 */}
+                          {testResults[ds.id] && (
+                            <span
+                              className={`flex items-center gap-1 text-xs ${
+                                testResults[ds.id].connected ? 'text-green-600' : 'text-red-500'
+                              }`}
+                            >
+                              {testResults[ds.id].connected ? (
+                                <CheckCircle size={12} />
+                              ) : (
+                                <XCircle size={12} />
+                              )}
+                              {testResults[ds.id].message}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => handleTest(ds)}
+                            disabled={testingId === ds.id}
+                            className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded transition-colors disabled:opacity-50"
+                            title="연결 테스트"
                           >
-                            {ds.isActive ? '활성' : '비활성'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* 연결 테스트 결과 인라인 표시 */}
-                            {testResults[ds.id] && (
-                              <span
-                                className={`flex items-center gap-1 text-xs ${
-                                  testResults[ds.id].connected ? 'text-green-600' : 'text-red-500'
-                                }`}
-                              >
-                                {testResults[ds.id].connected ? (
-                                  <CheckCircle size={12} />
-                                ) : (
-                                  <XCircle size={12} />
-                                )}
-                                {testResults[ds.id].message}
-                              </span>
-                            )}
-                            <button
-                              onClick={() => handleTest(ds)}
-                              disabled={testingId === ds.id}
-                              className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                              title="연결 테스트"
-                            >
-                              <RefreshCw size={12} className={testingId === ds.id ? 'animate-spin' : ''} />
-                              연결 테스트
-                            </button>
-                            <Link
-                              to={`/admin/datasources/${ds.id}/rag-tables`}
-                              className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
-                              title="RAG 테이블 관리"
-                            >
-                              <Layers size={12} />
-                              RAG 테이블
-                            </Link>
-                            <Link
-                              to={`/admin/datasources/${ds.id}/sql-tables`}
-                              className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
-                              title="SQL 테이블 관리"
-                            >
-                              <TableProperties size={12} />
-                              SQL 테이블
-                            </Link>
-                            <button
-                              onClick={() => toggleExpand(ds.id)}
-                              className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded transition-colors"
-                              title="테이블 관리"
-                            >
-                              {expandedId === ds.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                              테이블 관리
-                            </button>
-                            <button
-                              onClick={() => handleDelete(ds)}
-                              disabled={deleteMut.isPending}
-                              className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                              title="삭제"
-                            >
-                              <Trash2 size={12} />
-                              삭제
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                      {expandedId === ds.id && (
-                        <tr key={`${ds.id}-panel`} className="bg-gray-50">
-                          <td colSpan={5} className="px-6 py-4">
-                            <TablePanel ds={ds} />
-                          </td>
-                        </tr>
-                      )}
-                    </>
+                            <RefreshCw size={14} className={testingId === ds.id ? 'animate-spin' : ''} />
+                          </button>
+                          <button
+                            onClick={() => openEdit(ds)}
+                            className="text-gray-400 hover:text-gray-700 hover:bg-gray-100 p-1.5 rounded transition-colors"
+                            title="수정"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(ds)}
+                            disabled={deleteMut.isPending}
+                            className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition-colors disabled:opacity-50"
+                            title="삭제"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -468,165 +549,20 @@ export default function DataSourcesPage() {
           )}
         </>
       )}
+    </div>
+  )
+}
 
-      {/* 추가 모달 */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 flex flex-col max-h-[90vh]">
-            {/* 모달 헤더 */}
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
-              <h2 className="text-base font-semibold text-gray-900">데이터소스 추가</h2>
-              <button
-                onClick={closeModal}
-                className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none"
-              >
-                ×
-              </button>
-            </div>
+// ── helpers ──────────────────────────────────────────────────────────────────
 
-            {/* 모달 본문 */}
-            <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-              <div className="px-6 py-4 flex flex-col gap-4 flex-1 overflow-y-auto">
-                {/* name */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    이름 <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    required
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    placeholder="예: 운영 DB"
-                    className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+const inputCls =
+  'w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
-                {/* description */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">설명</label>
-                  <input
-                    value={form.description ?? ''}
-                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                    placeholder="선택 입력"
-                    className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                {/* dbType */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    DB 타입 <span className="text-red-400">*</span>
-                  </label>
-                  <select
-                    required
-                    value={form.dbType}
-                    onChange={e => setForm(f => ({ ...f, dbType: e.target.value }))}
-                    className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  >
-                    <option value="mysql">MySQL</option>
-                    <option value="mariadb">MariaDB</option>
-                  </select>
-                </div>
-
-                {/* host */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    호스트 <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    required
-                    value={form.host}
-                    onChange={e => setForm(f => ({ ...f, host: e.target.value }))}
-                    placeholder="예: 127.0.0.1"
-                    className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                {/* port */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    포트 <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    required
-                    type="number"
-                    min={1}
-                    max={65535}
-                    value={form.port}
-                    onChange={e => setForm(f => ({ ...f, port: Number(e.target.value) }))}
-                    className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                {/* dbName */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    데이터베이스명 <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    required
-                    value={form.dbName}
-                    onChange={e => setForm(f => ({ ...f, dbName: e.target.value }))}
-                    placeholder="예: mydb"
-                    className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                {/* username */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    사용자명 <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    required
-                    value={form.username}
-                    onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
-                    placeholder="예: root"
-                    className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                {/* password */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    비밀번호 <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    required
-                    type="password"
-                    value={form.password}
-                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                    placeholder="••••••••"
-                    className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                {formError && (
-                  <p className="text-xs text-red-500">오류: {formError}</p>
-                )}
-              </div>
-
-              {/* 모달 푸터 */}
-              <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="text-gray-500 hover:text-gray-700 px-4 py-1.5 text-sm transition-colors"
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMut.isPending}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
-                >
-                  {createMut.isPending ? '저장 중…' : '추가'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+      {children}
     </div>
   )
 }

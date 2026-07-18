@@ -5,6 +5,8 @@ import com.ragvault.widget.domain.DsSyncJob;
 import com.ragvault.widget.repository.DsSyncJobRepository;
 import com.ragvault.core.service.DataSourceConfigService;
 import com.ragvault.core.service.DataSourceConfigService.ConnectionTestResult;
+import com.ragvault.core.service.DataSourceAutoSetupService;
+import com.ragvault.core.service.RoutingEmbeddingService;
 import com.ragvault.core.dto.DataSourceRequest;
 import com.ragvault.widget.service.DsSyncService;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +36,8 @@ public class AdminDataSourceController {
     private final DataSourceConfigService dsConfigService;
     private final DsSyncService dsSyncService;
     private final DsSyncJobRepository syncJobRepository;
+    private final DataSourceAutoSetupService dataSourceAutoSetupService;
+    private final RoutingEmbeddingService routingEmbeddingService;
 
     // -----------------------------------------------------------------------
     // 응답/요청 레코드
@@ -41,14 +45,17 @@ public class AdminDataSourceController {
 
     record DataSourceResponse(Integer id, String name, String description, String dbType,
                               String host, int port, String dbName, String username,
-                              boolean isActive, Instant createdAt, Instant updatedAt) {}
+                              boolean isActive, boolean sshEnabled, String sshHost,
+                              Integer sshPort, String sshUser,
+                              Instant createdAt, Instant updatedAt) {}
     record SyncJobResponse(Integer id, Integer datasourceId, String tableName, String status,
                            Integer rowCount, String errorMsg, Instant startedAt, Instant finishedAt) {}
 
     private DataSourceResponse toResponse(DataSourceConfig ds) {
         return new DataSourceResponse(ds.getId(), ds.getName(), ds.getDescription(), ds.getDbType(),
                 ds.getHost(), ds.getPort(), ds.getDbName(), ds.getUsername(),
-                ds.isActive(), ds.getCreatedAt(), ds.getUpdatedAt());
+                ds.isActive(), ds.isSshEnabled(), ds.getSshHost(), ds.getSshPort(), ds.getSshUser(),
+                ds.getCreatedAt(), ds.getUpdatedAt());
     }
 
     private SyncJobResponse toResponse(DsSyncJob j) {
@@ -68,13 +75,16 @@ public class AdminDataSourceController {
     @PostMapping
     public ResponseEntity<DataSourceResponse> create(@RequestBody DataSourceRequest req) {
         DataSourceConfig saved = dsConfigService.create(req);
+        dataSourceAutoSetupService.setupAsync(saved.getId(), Boolean.TRUE.equals(req.autoDescribe()));
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(saved));
     }
 
     @PatchMapping("/{id}")
     public ResponseEntity<DataSourceResponse> update(@PathVariable Integer id,
                                                      @RequestBody DataSourceRequest req) {
-        return ResponseEntity.ok(toResponse(dsConfigService.update(id, req)));
+        DataSourceConfig updated = dsConfigService.update(id, req);
+        routingEmbeddingService.reindexDatasource(id);
+        return ResponseEntity.ok(toResponse(updated));
     }
 
     @DeleteMapping("/{id}")

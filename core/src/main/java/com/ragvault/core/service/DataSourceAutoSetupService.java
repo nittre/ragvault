@@ -1,4 +1,4 @@
-package com.ragservice.rag.service;
+package com.ragvault.core.service;
 
 import com.ragvault.core.service.SchemaInspectorService;
 import com.ragvault.core.service.DataSourceConfigService;

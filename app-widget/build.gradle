@@ -53,6 +53,7 @@ dependencies {
 
     // 외부 데이터소스 — MySQL/MariaDB 동기화
     runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client:3.5.2'
 
     // text-to-sql — JSqlParser 기반 SQL AST 검증 (Layer 1)
     implementation 'com.github.jsqlparser:jsqlparser:4.9'
