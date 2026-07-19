@@ -76,10 +76,12 @@ export default function ConversationList({ className = '' }: ConversationListPro
     togglePin(id)
   }
 
-  const handleDelete = (e: React.MouseEvent, id: string) => {
+  const handleDelete = (e: React.MouseEvent, id: string, title: string) => {
     e.stopPropagation()
     setMenuOpenId(null)
-    deleteConversation(id)
+    if (window.confirm(`'${title}' 대화를 삭제하시겠습니까?`)) {
+      deleteConversation(id)
+    }
   }
 
   return (
@@ -181,7 +183,7 @@ export default function ConversationList({ className = '' }: ConversationListPro
                   </button>
                   <hr className="my-1 border-gray-100" />
                   <button
-                    onClick={e => handleDelete(e, conv.id)}
+                    onClick={e => handleDelete(e, conv.id, conv.title)}
                     className="flex items-center gap-2 w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 transition-colors"
                   >
                     <Trash2 size={13} />
