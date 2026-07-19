@@ -52,7 +52,7 @@ public class DocumentChunkRepositoryImpl implements DocumentChunkRepositoryCusto
                        CAST(1 - (embedding <=> CAST(:embedding AS vector)) AS double precision) AS score
                 FROM document_chunks
                 WHERE (embedding <=> CAST(:embedding AS vector)) < CAST(:maxDistance AS double precision)
-                  AND (:datasourceId IS NULL OR datasource_id = :datasourceId OR datasource_id IS NULL)
+                  AND (CAST(:datasourceId AS INTEGER) IS NULL OR datasource_id = CAST(:datasourceId AS INTEGER) OR datasource_id IS NULL)
                 ORDER BY embedding <=> CAST(:embedding AS vector)
                 LIMIT :topK
                 """;
