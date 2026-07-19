@@ -88,6 +88,7 @@ com.ragservice.rag
 ├── domain/       ApiKey, AuditLog, BusinessKnowledge, Binlog*, SyncJob, *Param* …
 │   └── converter/  JPA 컨버터
 ├── repository/   Spring Data JPA
+├── aspect/       AuditLogAspect(@Auditable 어노테이션 처리 — core 모듈 참고)
 ├── filter/       JwtAuthFilter, ApiKeyAuthFilter, TrustedHeaderFilter
 ├── security/     SsrfGuard, InputValidator
 ├── config/       SecurityConfig, AiConfig, AwsConfig, SyncConfig, AdminSpaConfig, Core*Config

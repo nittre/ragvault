@@ -73,6 +73,7 @@ com.ragvault.widget
 ├── service/      WidgetRag·TextToSql·KnowledgeIngestion·DsSync·SiteKey·SearchConfig …
 ├── domain/       SiteKey, ConversationLog, AuditLog, DsSyncJob, DsRagTable
 ├── repository/   Spring Data JPA
+├── aspect/       AuditLogAspect(@Auditable 어노테이션 처리 — core 모듈 참고)
 ├── filter/       SiteKeyFilter(공개), JwtAuthFilter(어드민)
 ├── security/     InputValidator
 ├── config/       SecurityConfig, WebConfig, AiConfig, AsyncConfig, CacheConfig, Core*Config

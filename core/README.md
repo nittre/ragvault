@@ -43,6 +43,7 @@ ragvault 의 **공유 라이브러리 모듈**입니다. 챗 서비스(`app-inte
 - `service/JwtService` — JWT 발급·검증(JJWT 0.12.6)
 - `service/RagUserService`, `domain/RagUser`, `domain/RagRole` — 사용자·역할, BCrypt 비밀번호
 - `security/PiiMasker`, `domain/MaskingRule`, `repository/MaskingRuleRepository` — PII 마스킹 규칙
+- `security/Auditable` — 감사 로그 자동 기록 마커 어노테이션(SpEL 기반). app-internal/app-widget이 각자 구현한 `AuditLogAspect`가 이 어노테이션이 붙은 메서드를 처리한다(개발자 매뉴얼 6-3 참고)
 - `service/SensitivityAnalysisService` — 민감도 분석(`@Async`). 테이블 `data_sensitivity` 라벨 산정에 사용
 - `dto/LoginRequest`, `LoginResponse`, `dto/DataSourceRequest`
 
@@ -100,7 +101,7 @@ com.ragvault.core
 ├── prompt/        classpath 프롬프트 템플릿 로더(PromptLoader)
 ├── service/       핵심 비즈니스 로직 (임베딩·SQL·파싱·암호화·JWT·사용자·binlog 동기화·OCR·알림)
 │   └── parser/    멀티포맷 문서 파서 계층 (Router → Tika/PDF/Markdown, OCR 폴백)
-├── security/      PiiMasker
+├── security/      PiiMasker, Auditable(감사 로그 자동 기록 마커 어노테이션)
 └── util/          DailyCountFiller
 ```
 
