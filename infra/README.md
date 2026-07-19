@@ -37,7 +37,7 @@ docker compose -f infra/compose.dev.yml --env-file infra/.env.dev up -d
 | 서비스 | 이미지 | 역할 | 포트(로컬) |
 |--------|--------|------|-----------|
 | `ollama` | ollama/ollama | LLM/임베딩/비전 추론 (`OLLAMA_MAX_LOADED_MODELS=2`) | 11434 |
-| `ollama-init` | ollama/ollama | 기동 시 `bge-m3`·`qwen2.5:3b` 자동 pull (1회) | — |
+| `ollama-init` | ollama/ollama | 기동 시 `bge-m3`·`qwen2.5:3b`·`qwen2.5vl:7b` 자동 pull (1회) | — |
 | `pgvector` | pgvector/pgvector:pg16 | 벡터 DB — `ragdb`(챗) + `widget_db`(위젯) | 5432 |
 
 ### 챗 스택 (internal)
@@ -67,11 +67,12 @@ docker compose -f infra/compose.dev.yml --env-file infra/.env.dev up -d
 | 경로 | 역할 |
 |------|------|
 | `pg-init/01-widget-db.sh` | pgvector 최초 기동 시 `widget_db`·`widget` 유저 자동 생성(챗/위젯 DB 분리) |
-| `internal/mysql-init/01-grants.sql` | mysql-sample 권한 부여 |
+| `internal/mysql-init/01-grants.sql` | mysql-sample 권한 부여(binlog REPLICATION) |
+| `internal/mysql-init/02-schema-data.sql` | customer_sample 스키마·샘플 데이터(RAG 동기화 테스트용) |
 | `internal/mariadb-init/*.sql` | mariadb-board 스키마·시드 |
 | `internal/searxng/settings.yml` | SearXNG 설정 |
 | `widget/mariadb-init/*.sql` | shop-mariadb 스키마·시드 |
-| `widget/nginx/widget-nginx.conf` | 위젯 데모 Nginx — 정적 서빙 + `/api` 백엔드 프록시 |
+| `widget/nginx/widget-nginx.conf` | 위젯 데모 Nginx — 정적 서빙 + `/v1` 백엔드 프록시 |
 
 ---
 

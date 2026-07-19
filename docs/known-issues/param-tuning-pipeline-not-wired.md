@@ -1,8 +1,31 @@
-# 채팅 파라미터 튜닝(ADR-0005)이 실제 파이프라인에 배선되지 않음
+# 채팅 파라미터 튜닝(ADR-0005)이 실제 파이프라인에 배선되지 않음 — 해결됨
 
-**상태**: 미해결 — 후속 작업 필요
+**상태**: ✅ 해결됨 — 커밋 `cbc671a`(Stage2/4/5 제거 + 전역/세션 2단계로 단순화) 및 마이그레이션 `V36`~`V38`로 아래 "미해결 문제" 절에서 지목한 9개 파라미터 + Guard B 3종이 모두 실제 실행 경로에 배선되었다. 이 문서는 **문제가 무엇이었는지·왜 발생했는지에 대한 히스토리 기록용**으로 남겨둔다(아래 "미해결 문제" 절은 최초 작성 시점 기준이며 더 이상 현재 상태를 반영하지 않는다).
+
+## 해결 확인 (2026-07-19 재검증)
+
+`developer-manual.md`를 코드와 재대조하던 중 사용자가 "13개 파라미터를 전부 소비하도록 고쳤다"고 지적해 실제 코드를 다시 확인했다. 아래처럼 전부 배선되어 있음을 확인함:
+
+| 파라미터 | 배선 위치 |
+|---|---|
+| `top_k` | `RagService.java:97` |
+| `similarity_threshold` | `RagService.java:98` |
+| `temperature` | `RagService.java:131,139` |
+| `top_p` | `RagService.java:132` |
+| `max_tokens` | `RagService.java:133` |
+| `max_context_tokens`(Guard B) | `RagService.java:120` |
+| `query_timeout_sec` | `TextToSqlService.java:145` → `SqlExecutorService.execute(sql, dsId, timeout, rows)`(4-arg 오버로드):92 |
+| `max_result_rows` | `TextToSqlService.java:146` → 위와 동일 오버로드:93 |
+| `sql_temperature`(Guard B) | `TextToSqlService.java:144` |
+| `sql_few_shot_examples`(Guard B) | `TextToSqlService.java:138` |
+| `force_path` | `QueryRouterService.java:113-118`(슬래시 커맨드 없을 때만 폴백 적용) |
+| `hybrid_synthesis_style` | `HybridQueryService.java:108` |
+| `max_history_turns` | (아래 "이번 작업에서 이미 고친 것" 참고 — 이전부터 정상 배선) |
+
+추가로 `V38__drop_unused_param_stages.sql`이 기존 4~5단계 우선순위 체인(Stage2=`search_config`, Stage4=`user_param_profiles`, Stage5=`conversation_param_overrides`)을 제거하고 Stage1(`admin_param_limits` 전역 기본값)+Stage2(요청 body 세션 오버라이드)+Guard A/B의 단순한 2단계+2가드 구조로 통합했다(`ParameterResolver.java` 현재 구현과 일치).
+
 **연관 플랜**: `.claude/plans/iridescent-baking-pine.md` ("챗 어드민 파라미터 한도 vs 채팅 화면 파라미터 설정 불일치" 원인 분석, A/B 섹션)
-**이 문서가 만들어진 배경**: 위 플랜에서 "어드민 파라미터 한도와 채팅 화면 설정이 다르게 보인다"는 문제를 조사하다가, UI가 어드민 한도를 조회하지 않는 문제(이미 수정 완료)와는 별개로 훨씬 근본적인 문제를 발견했다. 이 문서는 그중 **이번 작업 범위에서 제외하고 별도로 분리한 부분**만 다룬다.
+**이 문서가 만들어진 배경**: 위 플랜에서 "어드민 파라미터 한도와 채팅 화면 설정이 다르게 보인다"는 문제를 조사하다가, UI가 어드민 한도를 조회하지 않는 문제(이미 수정 완료)와는 별개로 훨씬 근본적인 문제를 발견했다. 이 문서는 그중 **이번 작업 범위에서 제외하고 별도로 분리한 부분**만 다뤘으나, 이후 별도로 전부 해결되었다(위 참고).
 
 ## 이번 작업에서 이미 고친 것 (참고용, 이 문서의 대상 아님)
 
@@ -12,7 +35,9 @@
 - **프론트(camelCase: `topK`, `threshold`, `topP`, `maxTokens`, `queryTimeoutSec`, `maxResultRows`, `forcePath`, `hybridStyle`, `maxHistoryTurns`) ↔ 백엔드(snake_case: `top_k`, `similarity_threshold`, `top_p`, `max_tokens`, `query_timeout_sec`, `max_result_rows`, `force_path`, `hybrid_synthesis_style`, `max_history_turns`) 키 이름 불일치** → `frontend/internal/src/utils/ragParamKeys.ts` 매핑을 추가해 수정 완료. 이 버그 때문에 `temperature`(우연히 이름이 같음)를 제외한 모든 파라미터가 `rag_params`로 보내도 서버에서 전혀 인식되지 않고 있었다.
 - 키 매핑 수정 덕분에 `max_history_turns`는 이제 요청 단위로 실제로 적용된다(`ChatController.resolveMaxHistoryMessages()`가 이 값을 실제로 소비하기 때문).
 
-## 이 문서가 다루는 미해결 문제
+## 이 문서가 다루는 (당시) 미해결 문제 — 현재는 모두 해결됨, 히스토리 참고용
+
+> 아래 표는 **최초 작성 시점**의 문제 상황이다. 위 "해결 확인" 절 참고.
 
 키 매핑을 고쳐도, 아래 9개 파라미터는 **애초에 실제 RAG/SQL/LLM 실행 경로 어디에서도 소비되지 않기 때문에** 사용자가 어떤 값을 선택하든(그리고 어드민이 어떤 한도를 걸든) 채팅 동작에 영향이 없다.
 

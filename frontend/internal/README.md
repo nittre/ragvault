@@ -11,7 +11,8 @@
 
 - **채팅** (`src/pages/ChatPage.tsx`, `src/components/chat`) — RAG 답변 스트리밍/표시, 마크다운(react-markdown + remark-gfm) 렌더, 출처 표기, 파일/이미지 업로드(heic2any 로 HEIC 변환)
 - **로그인** (`src/pages/LoginPage.tsx`) — JWT 인증
-- **어드민 콘솔** (`src/pages/admin/`) — 사용자, API Key, 데이터소스, DDL 이벤트, 지식/지식문서, 마스킹 규칙, 파라미터 한도, RAG/SQL 테이블, SQL 로그, 사용 통계 페이지
+- **설정** (`src/pages/SettingsPage.tsx`) — 비밀번호 변경
+- **어드민 콘솔** (`src/pages/admin/`) — 사용자, API Key, 데이터소스, DDL 이벤트, 지식/지식문서, 마스킹 규칙, 파라미터 한도, RAG/SQL 테이블, SQL 로그, 감사 로그, 사용 통계 페이지
 
 ```
 src/pages/admin/
@@ -44,15 +45,16 @@ src/pages/admin/
 ```
 src/
 ├── main.tsx / App.tsx    엔트리 · 라우팅
-├── pages/                ChatPage, LoginPage, admin/*
+├── pages/                ChatPage, LoginPage, SettingsPage, admin/*
 ├── components/           chat/ · admin/ · common/
 ├── api/                  axios API 클라이언트 (백엔드 호출)
 ├── stores/               Zustand 스토어 (인증·UI 상태)
 ├── types/                TypeScript 타입
+├── utils/                TypeScript 유틸(ragParamKeys 등)
 └── index.css             Tailwind
 ```
 
-빌드 산출물(`dist/`)은 Nginx 가 서빙하고, `/api` 요청은 `nginx.conf` 가 백엔드로 프록시합니다.
+빌드 산출물(`dist/`)은 Nginx 가 서빙하고, `/api`·`/v1` 요청은 `nginx.conf` 가 백엔드로 프록시합니다.
 
 ---
 

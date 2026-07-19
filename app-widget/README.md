@@ -29,6 +29,7 @@
 - `service/TextToSqlService` — 고객사 DB 대상 자연어 → SQL (core SqlValidator 로 AST 검증)
 - `service/DsSyncService`, `service/InitialSyncService`, `domain/DsSyncJob`, `domain/DsRagTable` — 외부 datasource 동기화
 - `controller/AdminDataSourceController`, `AdminDsRagTableController`, `AdminDsSqlTableController`, `AdminSchemaController`, `AdminQueryController` — 데이터소스·RAG/SQL 테이블·스키마·쿼리 콘솔
+- `controller/AdminDdlController`, `AdminSyncController`, `AdminSyncModeController` — DDL 이벤트 조회, 수동/초기 동기화, 자동 동기화 모드 관리
 
 ### 어드민
 - `controller/SiteKeyController`, `service/SiteKeyService`, `domain/SiteKey` — Site-Key 발급/관리
@@ -36,12 +37,13 @@
 - `controller/MaskingRuleController`, `service/MaskingRuleService` — PII 마스킹 규칙
 - `controller/AuditLogController`, `service/AuditLogService`, `domain/AuditLog` — 감사 로그
 - `controller/AdminUserMgmtController`, `AdminMeController`, `JwtAuthController` — 사용자·인증
-- `service/WhitelistSyncService`
+- `service/WhitelistSyncService`(core 모듈 — RAG/SQL 대상 테이블 화이트리스트 동기화)
 
 ### 인증 / 보안
 - `filter/SiteKeyFilter` — 공개 위젯 API 는 `X-Site-Key` 헤더 검증(`widget.security.allowed-site-keys` 화이트리스트)
 - `filter/JwtAuthFilter` — 어드민 API 는 JWT(httpOnly 쿠키) 인증
-- `config/SecurityConfig` — 위젯용 CORS(credentials=false, 고객 도메인 화이트리스트) + 어드민용 CORS(credentials=true)
+- `config/WebConfig` — 위젯용 CORS(credentials=false, 고객 도메인 화이트리스트) + 어드민용 CORS(credentials=true)
+- `config/SecurityConfig` — 인증/인가(JWT·Site-Key 필터 체인, `authorizeHttpRequests`) 담당 — CORS 는 `WebConfig` 담당
 - `security/InputValidator` — 입력·프롬프트 인젝션 방어
 
 ---
@@ -53,7 +55,7 @@
 | 프레임워크 | Spring Boot 3.5.0 (web, data-jpa, security, actuator) |
 | 공유 모듈 | `com.ragvault:core` |
 | AI | Spring AI 1.0.0 `spring-ai-starter-model-ollama` |
-| DB | PostgreSQL + pgvector (`widget_db`), Flyway(V1~V12) |
+| DB | PostgreSQL + pgvector (`widget_db`), Flyway(V1~V16) |
 | 외부 DB | mysql-connector-j (고객 datasource 동기화) |
 | SQL 검증 | JSqlParser 4.9 |
 | 인증 | JJWT 0.12.6 |
@@ -110,6 +112,10 @@ docker build -f app-widget/Dockerfile -t app-widget:latest .
 | `WIDGET_CORS_ORIGINS` | 위젯 삽입 고객 도메인 화이트리스트 |
 | `WIDGET_ADMIN_CORS_ORIGINS` | 어드민 SPA origin (credentials 허용) |
 | `WIDGET_CHAT_MODEL` / `WIDGET_VISION_MODEL` | 채팅·비전 모델 |
+| `WIDGET_EMBEDDING_MODEL` | 임베딩 모델(기본 `bge-m3`) |
+| `WIDGET_KNOWLEDGE_DIR` / `WIDGET_KNOWLEDGE_AUTO_LOAD` | 지식문서 자동 적재 디렉토리/여부 |
+| `WIDGET_AUTH_JWT_EXPIRY_HOURS` | 어드민 JWT 만료 시간 |
+| `TESSERACT_DATAPATH` | Tesseract OCR 언어 데이터 경로 |
 | `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` | 최초 관리자 계정 |
 
 헬스체크: `/actuator/health`.

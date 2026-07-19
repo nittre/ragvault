@@ -18,7 +18,11 @@
 - **마스킹** (`MaskingPage`) — PII 마스킹 규칙
 - **대화 로그** (`ConversationsPage`) — 방문자 대화 이력
 - **감사 로그 / 통계** (`AuditLogPage`, `StatsPage`)
+- **DDL 이벤트** (`DdlEventsPage`) — 데이터소스 스키마 변경 이력·위험도 표시
+- **설정** (`SettingsPage`) — 비밀번호 변경
 - **사용자** (`UsersPage`), 로그인 (`LoginPage`)
+
+> 위젯 임베드 스니펫 적용 방법, 데이터소스 동기화/드리프트 확인, SQL 테이블 민감도 배지 등 세부 동작은 `docs/manual/widget-admin-manual.md`·`docs/manual/admin-manual.md` 참고.
 
 ---
 

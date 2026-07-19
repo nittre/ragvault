@@ -10,7 +10,7 @@ ragvault 의 **공유 라이브러리 모듈**입니다. 챗 서비스(`app-inte
 
 ### RAG / 임베딩
 - `service/RoutingEmbeddingService` — 텍스트를 bge-m3 로 임베딩. 다중 소스 라우팅 지원
-- `service/ChunkingService` — 문서를 청크로 분할(LangChain4j 텍스트 분할기 기반)
+- `service/ChunkingService` — 문서를 청크로 분할(자체 구현 재귀 분할 — 구분자 우선순위 `"\n\n" > "\n" > ". " > " "`)
 - `domain/DocumentChunk`, `repository/DocumentChunkRepository(+Custom/Impl)` — pgvector 코사인 유사도 검색 커스텀 쿼리
 - `domain/RoutingEmbedding`, `repository/RoutingEmbeddingRepository(+Custom/Impl)` — 임베딩 저장/검색
 - `dto/CitationSource` — 답변 출처 표기 DTO
@@ -49,6 +49,22 @@ ragvault 의 **공유 라이브러리 모듈**입니다. 챗 서비스(`app-inte
 ### 검색 설정
 - `domain/SearchConfig`, `repository/SearchConfigRepository` — top-k / threshold 등 검색 파라미터
 
+### 외부 데이터소스 동기화
+- `service/BinlogSyncService` — MySQL binlog 기반 실시간 동기화, DDL 위험도 분류(`classifyDdlRisk`)
+- `service/DataSourceAutoSetupService` — 신규 데이터소스 자동 초기 설정(`@Async`)
+- `service/WhitelistSyncService` — RAG/SQL 대상 테이블 화이트리스트 동기화
+- `service/RagTableConfigService` — RAG 테이블 설정 관리
+- `domain/BinlogEvent`, `BinlogPosition`, `DdlEvent`, `SyncJob`, `SyncModeConfig`, `WebSearchExecutionLog` 및 각 Repository
+
+### OCR · 알림
+- `service/TesseractOcrService`/`TesseractOcrServiceImpl` — Tess4j 기반 OCR (`kor+eng`)
+- `service/parser/PdfOcrFallbackService` — PDF 텍스트 추출 실패 시 OCR 폴백 — ADR-0006
+- `service/DiscordNotifier` — Discord 웹훅 알림
+
+### 프롬프트 · 유틸
+- `prompt/PromptLoader` — classpath 프롬프트 템플릿 로더
+- `util/DailyCountFiller` — 통계용 일자별 카운트 채움 유틸
+
 ---
 
 ## 기술 스택
@@ -63,6 +79,9 @@ ragvault 의 **공유 라이브러리 모듈**입니다. 챗 서비스(`app-inte
 | SQL 파싱 | JSqlParser 4.9 |
 | 문서 파싱 | Apache Tika 2.9.2, opendataloader-pdf-core 1.11.0 |
 | SSH | Apache MINA SSHD 2.13.2, BouncyCastle 1.78.1 |
+| OCR | Tess4j 5.12.0 |
+| 외부 DB 동기화 | mysql-binlog-connector-java 0.29.2 |
+| 분산 락 | shedlock-spring 5.16.0 |
 | 유틸 | Lombok |
 
 > opendataloader-pdf 의 verapdf 의존성 때문에 `artifactory.openpreservation.org` 저장소를 추가로 사용합니다.
@@ -74,12 +93,15 @@ ragvault 의 **공유 라이브러리 모듈**입니다. 챗 서비스(`app-inte
 ```
 com.ragvault.core
 ├── domain/        JPA 엔티티 (RagUser, DocumentChunk, RoutingEmbedding,
-│                  SqlTableConfig, RagTableConfig, DataSourceConfig, MaskingRule …)
+│                  SqlTableConfig, RagTableConfig, DataSourceConfig, MaskingRule,
+│                  BinlogEvent, BinlogPosition, DdlEvent, SyncJob, SyncModeConfig …)
 ├── repository/    Spring Data JPA + Custom/Impl (pgvector 벡터 검색 커스텀 쿼리)
 ├── dto/           요청·응답 DTO (Login, DataSource, CitationSource)
-├── service/       핵심 비즈니스 로직 (임베딩·SQL·파싱·암호화·JWT·사용자)
-│   └── parser/    멀티포맷 문서 파서 계층 (Router → Tika/PDF/Markdown)
-└── security/      PiiMasker
+├── prompt/        classpath 프롬프트 템플릿 로더(PromptLoader)
+├── service/       핵심 비즈니스 로직 (임베딩·SQL·파싱·암호화·JWT·사용자·binlog 동기화·OCR·알림)
+│   └── parser/    멀티포맷 문서 파서 계층 (Router → Tika/PDF/Markdown, OCR 폴백)
+├── security/      PiiMasker
+└── util/          DailyCountFiller
 ```
 
 - **소비 관계**: `app-internal` / `app-widget` 이 core 의 service·domain 을 주입받아 사용합니다. 각 앱은 `CorePackageConfig` / `CoreServicesConfig` 로 core 패키지의 빈을 스캔합니다.

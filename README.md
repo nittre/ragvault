@@ -197,7 +197,7 @@ ragvault/
 
 | 레이어 | 기술 |
 |--------|------|
-| 언어/런타임 | Java 21, TypeScript 5.6, Node 22 |
+| 언어/런타임 | Java 21, TypeScript 5.6, Node 22(`frontend/internal`) / Node 20(`frontend/widget-admin`) |
 | 백엔드 | Spring Boot 3.5.0, Spring AI 1.0.0(Ollama), Spring Security, Spring Data JPA, Flyway |
 | LLM/임베딩 | Ollama — 채팅/비전 `qwen2.5vl:7b`(운영), 임베딩 `bge-m3` |
 | 벡터 DB | PostgreSQL 16 + pgvector |
@@ -367,3 +367,9 @@ Jenkins 파이프라인(수동 트리거)은 아래 4종입니다. 공통 흐름
 | [0003](docs/adr/0003-frontend-monorepo-integration.md) | 프론트엔드 모노레포 통합 |
 | [0004](docs/adr/0004-chat-service-knowledge-docs.md) | 챗 서비스 지식문서 관리 — SOURCE_TABLE 분리 |
 | [0005](docs/adr/0005-qwen25vl-unified-model.md) | qwen2.5vl:7b 단일 멀티모달 모델 통합 |
+| [0006](docs/adr/0006-pdf-ocr-fallback.md) | PDF 텍스트 추출 실패 시 Tesseract OCR 폴백 |
+| [0007](docs/adr/0007-multiturn-rag-retrieval.md) | 멀티턴 RAG — 검색 쿼리 재작성 및 WEB_SEARCH 폴백 |
+| [0008](docs/adr/0008-pii-masking-all-response-paths.md) | PII 마스킹 원칙 — 모든 LLM 응답 경로에 STANDARD 마스킹 적용 |
+| [0009](docs/adr/0009-phase0-admin-web-ui.md) | Phase 0 Admin Web UI — 계정 발급 메일·비밀번호 재설정 |
+| [0010](docs/adr/0010-response-raw-storage.md) | LLM 원본 응답 단기 저장소 — PII 마스킹 실패 진단 |
+| [0011](docs/adr/0011-self-issued-jwt-auth.md) | 자체 발급 JWT 인증으로 전환 (Open WebUI 세션 제거) |

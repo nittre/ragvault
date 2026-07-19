@@ -24,3 +24,6 @@ dist/
 .env.*
 !.env.example
 !.env.dev.example
+
+# Generated docs
+*.pdf

@@ -19,3 +19,7 @@ ragvault 프로젝트의 중요한 아키텍처·정책 결정을 기록한다.
 | [0005](0005-qwen25vl-unified-model.md) | qwen2.5vl:7b 단일 멀티모달 모델 통합 | Accepted | 2026-06-30 |
 | [0006](0006-pdf-ocr-fallback.md) | PDF 텍스트 추출 실패 시 Tesseract OCR 폴백 | Accepted | 2026-07-03 |
 | [0007](0007-multiturn-rag-retrieval.md) | 멀티턴 RAG — 검색 쿼리 재작성 및 WEB_SEARCH 폴백 | Accepted | 2026-07-03 |
+| [0008](0008-pii-masking-all-response-paths.md) | PII 마스킹 원칙 — 모든 LLM 응답 경로에 STANDARD 마스킹 적용 | Accepted | 2026-06-30 |
+| [0009](0009-phase0-admin-web-ui.md) | Phase 0 Admin Web UI — 계정 발급 메일·비밀번호 재설정·임베디드 관리자 셸 | Accepted | 2026-06-30 |
+| [0010](0010-response-raw-storage.md) | LLM 원본 응답 단기 저장소 — PII 마스킹 실패 진단 | Accepted | 2026-06-30 |
+| [0011](0011-self-issued-jwt-auth.md) | 자체 발급 JWT 인증으로 전환 (Open WebUI 세션 제거) | Accepted | 2026-06-30 |
