@@ -39,6 +39,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
 
     // JWT — JJWT 0.12.x (ADR-0011 동일 버전)
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'

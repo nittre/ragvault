@@ -2,9 +2,8 @@ package com.ragvault.widget.controller;
 
 import com.ragvault.core.domain.RagRole;
 import com.ragvault.core.domain.RagUser;
-import com.ragvault.widget.service.AuditLogService;
+import com.ragvault.core.security.Auditable;
 import com.ragvault.core.service.RagUserService;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -31,7 +30,6 @@ import java.util.List;
 public class AdminUserMgmtController {
 
     private final RagUserService ragUserService;
-    private final AuditLogService auditLogService;
 
     record UserResponse(
             String email,
@@ -56,52 +54,40 @@ public class AdminUserMgmtController {
         return ResponseEntity.ok(result);
     }
 
+    @Auditable(action = "'USER_CREATE'", targetType = "'rag_user'", targetId = "#req.email")
     @PostMapping
     public ResponseEntity<UserResponse> create(
             @RequestBody CreateUserRequest req,
-            Authentication authentication,
-            HttpServletRequest httpRequest) {
+            Authentication authentication) {
         String createdBy = authentication != null ? authentication.getName() : "unknown";
         RagUser user = ragUserService.createUser(req.email(), req.name(), req.role(), req.password(), createdBy);
-        auditLogService.log(createdBy, "USER_CREATE", "rag_user", req.email(), null,
-                httpRequest.getRemoteAddr());
         return ResponseEntity.status(201).body(toResponse(user));
     }
 
+    @Auditable(action = "'USER_UPDATE'", targetType = "'rag_user'", targetId = "#email")
     @PutMapping("/{email}")
     public ResponseEntity<UserResponse> update(
             @PathVariable String email,
             @RequestBody UpdateUserRequest req,
-            Authentication authentication,
-            HttpServletRequest httpRequest) {
+            Authentication authentication) {
         String updatedBy = authentication != null ? authentication.getName() : "unknown";
         RagUser user = ragUserService.updateUser(email, req.name(), req.role(), req.active(), updatedBy);
-        auditLogService.log(updatedBy, "USER_UPDATE", "rag_user", email, null,
-                httpRequest.getRemoteAddr());
         return ResponseEntity.ok(toResponse(user));
     }
 
+    @Auditable(action = "'USER_DELETE'", targetType = "'rag_user'", targetId = "#email")
     @DeleteMapping("/{email}")
-    public ResponseEntity<Void> delete(@PathVariable String email,
-                                        Authentication authentication,
-                                        HttpServletRequest httpRequest) {
-        String actor = authentication != null ? authentication.getName() : "unknown";
+    public ResponseEntity<Void> delete(@PathVariable String email) {
         ragUserService.deleteUser(email);
-        auditLogService.log(actor, "USER_DELETE", "rag_user", email, null,
-                httpRequest.getRemoteAddr());
         return ResponseEntity.noContent().build();
     }
 
     /** 다른 사용자의 비밀번호 강제 재설정 (SUPER_ADMIN 전용). 재설정 후 다음 로그인 시 변경 강제. */
+    @Auditable(action = "'USER_PASSWORD_RESET'", targetType = "'rag_user'", targetId = "#email")
     @PostMapping("/{email}/reset-password")
     public ResponseEntity<Void> resetPassword(@PathVariable String email,
-                                               @RequestBody ResetPasswordRequest req,
-                                               Authentication authentication,
-                                               HttpServletRequest httpRequest) {
-        String actor = authentication != null ? authentication.getName() : "unknown";
+                                               @RequestBody ResetPasswordRequest req) {
         ragUserService.initPassword(email, req.newPassword());
-        auditLogService.log(actor, "USER_PASSWORD_RESET", "rag_user", email, null,
-                httpRequest.getRemoteAddr());
         return ResponseEntity.ok().build();
     }
 

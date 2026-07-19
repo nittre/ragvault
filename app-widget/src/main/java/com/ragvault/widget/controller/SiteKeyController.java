@@ -1,18 +1,14 @@
 package com.ragvault.widget.controller;
 
+import com.ragvault.core.security.Auditable;
 import com.ragvault.widget.domain.SiteKey;
-import com.ragvault.widget.service.AuditLogService;
 import com.ragvault.widget.service.SiteKeyService;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
 import java.util.List;
 
 /**
@@ -28,7 +24,6 @@ import java.util.List;
 public class SiteKeyController {
 
     private final SiteKeyService siteKeyService;
-    private final AuditLogService auditLogService;
 
     // -----------------------------------------------------------------------
     // 요청 바디 레코드
@@ -68,10 +63,10 @@ public class SiteKeyController {
      * POST /admin/sitekeys
      * Site-key 생성. site_key 값은 자동 생성(pk_live_...).
      */
+    @Auditable(action = "'SITEKEY_CREATE'", targetType = "'site_key'",
+            targetId = "#result.body.siteKey", detail = "'label=' + #result.body.label")
     @PostMapping
-    public ResponseEntity<SiteKey> create(@RequestBody CreateRequest req,
-                                          @AuthenticationPrincipal UserDetails actor,
-                                          HttpServletRequest httpReq) {
+    public ResponseEntity<SiteKey> create(@RequestBody CreateRequest req) {
         SiteKey sk = new SiteKey();
         sk.setSiteKey(siteKeyService.generateKey());
         sk.setLabel(req.label());
@@ -82,14 +77,6 @@ public class SiteKeyController {
 
         SiteKey saved = siteKeyService.create(sk);
 
-        auditLogService.log(
-                actor != null ? actor.getUsername() : "unknown",
-                "SITEKEY_CREATE",
-                "site_key", saved.getSiteKey(),
-                "label=" + saved.getLabel(),
-                httpReq.getRemoteAddr()
-        );
-
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 
@@ -97,11 +84,11 @@ public class SiteKeyController {
      * PUT /admin/sitekeys/{id}
      * label, active, brandColor, botName, greeting, logoUrl 수정.
      */
+    @Auditable(action = "'SITEKEY_UPDATE'", targetType = "'site_key'", targetId = "#result.body.siteKey",
+            detail = "'label=' + #result.body.label + ',active=' + #result.body.active")
     @PutMapping("/{id}")
     public ResponseEntity<SiteKey> update(@PathVariable Long id,
-                                          @RequestBody UpdateRequest req,
-                                          @AuthenticationPrincipal UserDetails actor,
-                                          HttpServletRequest httpReq) {
+                                          @RequestBody UpdateRequest req) {
         // 기존 엔티티를 읽어서 null 필드는 기존 값 유지
         SiteKey existing = siteKeyService.findAll().stream()
                 .filter(s -> s.getId().equals(id))
@@ -118,14 +105,6 @@ public class SiteKeyController {
 
         SiteKey updated = siteKeyService.update(id, patch);
 
-        auditLogService.log(
-                actor != null ? actor.getUsername() : "unknown",
-                "SITEKEY_UPDATE",
-                "site_key", updated.getSiteKey(),
-                "label=" + updated.getLabel() + ",active=" + updated.isActive(),
-                httpReq.getRemoteAddr()
-        );
-
         return ResponseEntity.ok(updated);
     }
 
@@ -133,26 +112,9 @@ public class SiteKeyController {
      * DELETE /admin/sitekeys/{id}
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id,
-                                       @AuthenticationPrincipal UserDetails actor,
-                                       HttpServletRequest httpReq) {
-        // 감사 로그를 위해 삭제 전 키 값 조회
-        String siteKeyValue = siteKeyService.findAll().stream()
-                .filter(s -> s.getId().equals(id))
-                .findFirst()
-                .map(SiteKey::getSiteKey)
-                .orElse(String.valueOf(id));
-
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        // 감사 로그는 SiteKeyService.deleteById 의 @Auditable 가 처리한다.
         siteKeyService.deleteById(id);
-
-        auditLogService.log(
-                actor != null ? actor.getUsername() : "unknown",
-                "SITEKEY_DELETE",
-                "site_key", siteKeyValue,
-                null,
-                httpReq.getRemoteAddr()
-        );
-
         return ResponseEntity.noContent().build();
     }
 
@@ -160,31 +122,31 @@ public class SiteKeyController {
      * POST /admin/sitekeys/{id}/deactivate
      * active = false
      */
+    @Auditable(action = "'SITEKEY_UPDATE'", targetType = "'site_key'",
+            targetId = "#result.body.siteKey", detail = "'active=false'")
     @PostMapping("/{id}/deactivate")
-    public ResponseEntity<SiteKey> deactivate(@PathVariable Long id,
-                                               @AuthenticationPrincipal UserDetails actor,
-                                               HttpServletRequest httpReq) {
-        return setActive(id, false, actor, httpReq);
+    public ResponseEntity<SiteKey> deactivate(@PathVariable Long id) {
+        return setActive(id, false);
     }
 
     /**
      * POST /admin/sitekeys/{id}/activate
      * active = true
      */
+    @Auditable(action = "'SITEKEY_UPDATE'", targetType = "'site_key'",
+            targetId = "#result.body.siteKey", detail = "'active=true'")
     @PostMapping("/{id}/activate")
-    public ResponseEntity<SiteKey> activate(@PathVariable Long id,
-                                             @AuthenticationPrincipal UserDetails actor,
-                                             HttpServletRequest httpReq) {
-        return setActive(id, true, actor, httpReq);
+    public ResponseEntity<SiteKey> activate(@PathVariable Long id) {
+        return setActive(id, true);
     }
 
     // -----------------------------------------------------------------------
     // 내부 헬퍼
     // -----------------------------------------------------------------------
 
-    private ResponseEntity<SiteKey> setActive(Long id, boolean active,
-                                               UserDetails actor,
-                                               HttpServletRequest httpReq) {
+    // self-invocation 이므로 @Auditable 을 붙이지 않는다 (프록시를 거치지 않아 동작하지 않음).
+    // 감사 로그는 호출하는 public 엔드포인트(activate/deactivate)의 @Auditable 가 처리한다.
+    private ResponseEntity<SiteKey> setActive(Long id, boolean active) {
         SiteKey existing = siteKeyService.findAll().stream()
                 .filter(s -> s.getId().equals(id))
                 .findFirst()
@@ -199,14 +161,6 @@ public class SiteKeyController {
         patch.setLogoUrl(existing.getLogoUrl());
 
         SiteKey updated = siteKeyService.update(id, patch);
-
-        auditLogService.log(
-                actor != null ? actor.getUsername() : "unknown",
-                "SITEKEY_UPDATE",
-                "site_key", updated.getSiteKey(),
-                "active=" + active,
-                httpReq.getRemoteAddr()
-        );
 
         return ResponseEntity.ok(updated);
     }

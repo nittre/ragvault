@@ -1,5 +1,6 @@
 package com.ragvault.widget.service;
 
+import com.ragvault.core.security.Auditable;
 import com.ragvault.widget.domain.SiteKey;
 import com.ragvault.widget.dto.SiteKeyConfigDto;
 import com.ragvault.widget.repository.SiteKeyRepository;
@@ -104,14 +105,16 @@ public class SiteKeyService {
 
     /**
      * Site-key 삭제.
-     * 삭제 전 캐시 무효화.
+     * 삭제 전 캐시 무효화. 감사 로그를 위해 삭제된 엔티티를 반환한다.
      */
+    @Auditable(action = "'SITEKEY_DELETE'", targetType = "'site_key'", targetId = "#result.siteKey")
     @Transactional
-    public void deleteById(Long id) {
+    public SiteKey deleteById(Long id) {
         SiteKey existing = siteKeyRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("SiteKey not found: " + id));
         evictKeyCache(existing.getSiteKey());
         siteKeyRepository.deleteById(id);
+        return existing;
     }
 
     /**
