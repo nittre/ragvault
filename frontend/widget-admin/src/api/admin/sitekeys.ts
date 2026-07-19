@@ -37,13 +37,13 @@ export const createSiteKey = (body: CreateSiteKeyBody) =>
   apiClient.post<SiteKey>('/api/admin/sitekeys', body).then(r => r.data)
 
 export const updateSiteKey = (id: number, body: UpdateSiteKeyBody) =>
-  apiClient.put<SiteKey>(`/admin/sitekeys/${id}`, body).then(r => r.data)
+  apiClient.put<SiteKey>(`/api/admin/sitekeys/${id}`, body).then(r => r.data)
 
 export const deleteSiteKey = (id: number) =>
-  apiClient.delete(`/admin/sitekeys/${id}`)
+  apiClient.delete(`/api/admin/sitekeys/${id}`)
 
 export const activateSiteKey = (id: number) =>
-  apiClient.post<SiteKey>(`/admin/sitekeys/${id}/activate`).then(r => r.data)
+  apiClient.post<SiteKey>(`/api/admin/sitekeys/${id}/activate`).then(r => r.data)
 
 export const deactivateSiteKey = (id: number) =>
-  apiClient.post<SiteKey>(`/admin/sitekeys/${id}/deactivate`).then(r => r.data)
+  apiClient.post<SiteKey>(`/api/admin/sitekeys/${id}/deactivate`).then(r => r.data)
