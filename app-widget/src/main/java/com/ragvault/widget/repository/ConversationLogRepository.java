@@ -12,8 +12,8 @@ import java.util.List;
 
 public interface ConversationLogRepository extends JpaRepository<ConversationLog, Long> {
 
-    // 페이징 조회 (siteKey 필터)
-    Page<ConversationLog> findBySiteKey(String siteKey, Pageable pageable);
+    // 페이징 조회 (siteKey 필터, 부분/대소문자 무시 검색 — 사이트키는 사용자가 직접 타이핑하는 랜덤 문자열이라 완전 일치는 실사용에서 매칭이 거의 안 됨)
+    Page<ConversationLog> findBySiteKeyContainingIgnoreCase(String siteKey, Pageable pageable);
 
     // 기간별 건수 (통계용)
     @Query("SELECT COUNT(c) FROM ConversationLog c WHERE c.createdAt >= :from")

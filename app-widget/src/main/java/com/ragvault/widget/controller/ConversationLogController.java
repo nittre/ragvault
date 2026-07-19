@@ -43,7 +43,7 @@ public class ConversationLogController {
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
 
         if (siteKey != null && !siteKey.isBlank()) {
-            return conversationLogRepository.findBySiteKey(siteKey, pageable)
+            return conversationLogRepository.findBySiteKeyContainingIgnoreCase(siteKey.trim(), pageable)
                     .map(ConversationLogDto::from);
         }
         return conversationLogRepository.findAll(pageable)
