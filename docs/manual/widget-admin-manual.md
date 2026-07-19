@@ -89,6 +89,39 @@
 - 카드 하단 액션: **편집**(레이블·봇이름·인사말·브랜드색상·로고URL·활성화 여부 수정), **활성화/비활성화 토글**, **삭제**(확인창: "삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다")
 - 이 Site-Key 값이 고객사 웹사이트에 심는 `<script>` 스니펫의 `X-Site-Key` 인증에 사용됩니다.
 
+> **주의**: 카드의 복사 아이콘은 **site-key 문자열 자체만** 클립보드에 복사합니다. 아래 스니펫의 `<script>` 태그 전체를 자동으로 만들어주지는 않으므로, 고객사 개발팀에는 이 문자열을 아래 템플릿에 끼워 넣은 형태로 안내해야 합니다.
+
+### 실제 적용 방법 — 고객사 웹사이트에 삽입하기
+
+임베드 스니펫 소스는 `frontend/widget-embed/`(`loader.js`, `chat.html`, `demo.html`)에 있고, 위젯 어드민(`app-widget`)과는 별도의 정적 호스팅으로 배포됩니다(`infra/widget/nginx/widget-nginx.conf`) — 이 nginx는 `/v1/` 경로만 `app-widget:8081`로 프록시하고, 나머지 정적 파일(`loader.js`, `chat.html`)은 그대로 서빙합니다.
+
+**1) 고객사 페이지에 붙일 코드 (한 줄)**
+
+```html
+<script src="https://<위젯-호스팅-도메인>/loader.js"
+        data-site-key="<위 카드에서 복사한 site-key 값>"
+        async></script>
+```
+
+- `src`는 위 nginx가 서빙하는 위젯 호스팅 도메인의 `loader.js` 경로로 고정합니다(고객사마다 동일, `data-site-key`만 다름).
+- `data-api-base`는 **개발/데모 환경에서 백엔드가 다른 origin(포트)일 때만** 추가하는 속성입니다(`demo.html` 참고). 운영 환경에서는 위젯 도메인과 백엔드(API)가 같은 origin이므로 **생략**합니다.
+
+**2) 동작 원리 (`loader.js`)**
+
+1. `<script>` 태그의 `data-site-key`를 읽어 우하단에 💬 버블 버튼을 그립니다.
+2. 버블 클릭 시, 같은 도메인의 `chat.html?site=<site-key>`를 `iframe`으로 토글해 보여줍니다(고객 페이지의 CSS/JS와 충돌하지 않도록 iframe으로 격리).
+3. `chat.html`이 스스로를 닫아야 할 때는 `postMessage({type:'ragvault:close'}, ...)`로 부모(loader)에 알리고, loader는 `e.origin`이 위젯 자신의 origin일 때만 반응합니다(다른 origin의 메시지는 무시 — 보안).
+
+**3) `chat.html`이 백엔드와 통신하는 방식**
+
+- 최초 로드 시 `GET /v1/widget/config`를 `X-Site-Key: <site-key>` 헤더로 호출해 브랜딩(봇 이름, 인사말, 브랜드 색상, 로고 URL)을 받아와 적용합니다 — 즉 §9 위쪽에서 편집한 값들이 여기서 실시간 반영됩니다.
+- 메시지 전송은 `POST /v1/widget/chat`을 `X-Site-Key` 헤더 + `{messages: [...]}` 바디로 호출합니다.
+- 두 API 모두 `X-Site-Key`가 유효(활성 상태)해야 정상 응답하며, 비활성화·삭제된 site-key로 호출하면 실패합니다 — §13 운영상 주의사항의 "배포된 Site-Key 삭제 시 사전 공지 필요"가 여기서 비롯됩니다.
+
+**4) 로컬에서 미리 확인하기**
+
+`frontend/widget-embed/demo.html`을 열면(정적 파일이므로 브라우저로 바로 열거나 위 nginx로 서빙) 실제 고객사 페이지처럼 하단에 위젯 버블이 뜨는 것을 확인할 수 있습니다. 이 파일 안의 `<script>` 태그가 위 1)번 스니펫의 실제 예시(`data-site-key="pk_test_widget_dev"`)이며, 백엔드가 별도 포트로 떠 있는 로컬 개발 환경에서는 여기에 `data-api-base="http://localhost:8081"`처럼 추가해 테스트합니다.
+
 ---
 
 ## 10. 쿼리 콘솔 (`/admin/query-console`) — 위젯 전용
