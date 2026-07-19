@@ -17,6 +17,8 @@ import {
   type ColumnDescription,
   type DriftEntry,
 } from '../../api/admin/sqlTables'
+import { getSyncMode, updateSyncMode, replaySyncMode } from '../../api/admin/syncMode'
+import { triggerSync } from '../../api/admin/sync'
 import SchemaDiscoverModal from '../../components/admin/SchemaDiscoverModal'
 
 export default function SqlTablesPage() {
@@ -41,6 +43,52 @@ export default function SqlTablesPage() {
   })
 
   const driftMap = new Map<string, DriftEntry>(driftData.map(d => [d.tableName, d]))
+
+  const { data: syncMode, refetch: refetchSyncMode } = useQuery({
+    queryKey: ['sync-mode', dsId],
+    queryFn: () => getSyncMode(dsId),
+    enabled: !!dsId,
+  })
+
+  const sqlAutoSync = syncMode?.sql.autoSyncEnabled ?? false
+  const sqlDisabledAt = syncMode?.sql.disabledAt ?? null
+
+  const toggleSyncMut = useMutation({
+    mutationFn: (enabled: boolean) => updateSyncMode(dsId, 'sql', enabled),
+    onSuccess: () => refetchSyncMode(),
+  })
+
+  const handleToggleAutoSync = async () => {
+    const next = !sqlAutoSync
+    if (next && sqlDisabledAt) {
+      const ok = window.confirm(
+        `비활성화 시점(${new Date(sqlDisabledAt).toLocaleString()})부터 현재까지의 변경사항을 즉시 자동 동기화하시겠습니까?`
+      )
+      if (!ok) return
+      await toggleSyncMut.mutateAsync(true)
+    } else {
+      await toggleSyncMut.mutateAsync(next)
+    }
+  }
+
+  const manualSyncMut = useMutation({
+    mutationFn: async () => {
+      const job = await triggerSync(dsId)
+      const replay = await replaySyncMode(dsId, 'sql')
+      return { job, replay }
+    },
+    onSuccess: ({ job, replay }) => {
+      qc.invalidateQueries({ queryKey: ['admin-sql-tables', dsId] })
+      if (job.status === 'failed') {
+        setBulkResult(job.errorMessage ?? '동기화 실패')
+      } else {
+        setBulkResult(
+          `동기화 완료: 성공 ${job.recordsSuccess}건 / 실패 ${job.recordsFailed}건, ` +
+          `화이트리스트 반영: ${replay.applied}개 적용 / ${replay.skipped}개 건너뜀`
+        )
+      }
+    },
+  })
 
   const createMut = useMutation({
     mutationFn: (body: Partial<SqlTable>) => createSqlTable(dsId, body),
@@ -171,6 +219,30 @@ export default function SqlTablesPage() {
           <p className="text-sm text-gray-500 mt-0.5">Text-to-SQL 조회 허용 테이블을 관리합니다.</p>
         </div>
         <div className="flex gap-2 items-center">
+          <label className="flex items-center gap-2 text-sm text-gray-600 mr-1">
+            <button
+              onClick={handleToggleAutoSync}
+              disabled={toggleSyncMut.isPending}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                sqlAutoSync ? 'bg-green-500' : 'bg-gray-300'
+              }`}
+              role="switch"
+              aria-checked={sqlAutoSync}
+            >
+              <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform duration-200 ${
+                sqlAutoSync ? 'translate-x-4' : 'translate-x-0'
+              }`} />
+            </button>
+            자동 동기화
+          </label>
+          <button
+            onClick={() => manualSyncMut.mutate()}
+            disabled={manualSyncMut.isPending}
+            className="flex items-center gap-2 border border-blue-300 hover:bg-blue-50 text-blue-600 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={manualSyncMut.isPending ? 'animate-spin' : ''} />
+            동기화
+          </button>
           {/* 드리프트 확인 */}
           <button
             onClick={() => refetchDrift()}

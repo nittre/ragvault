@@ -1,4 +1,4 @@
-package com.ragservice.rag.controller;
+package com.ragvault.widget.controller;
 
 import com.ragvault.core.domain.DataSourceConfig;
 import com.ragvault.core.domain.SyncJob;
@@ -6,7 +6,7 @@ import com.ragvault.core.repository.BinlogEventRepository;
 import com.ragvault.core.repository.SyncJobRepository;
 import com.ragvault.core.service.BinlogSyncService;
 import com.ragvault.core.service.DataSourceConfigService;
-import com.ragservice.rag.service.InitialSyncService;
+import com.ragvault.widget.service.InitialSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,11 +18,9 @@ import java.util.Map;
 
 /**
  * 동기화 관리 Admin API.
- *
- * 접근 권한: api:admin scope (SecurityConfig 설정).
  */
 @RestController
-@RequestMapping("/api/v1/admin/sync")
+@RequestMapping("/api/admin/sync")
 @RequiredArgsConstructor
 public class AdminSyncController {
 
@@ -57,10 +55,6 @@ public class AdminSyncController {
         return ResponseEntity.ok(syncJobRepository.findTopByOrderByStartedAtDesc());
     }
 
-    /**
-     * 초기 전체 동기화 트리거 (비동기).
-     * 즉시 202 Accepted 반환, 백그라운드에서 처리.
-     */
     /**
      * 초기 전체 동기화 트리거 (비동기).
      * 요청 바디: {"datasourceId": 1, "tables": ["table1", "table2"]}  (tables 생략 시 전체)

@@ -1,4 +1,4 @@
-package com.ragservice.rag.domain;
+package com.ragvault.core.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -6,10 +6,11 @@ import lombok.*;
 import java.time.Instant;
 
 /**
- * binlog_position 테이블 엔티티 (싱글톤, id=1).
+ * binlog_position 테이블 엔티티.
  *
  * ADR-0001: GTID 기반 binlog 위치 추적.
- * id=1 고정 row로 관리.
+ * 데이터소스별로 한 행씩 관리 — id는 DB가 자동 생성한다(과거 id=1 고정값 사용 시
+ * 두 번째 이후 데이터소스가 첫 데이터소스의 위치 행을 덮어쓰는 버그가 있었음).
  */
 @Entity
 @Table(name = "binlog_position")
@@ -19,7 +20,8 @@ import java.time.Instant;
 public class BinlogPosition {
 
     @Id
-    private Integer id = 1;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
 
     @Column(name = "gtid_set", nullable = false, columnDefinition = "TEXT")
     private String gtidSet = "";

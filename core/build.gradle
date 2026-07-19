@@ -60,6 +60,13 @@ dependencies {
     api 'org.bouncycastle:bcpkix-jdk18on:1.78.1'
     api 'org.bouncycastle:bcprov-jdk18on:1.78.1'
 
+    // MySQL binlog 실시간 동기화 (BinlogSyncService)
+    api 'com.zendesk:mysql-binlog-connector-java:0.29.2'
+
+    // ShedLock 어노테이션 (BinlogSyncService의 @SchedulerLock) — Redis 프로바이더는 app-internal에만 유지,
+    // @EnableSchedulerLock을 선언하지 않는 앱(app-widget)에서는 어노테이션이 그냥 무시되고 일반 @Scheduled로 동작한다.
+    api 'net.javacrumbs.shedlock:shedlock-spring:5.16.0'
+
     // 멀티포맷 문서 파싱 (DocumentParser 계층)
     // Office/CSV/TXT → 텍스트 + 임베디드 이미지 추출 (Tika + POI)
     // PDF는 opendataloader-pdf-core(PDFBox 3.x)가 전담하므로, PDFBox 2.x API를 쓰는

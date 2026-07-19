@@ -1,10 +1,10 @@
 package com.ragservice.rag.controller;
 
 import com.ragvault.core.domain.DataSourceConfig;
-import com.ragservice.rag.domain.SyncModeConfig;
-import com.ragservice.rag.service.BinlogSyncService;
+import com.ragvault.core.domain.SyncModeConfig;
+import com.ragvault.core.service.BinlogSyncService;
 import com.ragvault.core.service.DataSourceConfigService;
-import com.ragservice.rag.service.WhitelistSyncService;
+import com.ragvault.core.service.WhitelistSyncService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

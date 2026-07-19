@@ -16,6 +16,7 @@ const SiteKeysPage = lazy(() => import('./pages/admin/SiteKeysPage'))
 const DataSourcesPage = lazy(() => import('./pages/admin/DataSourcesPage'))
 const RagTablesPage = lazy(() => import('./pages/admin/RagTablesPage'))
 const SqlTablesPage = lazy(() => import('./pages/admin/SqlTablesPage'))
+const DdlEventsPage = lazy(() => import('./pages/admin/DdlEventsPage'))
 const QueryConsolePage = lazy(() => import('./pages/admin/QueryConsolePage'))
 
 function LoadingFallback() {
@@ -53,6 +54,7 @@ export default function App() {
             <Route path="datasources" element={<DataSourcesPage />} />
             <Route path="datasources/:dsId/rag-tables" element={<RagTablesPage />} />
             <Route path="datasources/:dsId/sql-tables" element={<SqlTablesPage />} />
+            <Route path="datasources/:dsId/ddl-events" element={<DdlEventsPage />} />
             <Route path="query-console" element={<QueryConsolePage />} />
           </Route>
           <Route path="*" element={<Navigate to="/admin/users" replace />} />

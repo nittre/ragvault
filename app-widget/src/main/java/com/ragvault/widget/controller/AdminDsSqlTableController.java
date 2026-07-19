@@ -7,7 +7,7 @@ import com.ragvault.core.repository.SqlTableConfigRepository;
 import com.ragvault.core.service.RoutingEmbeddingService;
 import com.ragvault.core.service.SchemaInspectorService;
 import com.ragvault.core.service.SensitivityAnalysisService;
-import com.ragvault.widget.service.WhitelistSyncService;
+import com.ragvault.core.service.WhitelistSyncService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;

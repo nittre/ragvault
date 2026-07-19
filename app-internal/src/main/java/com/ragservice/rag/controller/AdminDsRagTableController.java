@@ -6,7 +6,7 @@ import com.ragservice.rag.service.InitialSyncService;
 import com.ragvault.core.service.RagColumnSuggestionService;
 import com.ragvault.core.service.RagTableConfigService;
 import com.ragvault.core.service.SchemaInspectorService;
-import com.ragservice.rag.service.WhitelistSyncService;
+import com.ragvault.core.service.WhitelistSyncService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;

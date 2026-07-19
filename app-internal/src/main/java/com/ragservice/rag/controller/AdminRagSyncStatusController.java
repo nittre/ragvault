@@ -1,6 +1,6 @@
 package com.ragservice.rag.controller;
 
-import com.ragservice.rag.service.BinlogSyncService;
+import com.ragvault.core.service.BinlogSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

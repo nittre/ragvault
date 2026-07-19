@@ -1,6 +1,6 @@
-package com.ragservice.rag.repository;
+package com.ragvault.core.repository;
 
-import com.ragservice.rag.domain.BinlogEvent;
+import com.ragvault.core.domain.BinlogEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

@@ -58,8 +58,7 @@ dependencies {
     implementation 'org.springframework.retry:spring-retry'
     implementation 'org.springframework:spring-aspects'
 
-    // MySQL Binlog Connector (ADR-0001)
-    implementation 'com.zendesk:mysql-binlog-connector-java:0.29.2'
+    // MySQL Binlog Connector (ADR-0001) — core에서 api로 전이 제공됨 (BinlogSyncService가 core로 이동)
 
     // MySQL JDBC (초기 동기화 풀 스냅샷용)
     runtimeOnly 'com.mysql:mysql-connector-j:9.3.0'

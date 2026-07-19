@@ -14,13 +14,14 @@ import com.ragvault.core.service.QueryIntent;
 
 
 
-import com.ragservice.rag.domain.BinlogPosition;
+import com.ragvault.core.domain.BinlogPosition;
 import com.ragvault.core.domain.DataSourceConfig;
 import com.ragvault.core.domain.RagTableConfig;
-import com.ragservice.rag.domain.SyncJob;
-import com.ragservice.rag.repository.BinlogPositionRepository;
+import com.ragvault.core.domain.SyncJob;
+import com.ragvault.core.repository.BinlogPositionRepository;
 import com.ragvault.core.repository.RagTableConfigRepository;
-import com.ragservice.rag.repository.SyncJobRepository;
+import com.ragvault.core.repository.SyncJobRepository;
+import com.ragvault.core.service.DiscordNotifier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;

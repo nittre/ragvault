@@ -1,6 +1,6 @@
-package com.ragservice.rag.repository;
+package com.ragvault.core.repository;
 
-import com.ragservice.rag.domain.SyncJob;
+import com.ragvault.core.domain.SyncJob;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

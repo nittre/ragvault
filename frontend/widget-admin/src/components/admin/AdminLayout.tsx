@@ -17,6 +17,7 @@ import {
   Table,
   Code2,
   KeyRound,
+  AlertTriangle,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { logout } from '../../api/auth'
@@ -173,6 +174,13 @@ export default function AdminLayout() {
                         >
                           <Code2 size={13} />
                           SQL 테이블
+                        </NavLink>
+                        <NavLink
+                          to={`/admin/datasources/${ds.id}/ddl-events`}
+                          className={({ isActive }) => (isActive ? subActiveCls : subInactiveCls)}
+                        >
+                          <AlertTriangle size={13} />
+                          DDL 이벤트
                         </NavLink>
                       </div>
                     )}

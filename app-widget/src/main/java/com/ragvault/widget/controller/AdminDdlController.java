@@ -1,4 +1,4 @@
-package com.ragservice.rag.controller;
+package com.ragvault.widget.controller;
 
 import com.ragvault.core.repository.DdlEventRepository;
 import lombok.RequiredArgsConstructor;
@@ -7,11 +7,9 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * DDL 이벤트 조회 Admin API.
- *
- * 접근 권한: api:admin scope (SecurityConfig 설정).
  */
 @RestController
-@RequestMapping("/api/v1/admin/datasources/{dsId}/ddl-events")
+@RequestMapping("/api/admin/datasources/{dsId}/ddl-events")
 @RequiredArgsConstructor
 public class AdminDdlController {
 

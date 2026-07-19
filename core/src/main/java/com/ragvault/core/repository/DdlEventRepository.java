@@ -1,6 +1,6 @@
-package com.ragservice.rag.repository;
+package com.ragvault.core.repository;
 
-import com.ragservice.rag.domain.DdlEvent;
+import com.ragvault.core.domain.DdlEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

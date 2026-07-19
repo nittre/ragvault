@@ -1,10 +1,10 @@
-package com.ragservice.rag.controller;
+package com.ragvault.widget.controller;
 
 import com.ragvault.core.domain.DataSourceConfig;
+import com.ragvault.core.domain.SyncModeConfig;
 import com.ragvault.core.service.BinlogSyncService;
 import com.ragvault.core.service.DataSourceConfigService;
 import com.ragvault.core.service.WhitelistSyncService;
-import com.ragvault.core.domain.SyncModeConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -14,11 +14,11 @@ import java.util.Map;
 
 /**
  * 데이터소스별 자동 동기화 모드 관리 API.
- * /api/v1/admin/datasources/{dsId}/sync-mode
+ * /api/admin/datasources/{dsId}/sync-mode
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/admin/datasources/{dsId}/sync-mode")
+@RequestMapping("/api/admin/datasources/{dsId}/sync-mode")
 @RequiredArgsConstructor
 public class AdminSyncModeController {
 
@@ -34,8 +34,7 @@ public class AdminSyncModeController {
     @PutMapping
     public SyncModeResponse update(@PathVariable Integer dsId, @RequestBody UpdateRequest req) {
         if (req.autoSyncEnabled()) {
-            // disabledAt을 setAutoSync 이전에 캡처 — async 스레드에서 replay 범위 결정에 사용
-            java.time.Instant since = whitelistSyncService.getOrDefault(dsId, req.tableType()).getDisabledAt();
+            Instant since = whitelistSyncService.getOrDefault(dsId, req.tableType()).getDisabledAt();
             DataSourceConfig ds = dataSourceConfigService.findById(dsId);
             binlogSyncService.triggerSyncAndReplayAsync("sync-mode-toggle", ds, dsId, req.tableType(), since);
         }
@@ -53,13 +52,12 @@ public class AdminSyncModeController {
         return Map.of("syncing", binlogSyncService.isSyncInProgress(dsId));
     }
 
-
     private SyncModeResponse buildResponse(Integer dsId) {
         SyncModeConfig sql = whitelistSyncService.getOrDefault(dsId, "sql");
         SyncModeConfig rag = whitelistSyncService.getOrDefault(dsId, "rag");
         return new SyncModeResponse(
-            new ModeEntry(sql.isAutoSyncEnabled(), sql.getDisabledAt()),
-            new ModeEntry(rag.isAutoSyncEnabled(), rag.getDisabledAt())
+                new ModeEntry(sql.isAutoSyncEnabled(), sql.getDisabledAt()),
+                new ModeEntry(rag.isAutoSyncEnabled(), rag.getDisabledAt())
         );
     }
 

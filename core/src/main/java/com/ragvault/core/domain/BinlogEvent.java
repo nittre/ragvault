@@ -1,4 +1,4 @@
-package com.ragservice.rag.domain;
+package com.ragvault.core.domain;
 
 import jakarta.persistence.*;
 import lombok.*;

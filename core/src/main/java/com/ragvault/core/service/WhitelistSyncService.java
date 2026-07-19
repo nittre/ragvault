@@ -1,4 +1,4 @@
-package com.ragservice.rag.service;
+package com.ragvault.core.service;
 
 import com.ragvault.core.service.SchemaInspectorService;
 import com.ragvault.core.service.DataSourceConfigService;
@@ -13,8 +13,6 @@ import com.ragvault.core.service.QueryIntent;
 
 
 
-import com.ragservice.rag.domain.*;
-import com.ragservice.rag.repository.*;
 import com.ragvault.core.domain.*;
 import com.ragvault.core.repository.*;
 import lombok.RequiredArgsConstructor;
