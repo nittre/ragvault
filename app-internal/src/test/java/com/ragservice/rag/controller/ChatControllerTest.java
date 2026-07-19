@@ -4,11 +4,9 @@ import com.ragservice.rag.dto.ChatCompletionRequest;
 import com.ragservice.rag.dto.ChatMessage;
 import com.ragservice.rag.dto.EffectiveParams;
 import com.ragservice.rag.dto.MessageDto;
-import com.ragservice.rag.service.AuditLogService;
 import com.ragservice.rag.service.ParameterResolver;
 import com.ragservice.rag.service.ParameterValidator;
 import com.ragservice.rag.service.QueryRouterService;
-import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +30,10 @@ import static org.mockito.Mockito.*;
  * ADR-0005 7단계 우선순위 체인(ParameterResolver)이 계산한 max_history_turns 값이
  * 실제로 히스토리 길이 제한에 반영되는지 검증한다. 이전에는 이 값이 로그에만 찍히고
  * extractHistory()의 하드코딩된 10으로 항상 잘렸다.
+ *
+ * 참고: intent→action 매핑(SQL→SQL_QUERY 등)과 감사 로그 기록 자체는 더 이상 ChatController의
+ * 책임이 아니다. 매핑 검증은 ChatAuditActionResolverTest로, 감사 로그 기록은 @Auditable + Aspect로
+ * 이관됐다.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -40,8 +42,6 @@ class ChatControllerTest {
     @Mock QueryRouterService queryRouterService;
     @Mock ParameterResolver parameterResolver;
     @Mock ParameterValidator parameterValidator;
-    @Mock AuditLogService auditLogService;
-    @Mock HttpServletRequest httpServletRequest;
 
     @InjectMocks
     ChatController chatController;
@@ -72,7 +72,7 @@ class ChatControllerTest {
 
     @SuppressWarnings("unchecked")
     private List<MessageDto> captureHistory(ChatCompletionRequest request) {
-        chatController.chatCompletions(request, null, httpServletRequest);
+        chatController.chatCompletions(request, null);
         ArgumentCaptor<List<MessageDto>> captor = ArgumentCaptor.forClass(List.class);
         verify(queryRouterService).route(anyString(), captor.capture(), any(), any(), any(), any(), any());
         return captor.getValue();
@@ -98,7 +98,7 @@ class ChatControllerTest {
 
         List<ChatMessage> messages = messagesWithPriorCount(12);
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
-                () -> chatController.chatCompletions(requestWithMessages(messages), null, httpServletRequest));
+                () -> chatController.chatCompletions(requestWithMessages(messages), null));
     }
 
     @Test
@@ -108,56 +108,6 @@ class ChatControllerTest {
 
         List<ChatMessage> messages = messagesWithPriorCount(12);
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
-                () -> chatController.chatCompletions(requestWithMessages(messages), null, httpServletRequest));
-    }
-
-    // ── resolveAction: audit_log.action 매핑 검증 ──────────────────────────────
-    // HYBRID/WEB_SEARCH를 CHAT으로 뭉개면 사용량 통계에서 사라지는 회귀를 막기 위한 테스트.
-
-    @SuppressWarnings("unchecked")
-    private String captureLoggedAction(String intent) {
-        when(parameterResolver.resolve(any()))
-                .thenReturn(EffectiveParams.of(Map.of("max_history_turns", 10), Map.of()));
-        when(queryRouterService.route(anyString(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new QueryRouterService.RouterResult(
-                        "답변", List.of(), intent, null, false, null, List.of()));
-
-        chatController.chatCompletions(
-                requestWithMessages(messagesWithPriorCount(1)), null, httpServletRequest);
-
-        ArgumentCaptor<String> actionCaptor = ArgumentCaptor.forClass(String.class);
-        verify(auditLogService).log(any(), actionCaptor.capture(), any(), any(), any(), any(),
-                anyBoolean(), anyBoolean(), anyInt());
-        return actionCaptor.getValue();
-    }
-
-    @Test
-    void resolveAction_sqlIntent_mapsToSqlQuery() {
-        assertThat(captureLoggedAction("SQL")).isEqualTo("SQL_QUERY");
-    }
-
-    @Test
-    void resolveAction_fileIntent_mapsToFileUpload() {
-        assertThat(captureLoggedAction("FILE")).isEqualTo("FILE_UPLOAD");
-    }
-
-    @Test
-    void resolveAction_ragIntent_mapsToRag() {
-        assertThat(captureLoggedAction("RAG")).isEqualTo("RAG");
-    }
-
-    @Test
-    void resolveAction_hybridIntent_mapsToHybrid_notChat() {
-        assertThat(captureLoggedAction("HYBRID")).isEqualTo("HYBRID");
-    }
-
-    @Test
-    void resolveAction_webSearchIntent_mapsToWebSearch_notChat() {
-        assertThat(captureLoggedAction("WEB_SEARCH")).isEqualTo("WEB_SEARCH");
-    }
-
-    @Test
-    void resolveAction_imageIntent_mapsToOther() {
-        assertThat(captureLoggedAction("IMAGE")).isEqualTo("OTHER");
+                () -> chatController.chatCompletions(requestWithMessages(messages), null));
     }
 }

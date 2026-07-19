@@ -58,6 +58,9 @@ dependencies {
     implementation 'org.springframework.retry:spring-retry'
     implementation 'org.springframework:spring-aspects'
 
+    // Spring AOP (프록시 기반 @Aspect/@AfterReturning — AuditLogAspect) — aspectjweaver + AOP 자동설정 포함
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+
     // MySQL Binlog Connector (ADR-0001) — core에서 api로 전이 제공됨 (BinlogSyncService가 core로 이동)
 
     // MySQL JDBC (초기 동기화 풀 스냅샷용)
@@ -124,6 +127,12 @@ dependencyManagement {
     imports {
         mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
     }
+}
+
+// @Auditable Aspect의 SpEL 파라미터 이름 바인딩(#userEmail 등)이 디버그 심볼 없이도
+// 동작하도록 파라미터 이름을 클래스 파일에 보존한다.
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs << '-parameters'
 }
 
 tasks.named('test') {

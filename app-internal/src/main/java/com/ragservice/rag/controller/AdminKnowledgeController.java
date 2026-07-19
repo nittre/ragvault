@@ -1,15 +1,13 @@
 package com.ragservice.rag.controller;
 
+import com.ragvault.core.security.Auditable;
 import com.ragvault.core.service.parser.DocumentParserRouter;
-import com.ragservice.rag.service.AuditLogService;
 import com.ragservice.rag.service.KnowledgeDocIngestionService;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -38,7 +36,6 @@ public class AdminKnowledgeController {
 
     private final KnowledgeDocIngestionService ingestionService;
     private final DocumentParserRouter parserRouter;
-    private final AuditLogService auditLogService;
 
     @Value("${rag.knowledge.directory:knowledge-internal}")
     private String knowledgeDirectory;
@@ -112,10 +109,9 @@ public class AdminKnowledgeController {
     // POST /api/v1/admin/knowledge — 마크다운 신규 생성
     // -------------------------------------------------------------------------
 
+    @Auditable(action = "'KNOWLEDGE_CREATE'", targetId = "#result.body['name']")
     @PostMapping
-    public ResponseEntity<?> createMarkdown(@RequestBody CreateDocRequest req,
-                                             Authentication auth,
-                                             HttpServletRequest httpReq) {
+    public ResponseEntity<?> createMarkdown(@RequestBody CreateDocRequest req) {
         if (req.name() == null || req.name().isBlank())
             return ResponseEntity.badRequest().body(Map.of("error", "name 필수"));
         if (isPathTraversal(req.name())) return badTraversal();
@@ -138,7 +134,6 @@ public class AdminKnowledgeController {
             String content = req.content() != null ? req.content() : "";
             Files.writeString(filePath, content);
             ingestionService.ingestMarkdown(name, content);
-            log(auth, "KNOWLEDGE_CREATE", name, httpReq);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(Map.of("name", name, "status", "created"));
         } catch (IOException e) {
@@ -151,11 +146,10 @@ public class AdminKnowledgeController {
     // PUT /api/v1/admin/knowledge/{docId} — 마크다운 수정
     // -------------------------------------------------------------------------
 
+    @Auditable(action = "'KNOWLEDGE_UPDATE'", targetId = "#result.body['name']")
     @PutMapping("/{docId}")
     public ResponseEntity<?> updateMarkdown(@PathVariable String docId,
-                                             @RequestBody UpdateDocRequest req,
-                                             Authentication auth,
-                                             HttpServletRequest httpReq) {
+                                             @RequestBody UpdateDocRequest req) {
         if (isPathTraversal(docId)) return badTraversal();
         Path filePath = resolveFilePath(docId);
         if (!Files.exists(filePath)) return ResponseEntity.notFound().build();
@@ -169,7 +163,6 @@ public class AdminKnowledgeController {
             String content = req.content() != null ? req.content() : "";
             Files.writeString(filePath, content);
             ingestionService.ingestMarkdown(filePath.getFileName().toString(), content);
-            log(auth, "KNOWLEDGE_UPDATE", filePath.getFileName().toString(), httpReq);
             return ResponseEntity.ok(
                     Map.of("name", filePath.getFileName().toString(), "status", "updated"));
         } catch (IOException e) {
@@ -182,9 +175,9 @@ public class AdminKnowledgeController {
     // DELETE /api/v1/admin/knowledge/{docId}
     // -------------------------------------------------------------------------
 
+    @Auditable(action = "'KNOWLEDGE_DELETE'", targetId = "#docId")
     @DeleteMapping("/{docId}")
-    public ResponseEntity<?> deleteFile(@PathVariable String docId, Authentication auth,
-                                         HttpServletRequest httpReq) {
+    public ResponseEntity<?> deleteFile(@PathVariable String docId) {
         if (isPathTraversal(docId)) return badTraversal();
         Path filePath = resolveFilePath(docId);
         if (!Files.exists(filePath)) return ResponseEntity.notFound().build();
@@ -193,7 +186,6 @@ public class AdminKnowledgeController {
         try {
             Files.delete(filePath);
             ingestionService.deleteDoc(name);
-            log(auth, "KNOWLEDGE_DELETE", name, httpReq);
             return ResponseEntity.ok(Map.of("name", name, "status", "deleted"));
         } catch (IOException e) {
             return ResponseEntity.internalServerError()
@@ -205,10 +197,9 @@ public class AdminKnowledgeController {
     // POST /api/v1/admin/knowledge/upload — 바이너리 파일 업로드 + 인입
     // -------------------------------------------------------------------------
 
+    @Auditable(action = "'KNOWLEDGE_UPLOAD'", targetId = "#file.originalFilename")
     @PostMapping("/upload")
-    public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file,
-                                         Authentication auth,
-                                         HttpServletRequest httpReq) {
+    public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file) {
         if (file == null || file.isEmpty())
             return ResponseEntity.badRequest().body(Map.of("error", "파일이 비어 있습니다"));
         if (file.getSize() > MAX_UPLOAD_BYTES)
@@ -239,7 +230,6 @@ public class AdminKnowledgeController {
             byte[] bytes = file.getBytes();
             Files.write(dest, bytes);
             ingestionService.ingestFile(originalName, bytes, originalName);
-            log(auth, "KNOWLEDGE_UPLOAD", originalName, httpReq);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(Map.of("name", originalName, "status", "uploaded"));
         } catch (IOException e) {
@@ -357,11 +347,5 @@ public class AdminKnowledgeController {
     private ResponseEntity<Map<String, Object>> badTraversal() {
         return ResponseEntity.badRequest()
                 .body(Map.of("error", "유효하지 않은 파일명: path traversal 불허"));
-    }
-
-    private void log(Authentication auth, String action, String target, HttpServletRequest req) {
-        String actor = auth != null ? auth.getName() : "unknown";
-        log.info("AUDIT action={} actor={} target={}", action, actor, target);
-        auditLogService.log(actor, action, null, target, req.getRemoteAddr(), null);
     }
 }

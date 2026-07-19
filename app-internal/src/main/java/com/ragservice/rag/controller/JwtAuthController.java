@@ -3,16 +3,14 @@ package com.ragservice.rag.controller;
 import com.ragvault.core.domain.RagUser;
 import com.ragvault.core.dto.LoginRequest;
 import com.ragvault.core.dto.LoginResponse;
+import com.ragvault.core.security.Auditable;
 import com.ragvault.core.service.JwtService;
 import com.ragvault.core.service.RagUserService;
-import com.ragservice.rag.service.AuditLogService;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -38,12 +36,11 @@ public class JwtAuthController {
     private final RagUserService ragUserService;
     private final JwtService jwtService;
     private final BCryptPasswordEncoder passwordEncoder;
-    private final AuditLogService auditLogService;
 
+    @Auditable(action = "'LOGIN'", actor = "#req.email")
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(
             @RequestBody LoginRequest req,
-            HttpServletRequest request,
             HttpServletResponse response) {
 
         RagUser user = ragUserService.findByEmail(req.email())
@@ -59,8 +56,6 @@ public class JwtAuthController {
         String token = jwtService.generateToken(user.getEmail(), user.getRole());
         setTokenCookie(response, token, jwtService.expirySeconds());
 
-        auditLogService.log(user.getEmail(), "LOGIN", null, null, request.getRemoteAddr(), null);
-
         return ResponseEntity.ok(new LoginResponse(
                 user.getEmail(),
                 user.getRole().name(),
@@ -68,13 +63,10 @@ public class JwtAuthController {
                 user.isPasswordChangeRequired()));
     }
 
+    @Auditable(action = "'LOGOUT'")
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(HttpServletRequest request,
-                                        HttpServletResponse response,
-                                        Authentication authentication) {
-        String email = authentication != null ? authentication.getName() : "unknown";
+    public ResponseEntity<Void> logout(HttpServletResponse response) {
         setTokenCookie(response, "", 0);
-        auditLogService.log(email, "LOGOUT", null, null, request.getRemoteAddr(), null);
         return ResponseEntity.ok().build();
     }
 

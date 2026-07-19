@@ -1,11 +1,9 @@
 package com.ragservice.rag.controller;
 
 import com.ragservice.rag.dto.*;
-import com.ragservice.rag.service.AuditLogService;
 import com.ragservice.rag.service.ParameterResolver;
 import com.ragservice.rag.service.ParameterValidator;
 import com.ragservice.rag.service.QueryRouterService;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,7 +41,6 @@ public class ChatController {
     private final QueryRouterService queryRouterService;
     private final ParameterResolver parameterResolver;
     private final ParameterValidator parameterValidator;
-    private final AuditLogService auditLogService;
 
     @Value("${rag.chat.model:qwen2.5vl:7b}")
     private String defaultChatModel;
@@ -69,8 +66,7 @@ public class ChatController {
     @PostMapping("/chat/completions")
     public ResponseEntity<ChatCompletionResponse> chatCompletions(
             @RequestBody ChatCompletionRequest request,
-            Authentication authentication,
-            HttpServletRequest httpRequest) {
+            Authentication authentication) {
 
         // ADR-0011: SecurityContext 에서 이메일 추출
         String userEmail = authentication != null ? authentication.getName() : null;
@@ -110,27 +106,7 @@ public class ChatController {
                 request.routingHint(),
                 effectiveParams);
 
-        auditLogService.log(userEmail, resolveAction(result.intent()), result.intent(),
-                userMessage, httpRequest.getRemoteAddr(), result.responseId(),
-                !result.sources().isEmpty(), result.blocked(), result.sources().size());
-
         return ResponseEntity.ok(buildResponse(result, request.model()));
-    }
-
-    /**
-     * audit_log.action 은 최상위 라우팅 intent를 그대로 반영한다 (AdminUsageStatsController.routing).
-     * HYBRID/WEB_SEARCH를 CHAT으로 뭉개면 사용량 통계에서 이 경로들이 사라지므로 각자 라벨을 부여한다.
-     * IMAGE/IMAGE_RAG/URL_FETCH/REJECT는 빈도가 낮아 OTHER로 묶는다.
-     */
-    private String resolveAction(String intent) {
-        return switch (intent) {
-            case "SQL" -> "SQL_QUERY";
-            case "FILE" -> "FILE_UPLOAD";
-            case "HYBRID" -> "HYBRID";
-            case "WEB_SEARCH" -> "WEB_SEARCH";
-            case "RAG" -> "RAG";
-            default -> "OTHER";
-        };
     }
 
     /**

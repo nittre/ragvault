@@ -12,6 +12,7 @@ import com.ragvault.core.service.RoutingEmbeddingService;
 import com.ragvault.core.service.QueryIntent;
 
 import com.ragvault.core.domain.DocumentChunk;
+import com.ragvault.core.security.Auditable;
 import com.ragservice.rag.dto.EffectiveParams;
 import com.ragservice.rag.dto.MessageDto;
 import lombok.RequiredArgsConstructor;
@@ -80,6 +81,11 @@ public class QueryRouterService {
      * FORCE_WEB  → WEB_SEARCH 우선, denied 이면 RAG 폴백
      * null       → 기존 intentClassifier 경로
      */
+    @Auditable(action = "@chatAuditActionResolver.resolve(#result.intent())",
+               actor = "#userEmail", targetType = "#result.intent()",
+               userMessage = "#userMessage",
+               hasContext = "!#result.sources().isEmpty()",
+               isBlocked = "#result.blocked()", sourceCount = "#result.sources().size()")
     public RouterResult route(String userMessage, List<MessageDto> history, String userEmail,
                                List<String> images, List<String> fileIds, String routingHint,
                                EffectiveParams effectiveParams) {
